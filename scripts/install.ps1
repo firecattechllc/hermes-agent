@@ -288,18 +288,25 @@ function Install-AgentBrowser {
 # Dependency checks
 # ============================================================================
 
+# A uv that lives inside a conda/Anaconda environment carries its own
+# environment assumptions; pointed at the Hermes venv via VIRTUAL_ENV it breaks
+# dependency installs (reported on Windows with a conda uv first on PATH).
+# Treat such a uv as untrusted so resolution falls back to a standalone uv.
+# Mirrors hermes_cli/managed_uv.py's trust ordering for `hermes update`.
+function Test-UvUntrusted {
+    param([string]$UvSource)
+    if (-not $UvSource) { return $false }
+    return ($UvSource -match '(?i)(anaconda|miniconda|miniforge|mambaforge|conda)')
+}
+
 function Install-Uv {
     Write-Info "Checking for uv package manager..."
-    
-    # Check if uv is already available
-    if (Get-Command uv -ErrorAction SilentlyContinue) {
-        $version = uv --version
-        $script:UvCmd = "uv"
-        Write-Success "uv found ($version)"
-        return $true
-    }
-    
-    # Check common install locations
+
+    # Prefer a standalone uv in the known managed locations over whatever is
+    # first on PATH. A bare `Get-Command uv` frequently resolves to a
+    # conda/Anaconda-shipped uv; pointed at the Hermes venv via VIRTUAL_ENV its
+    # environment assumptions collide and the install breaks. Mirrors the trust
+    # ordering hermes_cli/managed_uv.py uses for `hermes update` (PR #37605).
     $uvPaths = @(
         "$env:USERPROFILE\.local\bin\uv.exe",
         "$env:USERPROFILE\.cargo\bin\uv.exe"
@@ -311,6 +318,18 @@ function Install-Uv {
             Write-Success "uv found at $uvPath ($version)"
             return $true
         }
+    }
+
+    # Fall back to a PATH uv only when it isn't a conda/Anaconda-managed one.
+    $pathUv = Get-Command uv -ErrorAction SilentlyContinue
+    if ($pathUv -and -not (Test-UvUntrusted $pathUv.Source)) {
+        $version = & $pathUv.Source --version
+        $script:UvCmd = "uv"
+        Write-Success "uv found ($version)"
+        return $true
+    }
+    if ($pathUv) {
+        Write-Info "Ignoring conda-managed uv on PATH ($($pathUv.Source)); installing a standalone uv instead"
     }
     
     # Install uv
@@ -404,29 +423,26 @@ function Resolve-UvCmd {
         # Stale; fall through to re-discover.
     }
 
-    # Try PATH first (covers `winget install astral.uv`, manual installs,
-    # and the post-Install-Uv state where uv.exe lives in
-    # %USERPROFILE%\.local\bin which the installer added to PATH).
-    if (Get-Command uv -ErrorAction SilentlyContinue) {
-        $script:UvCmd = "uv"
-        return
-    }
-
-    # Refresh PATH from registry in case the current process started before
-    # Install-Uv updated User PATH.
-    $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
-    if (Get-Command uv -ErrorAction SilentlyContinue) {
-        $script:UvCmd = "uv"
-        return
-    }
-
-    # Check the well-known install locations the astral.sh installer drops
-    # uv into.  Mirrors the probe order Install-Uv uses.
+    # Prefer the well-known managed locations the astral.sh installer drops uv
+    # into over a bare PATH uv, which may be a conda/Anaconda uv that breaks the
+    # Hermes venv install. Mirrors hermes_cli/managed_uv.py's trust ordering for
+    # `hermes update` (PR #37605). Test-Path doesn't depend on PATH, so this is
+    # also robust to the stale-PATH-in-a-fresh-stage-process case.
     foreach ($uvPath in @("$env:USERPROFILE\.local\bin\uv.exe", "$env:USERPROFILE\.cargo\bin\uv.exe")) {
         if (Test-Path $uvPath) {
             $script:UvCmd = $uvPath
             return
         }
+    }
+
+    # Refresh PATH from registry in case the current process started before
+    # Install-Uv updated User PATH (each stage runs in its own process), then
+    # accept a PATH uv only when it isn't conda/Anaconda-managed.
+    $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $pathUv = Get-Command uv -ErrorAction SilentlyContinue
+    if ($pathUv -and -not (Test-UvUntrusted $pathUv.Source)) {
+        $script:UvCmd = "uv"
+        return
     }
 
     throw "uv is not installed or not on PATH. Run install.ps1 -Stage uv first."

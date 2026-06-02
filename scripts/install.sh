@@ -468,6 +468,17 @@ detect_os() {
 # Dependency checks
 # ============================================================================
 
+# A uv that lives inside a conda/Anaconda environment carries its own
+# environment assumptions; pointed at the Hermes venv via VIRTUAL_ENV it breaks
+# dependency installs. Treat such a uv as untrusted so resolution falls back to
+# a standalone uv. Mirrors hermes_cli/managed_uv.py's trust ordering.
+uv_path_is_trusted() {
+    case "$1" in
+        *conda*|*anaconda*|*miniconda*|*miniforge*|*mambaforge*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
 install_uv() {
     if [ "$DISTRO" = "termux" ]; then
         log_info "Termux detected — using Python's stdlib venv + pip instead of uv"
@@ -477,15 +488,11 @@ install_uv() {
 
     log_info "Checking for uv package manager..."
 
-    # Check common locations for uv
-    if command -v uv &> /dev/null; then
-        UV_CMD="uv"
-        UV_VERSION=$($UV_CMD --version 2>/dev/null)
-        log_success "uv found ($UV_VERSION)"
-        return 0
-    fi
-
-    # Check ~/.local/bin (default uv install location) even if not on PATH yet
+    # Prefer a standalone uv in the known managed locations over whatever is
+    # first on PATH. A bare `command -v uv` frequently resolves to a
+    # conda/Anaconda-shipped uv; pointed at the Hermes venv via VIRTUAL_ENV its
+    # environment assumptions collide and the install breaks. Mirrors the trust
+    # ordering hermes_cli/managed_uv.py uses for `hermes update` (PR #37605).
     if [ -x "$HOME/.local/bin/uv" ]; then
         UV_CMD="$HOME/.local/bin/uv"
         UV_VERSION=$($UV_CMD --version 2>/dev/null)
@@ -499,6 +506,18 @@ install_uv() {
         UV_VERSION=$($UV_CMD --version 2>/dev/null)
         log_success "uv found at ~/.cargo/bin ($UV_VERSION)"
         return 0
+    fi
+
+    # Fall back to a PATH uv only when it isn't conda/Anaconda-managed.
+    if command -v uv &> /dev/null; then
+        _path_uv="$(command -v uv)"
+        if uv_path_is_trusted "$_path_uv"; then
+            UV_CMD="uv"
+            UV_VERSION=$($UV_CMD --version 2>/dev/null)
+            log_success "uv found ($UV_VERSION)"
+            return 0
+        fi
+        log_info "Ignoring conda-managed uv on PATH ($_path_uv); installing a standalone uv instead"
     fi
 
     # Install uv
