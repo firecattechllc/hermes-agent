@@ -55,6 +55,8 @@ export interface RenderProbe {
   readonly resize: (width: number, height: number) => void
   /** Left-click at screen cell (x, y) via the mock mouse, then settle a pass. */
   readonly click: (x: number, y: number) => Promise<void>
+  /** Mouse-wheel at screen cell (x, y) via the mock mouse, then settle a pass. */
+  readonly scroll: (x: number, y: number, direction: 'up' | 'down') => Promise<void>
   /** The mock keyboard (typeText / pressArrow / pressEnter / …) — pair with `settle()`. */
   readonly keys: TestRendererSetup['mockInput']
   /** Run a render pass + flush so simulated input lands in the next `frame()`. */
@@ -93,6 +95,11 @@ export async function renderProbe(
     resize: (width, height) => setup.resize(width, height),
     click: async (x, y) => {
       await setup.mockMouse.click(x, y)
+      await setup.renderOnce()
+      await setup.flush()
+    },
+    scroll: async (x, y, direction) => {
+      await setup.mockMouse.scroll(x, y, direction)
       await setup.renderOnce()
       await setup.flush()
     },

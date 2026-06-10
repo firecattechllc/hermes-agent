@@ -102,15 +102,27 @@ describe('node-ffi coordinate safety (boundary/ffiSafe.ts)', () => {
     const onErr = (e: unknown) => errors.push(e)
     process.on('uncaughtException', onErr)
     try {
-      // Expanding renders transient sticky-bottom frames where the diff top sits
-      // ABOVE the viewport (negative y) — the exact live-crash condition.
       await clickHeader(probe, 'patch')
-      // let tree-sitter + the scrollAnchor's 4x16ms re-asserts land
+      // let tree-sitter + the scrollAnchor's sticky-suspension window land
       await new Promise(r => setTimeout(r, 200))
       // added rows only paint when the diff body is actually expanded (the
       // scrollAnchor holds the viewport at the diff TOP, so assert early rows)
       const expanded = await probe.waitForFrame(f => f.includes('fn_0'))
       expect(expanded).toContain('+ def fn_0(): pass')
+      // Scroll INTO the tall diff so its top rows sit ABOVE the viewport
+      // (negative screen y) — the exact live-crash condition. (The old anchor
+      // produced this via transient sticky-bottom frames; the sticky
+      // suspension removed those, so drive the scroll-cut explicitly.)
+      let downTicks = 0
+      while (probe.frame().includes('fn_0(') && downTicks < 30) {
+        await probe.scroll(40, 15, 'down')
+        downTicks++
+      }
+      const cut = probe.frame()
+      expect(cut).not.toContain('fn_0(') // the diff top is cut above the viewport…
+      expect(cut).toContain('fn_') // …while mid-diff rows still paint (negative-y path)
+      // bring the header back on screen for the toggle churn
+      for (let i = 0; i < downTicks + 5; i++) await probe.scroll(40, 15, 'up')
       // toggle a few times + resize churn
       await clickHeader(probe, 'patch')
       await new Promise(r => setTimeout(r, 100))
