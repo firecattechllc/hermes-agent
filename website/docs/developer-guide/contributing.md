@@ -40,19 +40,15 @@ We value contributions in this order:
 
 ### Install with the standard installer
 
-For most contributors, the best development bootstrap is the same path users
-take: run the standard installer, then work inside the repository it cloned.
-The installer creates the Hermes venv, wires the `hermes` command, stamps the
-install method for `hermes update`, and clones the full git project into
-`$HERMES_HOME/hermes-agent` (usually `~/.hermes/hermes-agent`). That keeps your
-development environment on the same layout the CLI, updater, lazy dependency
-installer, gateway, and docs assume.
+The standard installer defaults to an immutable managed bundle for users.
+Contributors should explicitly request the source path; it clones the project,
+runs `hermes dev sync`, and wires the command to the development checkout.
 
 ```bash
-curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --source
 cd "${HERMES_HOME:-$HOME/.hermes}/hermes-agent"
 
-# Add dev/test extras on top of the standard install.
+# Add dev/test extras on top of the source install.
 uv pip install -e ".[all,dev]"
 
 # Optional: browser tools / docs site dependencies.

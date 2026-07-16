@@ -1,243 +1,114 @@
 ---
 sidebar_position: 3
 title: "Updating & Uninstalling"
-description: "How to update Hermes Agent to the latest version or uninstall it"
+description: "Update, roll back, adopt, eject, or uninstall Hermes"
 ---
 
 # Updating & Uninstalling
 
 ## Updating
 
-Update to the latest version with a single command:
-
 ```bash
 hermes update
 ```
 
-This pulls the latest code from `main`, updates dependencies, and prompts you to configure any new options that were added since your last update.
+Hermes routes this command according to how it was installed. It never mutates a package-manager install behind that package manager's back.
 
-:::tip
-`hermes update` automatically detects new configuration options and prompts you to add them. If you skipped that prompt, you can manually run `hermes config check` to see missing options, then `hermes config migrate` to interactively add them.
-:::
+| Install type | What `hermes update` does |
+|---|---|
+| **Managed bundle** (the standard installer default) | Downloads the latest signed release, verifies every file, stages and preflights an immutable slot, atomically flips `current.txt`, restages the updater, reapplies lazy features, and requests a gateway restart. |
+| **Source checkout** (`install.sh --source`, `install.ps1 -Source`, or `hermes eject`) | Fast-forwards a clean checkout. For local changes, offers a new worktree (default), an ordinary Git merge, or cancel. It never auto-stashes or mutates the active venv in place. |
+| **Nix, Homebrew, pip, or Docker** | Refuses with the package-manager/image command you should use instead. |
 
-### What happens during an update
+Your configuration, credentials, sessions, skills, and other durable state remain under `HERMES_HOME`; release slots live under `$HERMES_HOME/versions/`.
 
-When you run `hermes update`, the following steps occur:
-
-1. **Pairing-data snapshot** — a lightweight pre-update state snapshot is saved (covers `~/.hermes/pairing/`, Feishu comment rules, and other state files that get modified at runtime). Recoverable via the snapshot restore flow described under [Snapshots and rollback](../user-guide/checkpoints-and-rollback.md), or by extracting the most recent quick-snapshot zip Hermes wrote next to your `~/.hermes/` directory.
-2. **Git pull** — pulls the latest code from the `main` branch and updates submodules
-3. **Post-pull syntax validation + auto-rollback** — after the pull, Hermes compiles the eight critical files every `hermes` invocation imports at startup. If any fails to parse (e.g. an orphan merge-conflict marker, an accidentally truncated file), Hermes runs `git reset --hard <pre-pull-sha>` to roll the install back so your shell stays bootable. Re-run `hermes update` once the upstream fix lands.
-4. **Dependency install** — runs `uv pip install -e ".[all]"` to pick up new or changed dependencies
-5. **Config migration** — detects new config options added since your version and prompts you to set them
-6. **Gateway auto-restart** — running gateways are refreshed after the update completes so the new code takes effect immediately. Service-managed gateways (systemd on Linux, launchd on macOS) are restarted through the service manager. Manual gateways are relaunched automatically when Hermes can map the running PID back to a profile.
-
-### Updating against a non-default branch: `--branch`
-
-By default `hermes update` tracks `origin/main`. Pass `--branch <name>` to update against a different branch — useful for QA channels, feature branches, or release-candidate testing:
+### Managed release status
 
 ```bash
-hermes update --branch release-candidate
-hermes update --check --branch experimental   # preview behindness only
+hermes-updater status
+hermes-updater status --check
+hermes-updater status --check --json
 ```
 
-If your local checkout is on a different branch, Hermes auto-stashes any uncommitted work, switches HEAD to the target branch, and then pulls. Branches that don't exist locally are auto-tracked from `origin/<name>` (`git checkout -B <name> origin/<name>`). Branches that don't exist anywhere fail cleanly — your stashed changes are restored before exit so you're never stranded in a weird state. The `main`-only fork-upstream sync logic is automatically skipped on non-`main` branches.
+Status reports the current and previous slots, channel, interrupted staging leftovers, latest available release, releases behind, release notes, and build SHAs. A network failure is reported without modifying the active slot.
 
-### Local changes on non-interactive updates
+### Atomic update and rollback
 
-When you run `hermes update` in a terminal, Hermes stashes any uncommitted source-tree changes, pulls, then **asks** whether to restore them — exactly as it always has. Nothing changes for interactive updates.
+A managed update follows this order:
 
-When the update runs **without a terminal** — from the desktop/chat app's "Update" button or a gateway-triggered update — there's no prompt to answer. The `updates.non_interactive_local_changes` setting decides what happens to your stashed changes:
+1. resolve and stream the platform archive;
+2. require its Ed25519 signature and verify every manifest hash;
+3. unpack into `versions/<version>.staging`;
+4. run the staged slot's `hermes doctor --preflight`;
+5. rename staging to an immutable slot and atomically replace `current.txt`;
+6. restage the stable launcher/updater, reapply the feature ledger, and restart services.
 
-```yaml
-# ~/.hermes/config.yaml
-updates:
-  non_interactive_local_changes: stash   # default: keep + auto-restore
-  # non_interactive_local_changes: discard  # throw local source edits away
-```
-
-- `stash` (default) — auto-stash, pull, then auto-restore your changes on top of the updated code. Nothing is lost; if a restore hits conflicts they're preserved in a git stash for manual recovery.
-- `discard` — auto-stash and drop the stash after the pull, so the update always lands on a clean tree. Use this only on machines where you never intend to keep local edits to the Hermes source. It stash-drops (not `git reset --hard` + `git clean -fd`), so ignored paths like `node_modules`, `venv`, and build outputs are never touched.
-
-In the desktop app this is **Settings → Advanced → In-App Update Local Changes**.
-
-### Preview-only: `hermes update --check`
-
-Want to know if an update is available before pulling? Run `hermes update --check` — it fetches and compares commits against `origin/main`. No files are modified, no gateway is restarted. Useful in scripts and cron jobs that gate on "is there an update".
-
-### Full pre-update backup: `--backup`
-
-For high-value profiles (production gateways, shared team installs) you can opt into a full pre-pull backup of `HERMES_HOME` (config, auth, sessions, skills, pairing):
+Any failure before step 5 deletes staging and leaves the current version untouched. To switch instantly to the prior slot:
 
 ```bash
-hermes update --backup
+hermes-updater rollback
 ```
 
-Or make it the default for every run:
+Running processes keep using the concrete old slot they started from until they restart.
 
-```yaml
-# ~/.hermes/config.yaml
-updates:
-  pre_update_backup: true
-```
+### Source checkouts and worktrees
 
-`--backup` was the always-on behavior in earlier builds, but it was adding minutes to every update on large homes, so it's now opt-in. The lightweight pairing-data snapshot above still runs unconditionally.
-
-### Windows: another `hermes.exe` is running
-
-On Windows, `hermes update` will refuse to run if it detects another `hermes.exe` process holding the venv's entry-point executable open — most commonly the Hermes Desktop app's spawned backend, an open `hermes` REPL in another terminal, or a running gateway:
-
-```
-$ hermes update
-✗ Another hermes.exe is running:
-    PID 12345  hermes.exe
-
-  Updating now would fail to overwrite ...\venv\Scripts\hermes.exe because
-  Windows blocks REPLACE on a running executable.
-
-  Close Hermes Desktop, exit any open `hermes` REPLs, and
-  stop the gateway (`hermes gateway stop`) before retrying.
-  Override with `hermes update --force` if you've already
-  confirmed those processes will not write to the venv.
-```
-
-Close the listed processes and re-run. If you're sure the concurrent process won't interfere (rare — usually only useful when an antivirus shim is mis-attributed), pass `--force` to skip the check. In that case the updater will still retry the `.exe` rename with exponential backoff and, on stubborn locks, schedule the replacement for next reboot via `MoveFileEx(MOVEFILE_DELAY_UNTIL_REBOOT)` so the update can complete.
-
-A second, separate guard refuses to touch the venv while any process is running from its Python interpreter (the Desktop app's backend, a gateway, a Python REPL). Those processes keep native extension files (`.pyd`) locked, and a dependency sync that dies partway on an access-denied error strands the install between versions. This guard is **not** bypassed by `--force`; if you're certain the detected holders are false positives, use the explicit `hermes update --force-venv`.
-
-Expected output looks like:
-
-```
-$ hermes update
-Updating Hermes Agent...
-📥 Pulling latest code...
-Already up to date.  (or: Updating abc1234..def5678)
-📦 Updating dependencies...
-✅ Dependencies updated
-🔍 Checking for new config options...
-✅ Config is up to date  (or: Found 2 new options — running migration...)
-🔄 Restarting gateways...
-✅ Gateway restarted
-✅ Hermes Agent updated successfully!
-```
-
-### Recommended Post-Update Validation
-
-`hermes update` handles the main update path, but a quick validation confirms everything landed cleanly:
-
-1. `git status --short` — if the tree is unexpectedly dirty, inspect before continuing
-2. `hermes doctor` — checks config, dependencies, and service health
-3. `hermes --version` — confirm the version bumped as expected
-4. If you use the gateway: `hermes gateway status`
-5. If `doctor` reports npm audit issues: run `npm audit fix` in the flagged directory
-
-:::warning Dirty working tree after update
-If `git status --short` shows unexpected changes after `hermes update`, stop and inspect them before continuing. This usually means local modifications were reapplied on top of the updated code, or a dependency step refreshed lockfiles.
-:::
-
-### If your terminal disconnects mid-update
-
-`hermes update` protects itself against accidental terminal loss:
-
-- The update ignores `SIGHUP`, so closing your SSH session or terminal window no longer kills it mid-install. `pip` and `git` child processes inherit this protection, so the Python environment cannot be left half-installed by a dropped connection.
-- All output is mirrored to `~/.hermes/logs/update.log` while the update runs. If your terminal disappears, reconnect and inspect the log to see whether the update finished and whether the gateway restart succeeded:
+Inside a Hermes source checkout, say which runtime you mean:
 
 ```bash
-tail -f ~/.hermes/logs/update.log
+hermes --dev --version      # this checkout
+hermes --global --version   # installed/managed Hermes
 ```
 
-- `Ctrl-C` (SIGINT) and system shutdown (SIGTERM) are still honored — those are deliberate cancellations, not accidents.
-
-You no longer need to wrap `hermes update` in `screen` or `tmux` to survive a terminal drop.
-
-### Checking your current version
+Plain `hermes` refuses inside a checkout to prevent accidental environment skew. Provision a checkout with:
 
 ```bash
-hermes version
+hermes dev sync
+hermes dev sync --watch --only tui web
 ```
 
-Compare against the latest release at the [GitHub releases page](https://github.com/NousResearch/hermes-agent/releases).
+If `hermes update` finds local edits, the default **Switch** option creates `.worktrees/main-<sha>`, provisions it, and repoints the command link while preserving the original checkout byte-for-byte. Remove inactive update worktrees with `hermes dev gc`; the active target is never removed.
 
-### Updating from Messaging Platforms
+### Move between managed and source worlds
 
-You can also update directly from Telegram, Discord, Slack, WhatsApp, or Teams by sending:
-
-```
-/update
-```
-
-This pulls the latest code, updates dependencies, and restarts running gateways. The bot will briefly go offline during the restart (typically 5–15 seconds) and then resume.
-
-### Manual Update
-
-If you installed manually (not via the quick installer):
+A pristine legacy checkout can adopt managed releases automatically or on prompt, according to `updates.adopt: auto|prompt|never`:
 
 ```bash
-cd /path/to/hermes-agent
-# Activate the venv you created during install (outside the source tree)
-export VIRTUAL_ENV="$HOME/.hermes/venvs/hermes-dev"
-export PATH="$VIRTUAL_ENV/bin:$PATH"
-
-# Pull latest code
-git pull origin main
-
-# Reinstall (picks up new dependencies)
-uv pip install -e ".[all]"
-
-# Check for new config options
-hermes config check
-hermes config migrate   # Interactively add any missing options
+hermes adopt
+hermes-updater adopt --undo
 ```
 
-### Rollback instructions
-
-If an update introduces a problem, you can roll back to a previous version:
+Adoption keeps the checkout untouched and records the old command target for undo. To move a managed install back to a development checkout:
 
 ```bash
-cd /path/to/hermes-agent
-
-# List recent versions
-git log --oneline -10
-
-# Roll back to a specific commit
-git checkout <commit-hash>
-uv pip install -e ".[all]"
-
-# Restart the gateway if running
-hermes gateway restart
+hermes eject
 ```
 
-To roll back to a specific release tag (substitute your previous tag — e.g. a recent release like `v2026.5.16`, or any earlier tag from `git tag --sort=-version:refname`):
+`eject` clones the exact source revision recorded by the active slot, runs `hermes dev sync`, and repoints the command link. Your `HERMES_HOME` data is shared across the transition.
+
+### Updating from messaging platforms
+
+Send `/update`. The gateway invokes the same updater, drains active work when supported, and restarts on the new slot. The update marker exists only during the short flip/restart critical section.
+
+### Package-managed installs
+
+Use the owner of the installation:
 
 ```bash
-git checkout vX.Y.Z
-uv pip install -e ".[all]"
-```
-
-:::warning
-Rolling back may cause config incompatibilities if new options were added. Run `hermes config check` after rolling back and remove any unrecognized options from `config.yaml` if you encounter errors.
-:::
-
-### Note for Nix users
-
-Nix is no longer an explicitly supported install path (best-effort only) — see [Nix Setup](./nix-setup.md). If you installed via Nix flake, updates are managed through the Nix package manager:
-
-```bash
-# Update the flake input
-nix flake update hermes-agent
-
-# Or rebuild with the latest
+# Nix
 nix profile upgrade hermes-agent
-```
-
-Nix installations are immutable — rollback is handled by Nix's generation system:
-
-```bash
 nix profile rollback
+
+# Homebrew
+brew upgrade hermes-agent
+
+# pip (legacy/manual)
+pip install --upgrade hermes-agent
+
+# Docker
+# pull and recreate from the new image; do not update inside the container
+docker pull nousresearch/hermes-agent:latest
 ```
-
-See [Nix Setup](./nix-setup.md) for more details.
-
----
 
 ## Uninstalling
 
@@ -245,21 +116,6 @@ See [Nix Setup](./nix-setup.md) for more details.
 hermes uninstall
 ```
 
-The uninstaller gives you the option to keep your configuration files (`~/.hermes/`) for a future reinstall.
+The uninstaller can preserve `HERMES_HOME` for a future reinstall. Stop an installed gateway service first if requested. Package-managed installations should be removed through their package manager.
 
-### Manual Uninstall
-
-```bash
-rm -f ~/.local/bin/hermes
-rm -rf /path/to/hermes-agent
-rm -rf ~/.hermes            # Optional — keep if you plan to reinstall
-```
-
-:::info
-If you installed the gateway as a system service, stop and disable it first:
-```bash
-hermes gateway stop
-# Linux: systemctl --user disable hermes-gateway
-# macOS: launchctl remove ai.hermes.gateway
-```
-:::
+For manual cleanup, remove the command link and installation tree. Delete `~/.hermes` only if you intentionally want to erase configuration, credentials, sessions, skills, and all managed slots.

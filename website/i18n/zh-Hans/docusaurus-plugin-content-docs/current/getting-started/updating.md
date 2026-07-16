@@ -1,209 +1,113 @@
 ---
 sidebar_position: 3
 title: "更新与卸载"
-description: "如何将 Hermes Agent 更新至最新版本或将其卸载"
+description: "更新、回滚、adopt、eject 或卸载 Hermes"
 ---
 
 # 更新与卸载
 
 ## 更新
 
-使用单条命令更新至最新版本：
-
 ```bash
 hermes update
 ```
 
-此命令会从 `main` 拉取最新代码、更新依赖项，并提示你配置自上次更新以来新增的选项。
+Hermes 会根据安装方式选择更新路径，不会绕过包管理器修改其管理的安装。
 
-:::tip
-`hermes update` 会自动检测新的配置选项并提示你添加。如果跳过了该提示，可手动运行 `hermes config check` 查看缺失的选项，再运行 `hermes config migrate` 以交互方式添加。
-:::
+| 安装类型 | `hermes update` 的行为 |
+|---|---|
+| **托管 bundle**（标准安装器默认） | 下载最新签名发布，验证每个文件，在不可变 slot 中暂存并预检，原子切换 `current.txt`，重新部署 updater、恢复懒加载 feature，并请求重启 gateway。 |
+| **源码 checkout**（`install.sh --source`、`install.ps1 -Source` 或 `hermes eject`） | 干净 checkout 原地 fast-forward；存在本地修改时提供新 worktree（默认）、普通 Git merge 或取消。不会自动 stash，也不会原地修改正在使用的 venv。 |
+| **Nix、Homebrew、pip 或 Docker** | 拒绝自更新，并提示应使用的包管理器或镜像命令。 |
 
-### 更新过程
+配置、凭据、会话、skills 等持久状态保留在 `HERMES_HOME`；发布 slot 位于 `$HERMES_HOME/versions/`。
 
-运行 `hermes update` 时，将依次执行以下步骤：
-
-1. **配对数据快照** — 保存一份轻量级的更新前状态快照（涵盖 `~/.hermes/pairing/`、飞书评论规则及其他运行时修改的状态文件）。可通过 [快照与回滚](../user-guide/checkpoints-and-rollback.md) 中描述的快照恢复流程进行恢复，或从 Hermes 写入 `~/.hermes/` 目录旁的最新快速快照 zip 文件中提取。
-2. **Git pull** — 从 `main` 分支拉取最新代码并更新子模块
-3. **依赖安装** — 运行 `uv pip install -e ".[all]"` 以获取新增或变更的依赖项
-4. **配置迁移** — 检测自当前版本以来新增的配置选项并提示设置
-5. **Gateway 自动重启** — 更新完成后刷新正在运行的 gateway，使新代码立即生效。由服务管理的 gateway（Linux 上的 systemd、macOS 上的 launchd）通过服务管理器重启；手动启动的 gateway 在 Hermes 能将运行中的 PID 映射回某个 profile 时会自动重新启动。
-
-### 仅预览：`hermes update --check`
-
-想在拉取前确认是否有更新？运行 `hermes update --check` — 它会获取并与 `origin/main` 比较提交。不修改任何文件，不重启 gateway。适合在以"是否有更新"为条件的脚本和 cron 任务中使用。
-
-### 完整更新前备份：`--backup`
-
-对于高价值 profile（生产环境 gateway、团队共享安装），可选择在拉取前对 `HERMES_HOME`（配置、认证、会话、技能、配对数据）进行完整备份：
+### 查看托管发布状态
 
 ```bash
-hermes update --backup
+hermes-updater status
+hermes-updater status --check
+hermes-updater status --check --json
 ```
 
-或将其设为每次运行的默认行为：
+状态包含当前/上一个 slot、channel、中断后遗留的 staging、最新可用发布、落后版本数、发布说明及构建 SHA。网络检查失败不会修改当前 slot。
 
-```yaml
-# ~/.hermes/config.yaml
-updates:
-  pre_update_backup: true
-```
+### 原子更新与回滚
 
-`--backup` 在早期版本中是始终开启的行为，但在大型 home 目录上会给每次更新增加数分钟时间，因此现已改为按需启用。上述轻量级配对数据快照仍会无条件执行。
+托管更新按以下顺序执行：
 
-### Windows：另一个 `hermes.exe` 正在运行
+1. 解析并流式下载当前平台 archive；
+2. 强制验证 Ed25519 签名和 manifest 中每个文件的 hash；
+3. 解包到 `versions/<version>.staging`；
+4. 在 staged slot 中运行 `hermes doctor --preflight`；
+5. 将 staging 重命名为不可变 slot，并原子替换 `current.txt`；
+6. 更新稳定 launcher/updater、重新应用 feature ledger，并重启服务。
 
-在 Windows 上，如果 `hermes update` 检测到另一个 `hermes.exe` 进程持有 venv 入口点可执行文件的句柄，它将拒绝运行 — 最常见的情况是 Hermes Desktop 应用启动的后端进程、另一个终端中打开的 `hermes` REPL，或正在运行的 gateway：
-
-```
-$ hermes update
-✗ Another hermes.exe is running:
-    PID 12345  hermes.exe
-
-  Updating now would fail to overwrite ...\venv\Scripts\hermes.exe because
-  Windows blocks REPLACE on a running executable.
-
-  Close Hermes Desktop, exit any open `hermes` REPLs, and
-  stop the gateway (`hermes gateway stop`) before retrying.
-  Override with `hermes update --force` if you've already
-  confirmed those processes will not write to the venv.
-```
-
-关闭列出的进程后重试。如果你确定并发进程不会造成干扰（极少见 — 通常仅在杀毒软件 shim 被误判时有用），可传入 `--force` 跳过检查。此时更新程序仍会以指数退避方式重试 `.exe` 重命名操作，对于顽固的文件锁，会通过 `MoveFileEx(MOVEFILE_DELAY_UNTIL_REBOOT)` 将替换操作安排在下次重启时执行，以确保更新能够完成。
-
-预期输出如下：
-
-```
-$ hermes update
-Updating Hermes Agent...
-📥 Pulling latest code...
-Already up to date.  (or: Updating abc1234..def5678)
-📦 Updating dependencies...
-✅ Dependencies updated
-🔍 Checking for new config options...
-✅ Config is up to date  (or: Found 2 new options — running migration...)
-🔄 Restarting gateways...
-✅ Gateway restarted
-✅ Hermes Agent updated successfully!
-```
-
-### 更新后建议的验证步骤
-
-`hermes update` 处理主要的更新流程，但快速验证可确认一切正常落地：
-
-1. `git status --short` — 若工作树出现意外的脏状态，请在继续前检查
-2. `hermes doctor` — 检查配置、依赖项和服务健康状态
-3. `hermes --version` — 确认版本已按预期更新
-4. 如果使用 gateway：`hermes gateway status`
-5. 如果 `doctor` 报告 npm audit 问题：在标记的目录中运行 `npm audit fix`
-
-:::warning 更新后工作树出现脏状态
-如果 `hermes update` 后 `git status --short` 显示意外变更，请在继续前停下来检查。这通常意味着本地修改被重新应用到了更新后的代码之上，或依赖步骤刷新了锁文件。
-:::
-
-### 终端在更新中途断开连接
-
-`hermes update` 针对意外终端断开进行了保护：
-
-- 更新会忽略 `SIGHUP`，因此关闭 SSH 会话或终端窗口不再会在安装中途终止它。`pip` 和 `git` 子进程继承此保护，因此 Python 环境不会因连接断开而处于半安装状态。
-- 更新运行期间，所有输出会同步镜像到 `~/.hermes/logs/update.log`。如果终端消失，重新连接后检查日志，确认更新是否完成以及 gateway 重启是否成功：
+第 5 步之前的任何失败都会删除 staging，当前版本保持不变。立即切回上一个 slot：
 
 ```bash
-tail -f ~/.hermes/logs/update.log
+hermes-updater rollback
 ```
 
-- `Ctrl-C`（SIGINT）和系统关机（SIGTERM）仍会被响应 — 这些是主动取消操作，而非意外中断。
+已经运行的进程会继续使用启动时解析到的旧 slot，直到进程重启。
 
-你不再需要将 `hermes update` 包裹在 `screen` 或 `tmux` 中来应对终端断开。
+### 源码 checkout 与 worktree
 
-### 查看当前版本
+在 Hermes 源码 checkout 内必须明确选择运行环境：
 
 ```bash
-hermes version
+hermes --dev --version      # 当前 checkout
+hermes --global --version   # 已安装/托管的 Hermes
 ```
 
-与 [GitHub releases 页面](https://github.com/NousResearch/hermes-agent/releases) 上的最新版本进行比较。
+为防止环境错配，checkout 内的普通 `hermes` 会拒绝运行。配置 checkout：
+
+```bash
+hermes dev sync
+hermes dev sync --watch --only tui web
+```
+
+如果 `hermes update` 发现本地修改，默认 **Switch** 会创建 `.worktrees/main-<sha>`、完成 provisioning 并重新指向命令链接，同时保持原 checkout 字节级不变。`hermes dev gc` 会删除非活动更新 worktree，但永远不会删除当前活动目标。
+
+### 在托管与源码模式之间切换
+
+旧版干净 checkout 可根据 `updates.adopt: auto|prompt|never` 自动或经提示迁移到托管发布：
+
+```bash
+hermes adopt
+hermes-updater adopt --undo
+```
+
+Adoption 不修改原 checkout，并记录旧命令目标以便撤销。要从托管安装切回开发 checkout：
+
+```bash
+hermes eject
+```
+
+`eject` 会按当前 slot manifest 中的精确源码 revision 克隆、运行 `hermes dev sync` 并重新指向命令链接。切换过程中继续共享同一个 `HERMES_HOME` 数据。
 
 ### 从消息平台更新
 
-你也可以直接从 Telegram、Discord、Slack、WhatsApp 或 Teams 发送以下命令进行更新：
+发送 `/update`。Gateway 会调用同一 updater，在支持时 drain 活跃任务，并在新 slot 上重启。更新 marker 只在短暂的 flip/restart 临界区存在。
 
-```
-/update
-```
+### 包管理器安装
 
-此命令会拉取最新代码、更新依赖项并重启正在运行的 gateway。Bot 在重启期间会短暂下线（通常为 5–15 秒），之后恢复服务。
-
-### 手动更新
-
-如果你是手动安装的（未使用快速安装脚本）：
+请使用安装所有者：
 
 ```bash
-cd /path/to/hermes-agent
-export VIRTUAL_ENV="$(pwd)/venv"
-
-# Pull latest code
-git pull origin main
-
-# Reinstall (picks up new dependencies)
-uv pip install -e ".[all]"
-
-# Check for new config options
-hermes config check
-hermes config migrate   # Interactively add any missing options
-```
-
-### 回滚说明
-
-如果更新引入了问题，可以回滚到之前的版本：
-
-```bash
-cd /path/to/hermes-agent
-
-# List recent versions
-git log --oneline -10
-
-# Roll back to a specific commit
-git checkout <commit-hash>
-uv pip install -e ".[all]"
-
-# Restart the gateway if running
-hermes gateway restart
-```
-
-回滚到特定发布标签：
-
-```bash
-git checkout v0.6.0
-uv pip install -e ".[all]"
-```
-
-:::warning
-如果新增了配置选项，回滚可能导致配置不兼容。回滚后运行 `hermes config check`，如果遇到错误，请从 `config.yaml` 中删除无法识别的选项。
-:::
-
-### Nix 用户注意事项
-
-如果你通过 Nix flake 安装，更新由 Nix 包管理器负责：
-
-```bash
-# Update the flake input
-nix flake update hermes-agent
-
-# Or rebuild with the latest
+# Nix
 nix profile upgrade hermes-agent
-```
-
-Nix 安装是不可变的 — 回滚由 Nix 的 generation 系统处理：
-
-```bash
 nix profile rollback
+
+# Homebrew
+brew upgrade hermes-agent
+
+# pip（旧版/手动安装）
+pip install --upgrade hermes-agent
+
+# Docker：拉取新镜像并重建容器，不要在容器内更新
+docker pull nousresearch/hermes-agent:latest
 ```
-
-详情参见 [Nix 安装](./nix-setup.md)。
-
----
 
 ## 卸载
 
@@ -211,21 +115,6 @@ nix profile rollback
 hermes uninstall
 ```
 
-卸载程序会提供选项，让你保留配置文件（`~/.hermes/`）以便将来重新安装。
+卸载器可保留 `HERMES_HOME` 供以后重装。若有 gateway 服务，请按提示先停止。由包管理器安装的 Hermes 应通过该包管理器卸载。
 
-### 手动卸载
-
-```bash
-rm -f ~/.local/bin/hermes
-rm -rf /path/to/hermes-agent
-rm -rf ~/.hermes            # 可选 — 如计划重新安装则保留
-```
-
-:::info
-如果你将 gateway 安装为系统服务，请先停止并禁用它：
-```bash
-hermes gateway stop
-# Linux: systemctl --user disable hermes-gateway
-# macOS: launchctl remove ai.hermes.gateway
-```
-:::
+手动清理时，删除命令链接和安装目录。只有在确实要擦除配置、凭据、会话、skills 和所有托管 slot 时才删除 `~/.hermes`。
