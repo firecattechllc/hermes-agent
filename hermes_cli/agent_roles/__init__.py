@@ -72,6 +72,15 @@ from hermes_cli.agent_roles.launch_builder import (
     LaunchContractBuilder,
 )
 
+from hermes_cli.agent_roles.launch_validation import (
+    LaunchContractValidator,
+    LaunchValidationCode,
+    LaunchValidationIssue,
+    LaunchValidationResult,
+    LaunchValidationSeverity,
+    RuntimeCompatibility,
+)
+
 __all__ = [
     "AgentRole",
     "Assignment",
@@ -127,4 +136,10 @@ __all__ = [
     "LaunchWorkspaceMode",
     "LaunchContractBuildError",
     "LaunchContractBuilder",
+    "LaunchContractValidator",
+    "LaunchValidationCode",
+    "LaunchValidationIssue",
+    "LaunchValidationResult",
+    "LaunchValidationSeverity",
+    "RuntimeCompatibility",
 ]
