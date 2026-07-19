@@ -134,6 +134,9 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "snapshot_generated",
     "context_ingested",
     "context_launch_imported",
+    # Governed Agent Roles launch visibility
+    "launch_contract_published",
+    "launch_validation_recorded",
 })
 
 

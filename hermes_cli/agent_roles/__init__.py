@@ -81,6 +81,14 @@ from hermes_cli.agent_roles.launch_validation import (
     RuntimeCompatibility,
 )
 
+from hermes_cli.agent_roles.launch_visibility import (
+    CONTRACT_EVENT_TYPE,
+    VALIDATION_EVENT_TYPE,
+    LaunchVisibilityAdapter,
+    LaunchVisibilityRecord,
+    LaunchVisibilityService,
+)
+
 __all__ = [
     "AgentRole",
     "Assignment",
@@ -142,4 +150,9 @@ __all__ = [
     "LaunchValidationResult",
     "LaunchValidationSeverity",
     "RuntimeCompatibility",
+    "CONTRACT_EVENT_TYPE",
+    "VALIDATION_EVENT_TYPE",
+    "LaunchVisibilityAdapter",
+    "LaunchVisibilityRecord",
+    "LaunchVisibilityService",
 ]
