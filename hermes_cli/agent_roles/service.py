@@ -15,11 +15,17 @@ from typing import Dict, Optional, Tuple
 from .models import (
     AgentRole,
     Assignment,
+    AssignmentHandoff,
+    AssignmentOutcome,
+    AssignmentResult,
     AssignmentStatus,
     BuiltinRole,
+    HandoffReason,
     RoleCapability,
     builtin_agent_roles,
     new_assignment_id,
+    new_handoff_id,
+    new_result_id,
 )
 from .store import (
     AgentRoleProjectState,
@@ -414,6 +420,408 @@ class AgentRoleService:
             status=AssignmentStatus.ACTIVE,
             causation_id=causation_id,
         )
+
+    def list_handoffs(
+        self,
+        project_id: str,
+        *,
+        assignment_id: Optional[str] = None,
+    ) -> Tuple[AssignmentHandoff, ...]:
+        """Return immutable handoff records in append order."""
+        handoffs = self.store.replay(project_id).handoffs
+
+        if assignment_id is not None:
+            handoffs = tuple(
+                handoff
+                for handoff in handoffs
+                if handoff.assignment_id == assignment_id
+            )
+
+        return handoffs
+
+    def list_results(
+        self,
+        project_id: str,
+        *,
+        assignment_id: Optional[str] = None,
+    ) -> Tuple[AssignmentResult, ...]:
+        """Return immutable assignment results in append order."""
+        results = self.store.replay(project_id).results
+
+        if assignment_id is not None:
+            results = tuple(
+                result
+                for result in results
+                if result.assignment_id == assignment_id
+            )
+
+        return results
+
+    def block_assignment(
+        self,
+        project_id: str,
+        assignment_id: str,
+        *,
+        agent_id: str,
+        timestamp: int,
+        causation_id: Optional[str] = None,
+    ) -> Assignment:
+        """Move active work into the governed blocked state."""
+        current = self.get_assignment(project_id, assignment_id)
+
+        self._require_status(
+            current,
+            AssignmentStatus.ACTIVE,
+            operation="block assignment",
+        )
+        self._require_assigned_agent(current, agent_id)
+
+        return self._record_assignment_update(
+            current,
+            timestamp=timestamp,
+            status=AssignmentStatus.BLOCKED,
+            causation_id=causation_id,
+        )
+
+    def unblock_assignment(
+        self,
+        project_id: str,
+        assignment_id: str,
+        *,
+        agent_id: str,
+        timestamp: int,
+        causation_id: Optional[str] = None,
+    ) -> Assignment:
+        """Return blocked work to active execution."""
+        current = self.get_assignment(project_id, assignment_id)
+
+        self._require_status(
+            current,
+            AssignmentStatus.BLOCKED,
+            operation="unblock assignment",
+        )
+        self._require_assigned_agent(current, agent_id)
+
+        return self._record_assignment_update(
+            current,
+            timestamp=timestamp,
+            status=AssignmentStatus.ACTIVE,
+            causation_id=causation_id,
+        )
+
+    def request_handoff(
+        self,
+        project_id: str,
+        assignment_id: str,
+        *,
+        agent_id: str,
+        to_role_id: str,
+        reason: HandoffReason,
+        summary: str,
+        timestamp: int,
+        evidence_refs: Tuple[str, ...] = (),
+        correlation_id: Optional[str] = None,
+        causation_id: Optional[str] = None,
+        metadata: Optional[Dict[str, object]] = None,
+        handoff_id: Optional[str] = None,
+    ) -> Tuple[Assignment, AssignmentHandoff]:
+        """Record a responsibility handoff request from active work."""
+        current = self.get_assignment(project_id, assignment_id)
+
+        self._require_status(
+            current,
+            AssignmentStatus.ACTIVE,
+            operation="request handoff",
+        )
+        self._require_assigned_agent(current, agent_id)
+
+        target_role = self.get_role(project_id, to_role_id)
+
+        if not target_role.active:
+            raise InvalidAssignmentError(
+                f"handoff target role is inactive: {to_role_id}"
+            )
+
+        handoff = AssignmentHandoff(
+            handoff_id=handoff_id or new_handoff_id(),
+            assignment_id=current.assignment_id,
+            project_id=current.project_id,
+            from_role_id=current.role_id,
+            to_role_id=target_role.role_id,
+            reason=reason,
+            summary=summary,
+            evidence_refs=evidence_refs,
+            requested_by=agent_id,
+            timestamp=timestamp,
+            correlation_id=(
+                correlation_id
+                if correlation_id is not None
+                else current.correlation_id
+            ),
+            causation_id=causation_id,
+            metadata={} if metadata is None else dict(metadata),
+        )
+
+        if any(
+            existing.handoff_id == handoff.handoff_id
+            for existing in self.list_handoffs(project_id)
+        ):
+            raise InvalidAssignmentError(
+                f"handoff_id already exists: {handoff.handoff_id}"
+            )
+
+        if timestamp < current.updated_at:
+            raise InvalidAssignmentTransitionError(
+                "handoff timestamp must not move backwards"
+            )
+
+        self.store.append_handoff(handoff)
+
+        updated = self._record_assignment_update(
+            current,
+            timestamp=timestamp,
+            status=AssignmentStatus.HANDOFF_REQUESTED,
+            causation_id=causation_id,
+        )
+
+        return updated, handoff
+
+    def complete_handoff(
+        self,
+        project_id: str,
+        assignment_id: str,
+        *,
+        agent_id: str,
+        timestamp: int,
+        causation_id: Optional[str] = None,
+    ) -> Assignment:
+        """Mark a requested responsibility transfer as handed off."""
+        current = self.get_assignment(project_id, assignment_id)
+
+        self._require_status(
+            current,
+            AssignmentStatus.HANDOFF_REQUESTED,
+            operation="complete handoff",
+        )
+        self._require_assigned_agent(current, agent_id)
+
+        handoffs = self.list_handoffs(
+            project_id,
+            assignment_id=assignment_id,
+        )
+
+        if not handoffs:
+            raise InvalidAssignmentTransitionError(
+                "cannot complete handoff without a recorded request"
+            )
+
+        return self._record_assignment_update(
+            current,
+            timestamp=timestamp,
+            status=AssignmentStatus.HANDED_OFF,
+            causation_id=causation_id,
+        )
+
+    def complete_assignment(
+        self,
+        project_id: str,
+        assignment_id: str,
+        *,
+        agent_id: str,
+        summary: str,
+        timestamp: int,
+        evidence_refs: Tuple[str, ...] = (),
+        correlation_id: Optional[str] = None,
+        causation_id: Optional[str] = None,
+        metadata: Optional[Dict[str, object]] = None,
+        result_id: Optional[str] = None,
+    ) -> Tuple[Assignment, AssignmentResult]:
+        """Complete active work and record its immutable evidence."""
+        return self._terminalize_assignment(
+            project_id,
+            assignment_id,
+            agent_id=agent_id,
+            status=AssignmentStatus.COMPLETED,
+            outcome=AssignmentOutcome.SUCCEEDED,
+            summary=summary,
+            timestamp=timestamp,
+            evidence_refs=evidence_refs,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            metadata=metadata,
+            result_id=result_id,
+            allowed_statuses=(AssignmentStatus.ACTIVE,),
+        )
+
+    def fail_assignment(
+        self,
+        project_id: str,
+        assignment_id: str,
+        *,
+        agent_id: str,
+        summary: str,
+        timestamp: int,
+        evidence_refs: Tuple[str, ...] = (),
+        correlation_id: Optional[str] = None,
+        causation_id: Optional[str] = None,
+        metadata: Optional[Dict[str, object]] = None,
+        result_id: Optional[str] = None,
+    ) -> Tuple[Assignment, AssignmentResult]:
+        """Fail active or blocked work and preserve failure evidence."""
+        return self._terminalize_assignment(
+            project_id,
+            assignment_id,
+            agent_id=agent_id,
+            status=AssignmentStatus.FAILED,
+            outcome=AssignmentOutcome.FAILED,
+            summary=summary,
+            timestamp=timestamp,
+            evidence_refs=evidence_refs,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            metadata=metadata,
+            result_id=result_id,
+            allowed_statuses=(
+                AssignmentStatus.ACTIVE,
+                AssignmentStatus.BLOCKED,
+            ),
+        )
+
+    def cancel_assignment(
+        self,
+        project_id: str,
+        assignment_id: str,
+        *,
+        summary: str,
+        timestamp: int,
+        agent_id: Optional[str] = None,
+        evidence_refs: Tuple[str, ...] = (),
+        correlation_id: Optional[str] = None,
+        causation_id: Optional[str] = None,
+        metadata: Optional[Dict[str, object]] = None,
+        result_id: Optional[str] = None,
+    ) -> Tuple[Assignment, AssignmentResult]:
+        """Cancel non-terminal work and record the cancellation."""
+        current = self.get_assignment(project_id, assignment_id)
+
+        allowed_statuses = (
+            AssignmentStatus.PENDING,
+            AssignmentStatus.ASSIGNED,
+            AssignmentStatus.ACCEPTED,
+            AssignmentStatus.ACTIVE,
+            AssignmentStatus.BLOCKED,
+            AssignmentStatus.HANDOFF_REQUESTED,
+        )
+
+        if current.status not in allowed_statuses:
+            raise InvalidAssignmentTransitionError(
+                f"cannot cancel assignment while assignment is "
+                f"{current.status.value}"
+            )
+
+        if current.assigned_agent_id is not None:
+            if agent_id is None:
+                raise AssignmentAgentMismatchError(
+                    "assigned work requires agent_id for cancellation"
+                )
+
+            self._require_assigned_agent(current, agent_id)
+
+        return self._terminalize_assignment(
+            project_id,
+            assignment_id,
+            agent_id=agent_id,
+            status=AssignmentStatus.CANCELLED,
+            outcome=AssignmentOutcome.CANCELLED,
+            summary=summary,
+            timestamp=timestamp,
+            evidence_refs=evidence_refs,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            metadata=metadata,
+            result_id=result_id,
+            allowed_statuses=allowed_statuses,
+        )
+
+    def _terminalize_assignment(
+        self,
+        project_id: str,
+        assignment_id: str,
+        *,
+        agent_id: Optional[str],
+        status: AssignmentStatus,
+        outcome: AssignmentOutcome,
+        summary: str,
+        timestamp: int,
+        evidence_refs: Tuple[str, ...],
+        correlation_id: Optional[str],
+        causation_id: Optional[str],
+        metadata: Optional[Dict[str, object]],
+        result_id: Optional[str],
+        allowed_statuses: Tuple[AssignmentStatus, ...],
+    ) -> Tuple[Assignment, AssignmentResult]:
+        """Record one legal terminal transition and its result."""
+        current = self.get_assignment(project_id, assignment_id)
+
+        if current.status not in allowed_statuses:
+            expected = ", ".join(
+                allowed.value for allowed in allowed_statuses
+            )
+            raise InvalidAssignmentTransitionError(
+                f"cannot move assignment from {current.status.value} "
+                f"to {status.value}; expected one of: {expected}"
+            )
+
+        if current.assigned_agent_id is not None:
+            if agent_id is None:
+                raise AssignmentAgentMismatchError(
+                    "assigned work requires the assigned agent"
+                )
+
+            self._require_assigned_agent(current, agent_id)
+
+        if timestamp < current.updated_at:
+            raise InvalidAssignmentTransitionError(
+                "result timestamp must not move backwards"
+            )
+
+        result = AssignmentResult(
+            result_id=result_id or new_result_id(),
+            assignment_id=current.assignment_id,
+            project_id=current.project_id,
+            role_id=current.role_id,
+            outcome=outcome,
+            summary=summary,
+            evidence_refs=evidence_refs,
+            produced_by=agent_id,
+            completed_at=timestamp,
+            correlation_id=(
+                correlation_id
+                if correlation_id is not None
+                else current.correlation_id
+            ),
+            causation_id=causation_id,
+            metadata={} if metadata is None else dict(metadata),
+        )
+
+        if any(
+            existing.result_id == result.result_id
+            for existing in self.list_results(project_id)
+        ):
+            raise InvalidAssignmentError(
+                f"result_id already exists: {result.result_id}"
+            )
+
+        updated = self._record_assignment_update(
+            current,
+            timestamp=timestamp,
+            status=status,
+            causation_id=causation_id,
+        )
+
+        self.store.append_result(result)
+
+        return updated, result
 
     def _record_assignment_update(
         self,

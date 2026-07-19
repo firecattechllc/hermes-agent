@@ -885,3 +885,508 @@ def test_list_assignments_filters_role_and_status(
     assert tuple(
         item.assignment_id for item in reviewers
     ) == ("assign_reviewer",)
+
+
+def _active_assignment(
+    service: svc.AgentRoleService,
+    *,
+    assignment_id: str = "assign_active",
+) -> m.Assignment:
+    created = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        assignment_id=assignment_id,
+        timestamp=10,
+    )
+    service.assign_agent(
+        "hermes-platform",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=20,
+    )
+    service.accept_assignment(
+        "hermes-platform",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=30,
+    )
+    return service.activate_assignment(
+        "hermes-platform",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=40,
+    )
+
+
+def test_block_and_unblock_assignment(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+
+    blocked = service.block_assignment(
+        "hermes-platform",
+        active.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=50,
+    )
+    unblocked = service.unblock_assignment(
+        "hermes-platform",
+        active.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=60,
+    )
+
+    assert blocked.status == m.AssignmentStatus.BLOCKED
+    assert blocked.version == 5
+    assert unblocked.status == m.AssignmentStatus.ACTIVE
+    assert unblocked.version == 6
+
+
+def test_block_assignment_requires_active_state(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    created = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        timestamp=10,
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentTransitionError,
+        match="cannot block assignment",
+    ):
+        service.block_assignment(
+            "hermes-platform",
+            created.assignment_id,
+            agent_id="agent-builder-1",
+            timestamp=20,
+        )
+
+
+def test_block_assignment_enforces_agent_ownership(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+
+    with pytest.raises(svc.AssignmentAgentMismatchError):
+        service.block_assignment(
+            "hermes-platform",
+            active.assignment_id,
+            agent_id="agent-builder-2",
+            timestamp=50,
+        )
+
+
+def test_request_handoff_records_evidence_and_state(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+
+    updated, handoff = service.request_handoff(
+        "hermes-platform",
+        active.assignment_id,
+        agent_id="agent-builder-1",
+        to_role_id="reviewer",
+        reason=m.HandoffReason.REVIEW_REQUIRED,
+        summary="Implementation is ready for review.",
+        timestamp=50,
+        evidence_refs=("commit:abc123", "tests:85-passed"),
+        handoff_id="handoff_service_test",
+    )
+
+    assert updated.status == m.AssignmentStatus.HANDOFF_REQUESTED
+    assert updated.version == 5
+    assert handoff.from_role_id == "builder"
+    assert handoff.to_role_id == "reviewer"
+    assert handoff.requested_by == "agent-builder-1"
+    assert handoff.evidence_refs == (
+        "commit:abc123",
+        "tests:85-passed",
+    )
+    assert service.list_handoffs(
+        "hermes-platform",
+        assignment_id=active.assignment_id,
+    ) == (handoff,)
+
+
+def test_request_handoff_requires_active_target_role(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+
+    inactive = m.AgentRole(
+        role_id="inactive-target",
+        name="Inactive target",
+        description="Inactive handoff target.",
+        capabilities=(
+            m.RoleCapability(
+                capability_id="review",
+                description="Review work.",
+            ),
+        ),
+        active=False,
+    )
+    service.store.append_role(
+        "hermes-platform",
+        inactive,
+        timestamp=45,
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="handoff target role is inactive",
+    ):
+        service.request_handoff(
+            "hermes-platform",
+            active.assignment_id,
+            agent_id="agent-builder-1",
+            to_role_id="inactive-target",
+            reason=m.HandoffReason.REVIEW_REQUIRED,
+            summary="Review required.",
+            timestamp=50,
+        )
+
+
+def test_request_handoff_rejects_duplicate_identifier(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    first = _active_assignment(
+        service,
+        assignment_id="assign_handoff_one",
+    )
+    second = _active_assignment(
+        service,
+        assignment_id="assign_handoff_two",
+    )
+
+    service.request_handoff(
+        "hermes-platform",
+        first.assignment_id,
+        agent_id="agent-builder-1",
+        to_role_id="reviewer",
+        reason=m.HandoffReason.REVIEW_REQUIRED,
+        summary="First request.",
+        timestamp=50,
+        handoff_id="handoff_duplicate",
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="handoff_id already exists",
+    ):
+        service.request_handoff(
+            "hermes-platform",
+            second.assignment_id,
+            agent_id="agent-builder-1",
+            to_role_id="reviewer",
+            reason=m.HandoffReason.REVIEW_REQUIRED,
+            summary="Second request.",
+            timestamp=50,
+            handoff_id="handoff_duplicate",
+        )
+
+
+def test_complete_handoff_moves_to_handed_off(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+
+    requested, _ = service.request_handoff(
+        "hermes-platform",
+        active.assignment_id,
+        agent_id="agent-builder-1",
+        to_role_id="reviewer",
+        reason=m.HandoffReason.REVIEW_REQUIRED,
+        summary="Ready for review.",
+        timestamp=50,
+    )
+
+    handed_off = service.complete_handoff(
+        "hermes-platform",
+        requested.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=60,
+    )
+
+    assert handed_off.status == m.AssignmentStatus.HANDED_OFF
+    assert handed_off.version == 6
+
+
+def test_complete_handoff_requires_recorded_request(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+
+    payload = active.model_dump(mode="python")
+    payload.update(
+        {
+            "status": m.AssignmentStatus.HANDOFF_REQUESTED,
+            "updated_at": 50,
+            "version": 5,
+        }
+    )
+    service.store.append_assignment(
+        m.Assignment.model_validate(payload),
+        timestamp=50,
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentTransitionError,
+        match="without a recorded request",
+    ):
+        service.complete_handoff(
+            "hermes-platform",
+            active.assignment_id,
+            agent_id="agent-builder-1",
+            timestamp=60,
+        )
+
+
+def test_complete_assignment_records_success_result(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+
+    completed, result = service.complete_assignment(
+        "hermes-platform",
+        active.assignment_id,
+        agent_id="agent-builder-1",
+        summary="Implementation and focused verification completed.",
+        timestamp=50,
+        evidence_refs=("commit:abc123", "pytest:passed"),
+        result_id="result_success",
+    )
+
+    assert completed.status == m.AssignmentStatus.COMPLETED
+    assert completed.version == 5
+    assert result.outcome == m.AssignmentOutcome.SUCCEEDED
+    assert result.role_id == "builder"
+    assert result.produced_by == "agent-builder-1"
+    assert service.list_results(
+        "hermes-platform",
+        assignment_id=active.assignment_id,
+    ) == (result,)
+
+
+def test_fail_assignment_from_active(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+
+    failed, result = service.fail_assignment(
+        "hermes-platform",
+        active.assignment_id,
+        agent_id="agent-builder-1",
+        summary="Focused verification failed.",
+        timestamp=50,
+        evidence_refs=("pytest:failed",),
+    )
+
+    assert failed.status == m.AssignmentStatus.FAILED
+    assert result.outcome == m.AssignmentOutcome.FAILED
+
+
+def test_fail_assignment_from_blocked(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+    blocked = service.block_assignment(
+        "hermes-platform",
+        active.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=50,
+    )
+
+    failed, result = service.fail_assignment(
+        "hermes-platform",
+        blocked.assignment_id,
+        agent_id="agent-builder-1",
+        summary="Blocker could not be resolved.",
+        timestamp=60,
+    )
+
+    assert failed.status == m.AssignmentStatus.FAILED
+    assert failed.version == 6
+    assert result.outcome == m.AssignmentOutcome.FAILED
+
+
+def test_cancel_pending_assignment_without_agent(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    pending = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        timestamp=10,
+    )
+
+    cancelled, result = service.cancel_assignment(
+        "hermes-platform",
+        pending.assignment_id,
+        summary="Operator withdrew the assignment.",
+        timestamp=20,
+    )
+
+    assert cancelled.status == m.AssignmentStatus.CANCELLED
+    assert result.outcome == m.AssignmentOutcome.CANCELLED
+    assert result.produced_by is None
+
+
+def test_cancel_assigned_work_requires_owner(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+
+    with pytest.raises(
+        svc.AssignmentAgentMismatchError,
+        match="requires agent_id",
+    ):
+        service.cancel_assignment(
+            "hermes-platform",
+            active.assignment_id,
+            summary="Cancel active assignment.",
+            timestamp=50,
+        )
+
+
+def test_terminal_assignment_cannot_complete_twice(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+
+    completed, _ = service.complete_assignment(
+        "hermes-platform",
+        active.assignment_id,
+        agent_id="agent-builder-1",
+        summary="Completed.",
+        timestamp=50,
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentTransitionError,
+        match="cannot move assignment from completed",
+    ):
+        service.complete_assignment(
+            "hermes-platform",
+            completed.assignment_id,
+            agent_id="agent-builder-1",
+            summary="Completed again.",
+            timestamp=60,
+        )
+
+
+def test_terminal_result_rejects_duplicate_identifier(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    first = _active_assignment(
+        service,
+        assignment_id="assign_result_one",
+    )
+    second = _active_assignment(
+        service,
+        assignment_id="assign_result_two",
+    )
+
+    service.complete_assignment(
+        "hermes-platform",
+        first.assignment_id,
+        agent_id="agent-builder-1",
+        summary="First completed assignment.",
+        timestamp=50,
+        result_id="result_duplicate",
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="result_id already exists",
+    ):
+        service.complete_assignment(
+            "hermes-platform",
+            second.assignment_id,
+            agent_id="agent-builder-1",
+            summary="Second completed assignment.",
+            timestamp=50,
+            result_id="result_duplicate",
+        )
+
+    still_active = service.get_assignment(
+        "hermes-platform",
+        second.assignment_id,
+    )
+    assert still_active.status == m.AssignmentStatus.ACTIVE
+
+
+def test_terminal_transition_rejects_backward_timestamp(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    active = _active_assignment(service)
+
+    with pytest.raises(
+        svc.InvalidAssignmentTransitionError,
+        match="result timestamp must not move backwards",
+    ):
+        service.complete_assignment(
+            "hermes-platform",
+            active.assignment_id,
+            agent_id="agent-builder-1",
+            summary="Invalid old result.",
+            timestamp=39,
+        )
+
+
+def test_handoffs_and_results_are_project_isolated(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    service.bootstrap_builtin_roles("project-a", timestamp=1)
+    service.bootstrap_builtin_roles("project-b", timestamp=1)
+
+    created = service.create_assignment(
+        "project-a",
+        "builder",
+        timestamp=10,
+    )
+    service.assign_agent(
+        "project-a",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=20,
+    )
+    service.accept_assignment(
+        "project-a",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=30,
+    )
+    active = service.activate_assignment(
+        "project-a",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=40,
+    )
+    service.complete_assignment(
+        "project-a",
+        active.assignment_id,
+        agent_id="agent-builder-1",
+        summary="Project A completed.",
+        timestamp=50,
+    )
+
+    assert len(service.list_results("project-a")) == 1
+    assert service.list_results("project-b") == ()
+    assert service.list_handoffs("project-b") == ()
