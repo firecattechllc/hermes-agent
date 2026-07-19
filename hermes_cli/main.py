@@ -313,6 +313,10 @@ from hermes_cli.subcommands.prompt_size import build_prompt_size_parser
 from hermes_cli.subcommands.memory import build_memory_parser
 from hermes_cli.subcommands.acp import build_acp_parser
 from hermes_cli.subcommands.context import build_context_parser, cmd_context
+from hermes_cli.subcommands.mission_control import (
+    build_mission_control_parser,
+    cmd_mission_control,
+)
 from hermes_cli.subcommands.tools import build_tools_parser
 from hermes_cli.subcommands.insights import build_insights_parser
 from hermes_cli.subcommands.skills import build_skills_parser
@@ -12698,7 +12702,8 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "computer-use",
         "config", "console", "context", "cron", "curator", "dashboard", "serve", "debug", "doctor",
         "dump", "fallback", "gateway", "hooks", "import", "insights",
-        "gui", "desktop", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate", "moa",
+        "gui", "desktop", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory",
+        "mission-control", "mission_control", "migrate", "moa",
         "journey", "memory-graph", "learning",
         "model", "pairing", "pets", "plugins", "portal", "postinstall", "profile",
         "project", "proxy",
@@ -13702,6 +13707,11 @@ def main():
     # context command  (parser built in hermes_cli/subcommands/context.py)
     # =========================================================================
     build_context_parser(subparsers, cmd_context=cmd_context)
+
+    # =========================================================================
+    # mission-control command  (parser built in hermes_cli/subcommands/mission_control.py)
+    # =========================================================================
+    build_mission_control_parser(subparsers, cmd_mission_control=cmd_mission_control)
 
     # =========================================================================
     # tools command  (parser built in hermes_cli/subcommands/tools.py)

@@ -32,6 +32,24 @@ class ContextService:
     def __init__(self, store: Optional[ContextStore] = None) -> None:
         self._store = store or get_store()
 
+    def _ingest_mission_control_launch(
+        self,
+        launch: m.LaunchContext,
+        *,
+        actor: Optional[str],
+    ) -> None:
+        """Mirror launch telemetry into Mission Control when available."""
+        try:
+            from hermes_cli.mission_control.service import MissionControlService
+
+            MissionControlService().ingest_context_launch(
+                launch,
+                project=self._store.get_project(launch.project_id),
+                actor=actor or "context_engine",
+            )
+        except Exception as exc:
+            logger.debug("mission control launch ingestion failed: %s", exc)
+
     # ── Project management ─────────────────────────────────────────────────
 
     def register_project(
@@ -359,6 +377,7 @@ class ContextService:
                 "backlog_id": backlog_id,
             },
         ))
+        self._ingest_mission_control_launch(launch, actor=actor)
         return launch
 
     def update_launch(
@@ -387,8 +406,8 @@ class ContextService:
             raise ValueError(f"no such launch: {launch_id}")
 
         now = m._utc_now()
-        updated = m.LaunchContext(
-            **existing.model_dump(),
+        data = existing.model_dump()
+        data.update(
             stage=stage if stage is not None else existing.stage,
             status=status if status is not None else existing.status,
             evidence_refs=evidence_refs if evidence_refs is not None else existing.evidence_refs,
@@ -416,6 +435,7 @@ class ContextService:
                 m.LaunchStatus.CANCELLED,
             }) else existing.completed_at,
         )
+        updated = m.LaunchContext(**data)
         self._store.save_launch(updated)
         self._store.append_event(m.ContextEvent(
             event_id=m.new_event_id(),
@@ -424,6 +444,7 @@ class ContextService:
             actor=actor,
             payload={"launch_id": launch_id, "status": updated.status.value},
         ))
+        self._ingest_mission_control_launch(updated, actor=actor)
         return updated
 
     def list_launches(
