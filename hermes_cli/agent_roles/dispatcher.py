@@ -10,6 +10,8 @@ This module owns no durable state and launches no agents.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import Enum
 from typing import Optional, Tuple
 
 from hermes_cli.autonomous_backlog import models as backlog_models
@@ -26,6 +28,63 @@ from .service import (
     AgentRoleService,
     InvalidAssignmentError,
 )
+
+
+class DispatchResultStatus(str, Enum):
+    """Outcome of one item considered during a dispatch pass."""
+
+    CLAIMED = "claimed"
+    ALREADY_ASSIGNED = "already_assigned"
+    BLOCKED = "blocked"
+    SKIPPED = "skipped"
+
+
+@dataclass(frozen=True)
+class DispatchResult:
+    """Immutable result for one backlog item considered for dispatch."""
+
+    item_id: str
+    status: DispatchResultStatus
+    assignment_id: Optional[str] = None
+    role_id: Optional[str] = None
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class DispatchReport:
+    """Deterministic summary of one synchronous dispatch pass."""
+
+    project_id: str
+    timestamp: int
+    results: Tuple[DispatchResult, ...]
+
+    @property
+    def claimed_count(self) -> int:
+        return sum(
+            result.status == DispatchResultStatus.CLAIMED
+            for result in self.results
+        )
+
+    @property
+    def already_assigned_count(self) -> int:
+        return sum(
+            result.status == DispatchResultStatus.ALREADY_ASSIGNED
+            for result in self.results
+        )
+
+    @property
+    def blocked_count(self) -> int:
+        return sum(
+            result.status == DispatchResultStatus.BLOCKED
+            for result in self.results
+        )
+
+    @property
+    def skipped_count(self) -> int:
+        return sum(
+            result.status == DispatchResultStatus.SKIPPED
+            for result in self.results
+        )
 
 
 class DispatcherError(RuntimeError):
@@ -62,6 +121,95 @@ class GovernedDispatcher:
     ) -> None:
         self.backlog_service = backlog_service
         self.role_service = role_service
+
+    def dispatch_ready_items(
+        self,
+        project_id: str,
+        *,
+        timestamp: int,
+        limit: Optional[int] = None,
+        actor: str = "dispatcher",
+    ) -> DispatchReport:
+        """Dispatch eligible work in deterministic governed order.
+
+        This method performs one synchronous selection pass. It creates no
+        timer, worker, queue, lease, or persistent dispatcher state.
+        """
+        if limit is not None and limit < 0:
+            raise ValueError("dispatch limit must be non-negative")
+
+        approved = self.backlog_service.store.list_items(
+            project_id,
+            status=backlog_models.BacklogStatus.APPROVED,
+        )
+        scheduled = self.backlog_service.store.list_items(
+            project_id,
+            status=backlog_models.BacklogStatus.SCHEDULED,
+        )
+
+        candidates = sorted(
+            (*approved, *scheduled),
+            key=self._dispatch_sort_key,
+        )
+
+        if limit is not None:
+            candidates = candidates[:limit]
+
+        results = []
+
+        for item in candidates:
+            existing = self._active_assignment_for_item(
+                project_id,
+                item.item_id,
+            )
+
+            try:
+                assignment = self.dispatch_item(
+                    project_id,
+                    item.item_id,
+                    timestamp=timestamp,
+                    actor=actor,
+                )
+            except DependencyNotSatisfiedError as error:
+                results.append(
+                    DispatchResult(
+                        item_id=item.item_id,
+                        status=DispatchResultStatus.BLOCKED,
+                        reason=str(error),
+                    )
+                )
+                continue
+            except (
+                BacklogItemNotEligibleError,
+                MatchingRoleNotFoundError,
+            ) as error:
+                results.append(
+                    DispatchResult(
+                        item_id=item.item_id,
+                        status=DispatchResultStatus.SKIPPED,
+                        reason=str(error),
+                    )
+                )
+                continue
+
+            results.append(
+                DispatchResult(
+                    item_id=item.item_id,
+                    status=(
+                        DispatchResultStatus.ALREADY_ASSIGNED
+                        if existing is not None
+                        else DispatchResultStatus.CLAIMED
+                    ),
+                    assignment_id=assignment.assignment_id,
+                    role_id=assignment.role_id,
+                )
+            )
+
+        return DispatchReport(
+            project_id=project_id,
+            timestamp=timestamp,
+            results=tuple(results),
+        )
 
     def dispatch_item(
         self,
@@ -322,6 +470,10 @@ class GovernedDispatcher:
             role
             for role in roles
             if self._role_matches_item(role, item)
+            and self._role_has_capacity(
+                project_id,
+                role,
+            )
         )
 
         if not matching:
@@ -339,6 +491,31 @@ class GovernedDispatcher:
             matching,
             key=lambda role: role.role_id,
         )[0]
+
+    def _role_has_capacity(
+        self,
+        project_id: str,
+        role: AgentRole,
+    ) -> bool:
+        """Return whether the role can accept another active assignment."""
+        active_statuses = {
+            AssignmentStatus.PENDING,
+            AssignmentStatus.ASSIGNED,
+            AssignmentStatus.ACCEPTED,
+            AssignmentStatus.ACTIVE,
+            AssignmentStatus.BLOCKED,
+            AssignmentStatus.HANDOFF_REQUESTED,
+        }
+
+        active_count = sum(
+            assignment.status in active_statuses
+            for assignment in self.role_service.list_assignments(
+                project_id,
+                role_id=role.role_id,
+            )
+        )
+
+        return active_count < role.policy.max_concurrent_assignments
 
     @classmethod
     def _role_matches_item(
@@ -393,6 +570,31 @@ class GovernedDispatcher:
             or normalised_path.startswith(
                 f"{normalised_policy}/"
             )
+        )
+
+    @staticmethod
+    def _dispatch_sort_key(
+        item: backlog_models.BacklogItem,
+    ) -> tuple[int, int, int, str]:
+        """Return deterministic priority and schedule selection order."""
+        priority_order = {
+            backlog_models.BacklogPriority.CRITICAL: 0,
+            backlog_models.BacklogPriority.HIGH: 1,
+            backlog_models.BacklogPriority.NORMAL: 2,
+            backlog_models.BacklogPriority.LOW: 3,
+        }
+
+        scheduled_at = (
+            item.schedule_policy.scheduled_at
+            if item.schedule_policy.scheduled_at is not None
+            else 0
+        )
+
+        return (
+            priority_order[item.priority],
+            scheduled_at,
+            item.created_at,
+            item.item_id,
         )
 
     def _active_assignment_for_item(

@@ -30,6 +30,19 @@ from .store import (
     JournalRecord,
 )
 
+from .dispatcher import (
+    BacklogItemNotEligibleError,
+    BacklogItemNotFoundError,
+    DependencyNotSatisfiedError,
+    DispatchPersistenceError,
+    DispatchReport,
+    DispatchResult,
+    DispatchResultStatus,
+    DispatcherError,
+    GovernedDispatcher,
+    MatchingRoleNotFoundError,
+)
+
 from .service import (
     AgentRoleService,
     AgentRoleServiceError,
@@ -68,6 +81,16 @@ __all__ = [
     "JournalCorruptionError",
     "JournalEventType",
     "JournalRecord",
+    "BacklogItemNotEligibleError",
+    "BacklogItemNotFoundError",
+    "DependencyNotSatisfiedError",
+    "DispatchPersistenceError",
+    "DispatchReport",
+    "DispatchResult",
+    "DispatchResultStatus",
+    "DispatcherError",
+    "GovernedDispatcher",
+    "MatchingRoleNotFoundError",
     "AgentRoleService",
     "AgentRoleServiceError",
     "BuiltinRoleConflictError",
