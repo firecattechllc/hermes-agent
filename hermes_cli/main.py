@@ -321,6 +321,10 @@ from hermes_cli.subcommands.mission_control import (
     build_mission_control_parser,
     cmd_mission_control,
 )
+from hermes_cli.subcommands.autonomous_backlog import (
+    build_autonomous_backlog_parser,
+    cmd_autonomous_backlog,
+)
 from hermes_cli.subcommands.tools import build_tools_parser
 from hermes_cli.subcommands.insights import build_insights_parser
 from hermes_cli.subcommands.skills import build_skills_parser
@@ -13726,6 +13730,14 @@ def main():
     # mission-control command  (parser built in hermes_cli/subcommands/mission_control.py)
     # =========================================================================
     build_mission_control_parser(subparsers, cmd_mission_control=cmd_mission_control)
+
+    # =========================================================================
+    # autonomous-backlog command
+    # =========================================================================
+    build_autonomous_backlog_parser(
+        subparsers,
+        cmd_autonomous_backlog=cmd_autonomous_backlog,
+    )
 
     # =========================================================================
     # tools command  (parser built in hermes_cli/subcommands/tools.py)
