@@ -30,6 +30,15 @@ from .store import (
     JournalRecord,
 )
 
+from .service import (
+    AgentRoleService,
+    AgentRoleServiceError,
+    BuiltinRoleConflictError,
+    InvalidRoleRegistrationError,
+    RoleAlreadyRegisteredError,
+    RoleNotFoundError,
+)
+
 __all__ = [
     "AgentRole",
     "Assignment",
@@ -55,4 +64,10 @@ __all__ = [
     "JournalCorruptionError",
     "JournalEventType",
     "JournalRecord",
+    "AgentRoleService",
+    "AgentRoleServiceError",
+    "BuiltinRoleConflictError",
+    "InvalidRoleRegistrationError",
+    "RoleAlreadyRegisteredError",
+    "RoleNotFoundError",
 ]
