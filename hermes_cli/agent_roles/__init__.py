@@ -100,6 +100,16 @@ from hermes_cli.agent_roles.runtime_handoff import (
     RuntimeHandoffStatus,
 )
 
+from hermes_cli.agent_roles.runtime_session import (
+    RUNTIME_SESSION_SCHEMA_VERSION,
+    RuntimeSession,
+    RuntimeSessionEvent,
+    RuntimeSessionFactory,
+    RuntimeSessionService,
+    RuntimeSessionState,
+    RuntimeSessionTransition,
+)
+
 __all__ = [
     "AgentRole",
     "Assignment",
@@ -174,4 +184,11 @@ __all__ = [
     "RuntimeHandoffRequest",
     "RuntimeHandoffService",
     "RuntimeHandoffStatus",
+    "RUNTIME_SESSION_SCHEMA_VERSION",
+    "RuntimeSession",
+    "RuntimeSessionEvent",
+    "RuntimeSessionFactory",
+    "RuntimeSessionService",
+    "RuntimeSessionState",
+    "RuntimeSessionTransition",
 ]
