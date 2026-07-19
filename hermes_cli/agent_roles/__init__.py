@@ -89,6 +89,17 @@ from hermes_cli.agent_roles.launch_visibility import (
     LaunchVisibilityService,
 )
 
+from hermes_cli.agent_roles.runtime_handoff import (
+    RUNTIME_HANDOFF_SCHEMA_VERSION,
+    DeterministicDryRunAdapter,
+    RuntimeAdapter,
+    RuntimeHandoffMode,
+    RuntimeHandoffReceipt,
+    RuntimeHandoffRequest,
+    RuntimeHandoffService,
+    RuntimeHandoffStatus,
+)
+
 __all__ = [
     "AgentRole",
     "Assignment",
@@ -155,4 +166,12 @@ __all__ = [
     "LaunchVisibilityAdapter",
     "LaunchVisibilityRecord",
     "LaunchVisibilityService",
+    "RUNTIME_HANDOFF_SCHEMA_VERSION",
+    "DeterministicDryRunAdapter",
+    "RuntimeAdapter",
+    "RuntimeHandoffMode",
+    "RuntimeHandoffReceipt",
+    "RuntimeHandoffRequest",
+    "RuntimeHandoffService",
+    "RuntimeHandoffStatus",
 ]
