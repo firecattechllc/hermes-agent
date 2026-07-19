@@ -313,7 +313,10 @@ class ContextSnapshot(BaseModel):
     def integrity_hash(self) -> str:
         """SHA-256 of canonical JSON (sorted keys, no indent) over snapshot content."""
         canonical = json.dumps(
-            self.model_dump(exclude={"integrity_hash"}, mode="json"),
+            self.model_dump(
+                exclude={"generated_at", "generated_by"},
+                mode="json",
+            ),
             sort_keys=True,
             separators=(",", ":"),
             ensure_ascii=False,

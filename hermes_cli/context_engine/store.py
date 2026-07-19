@@ -361,6 +361,8 @@ class ContextStore:
         """Deterministic snapshot: latest version of each entity from journal replay."""
         _safe_id(project_id)
         project = self.get_project(project_id)
+        if project is None:
+            raise ValueError(f"no such project: {project_id}")
         records: Dict[str, m.ContextRecord] = {}
         launches: Dict[str, m.LaunchContext] = {}
         event_count = 0

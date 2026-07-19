@@ -122,6 +122,32 @@ def test_snapshot_hash_is_key_order_independent() -> None:
     assert first.integrity_hash() == second.integrity_hash()
 
 
+def test_snapshot_hash_ignores_generation_metadata() -> None:
+    first = m.ContextSnapshot(
+        version=0,
+        generated_at=1,
+        generated_by="cli",
+        project_id="hermes-platform",
+        event_count=0,
+    )
+    second = m.ContextSnapshot(
+        **{
+            **first.model_dump(),
+            "generated_at": 2,
+            "generated_by": "test",
+        }
+    )
+
+    assert first.integrity_hash() == second.integrity_hash()
+
+
+def test_build_snapshot_rejects_unknown_project(tmp_path: Path) -> None:
+    service = ContextService(store=ContextStore(root=tmp_path / "context"))
+
+    with pytest.raises(ValueError, match="no such project: missing-project"):
+        service.build_snapshot("missing-project")
+
+
 def test_event_log_honors_explicit_store_root(tmp_path: Path) -> None:
     root = tmp_path / "context"
     service = ContextService(store=ContextStore(root=root))
