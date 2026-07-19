@@ -477,3 +477,411 @@ def test_capability_helpers_preserve_model_order(
         "first",
         "third",
     )
+
+
+def _bootstrapped_service(
+    tmp_path: Path,
+) -> svc.AgentRoleService:
+    service = _service(tmp_path)
+    service.bootstrap_builtin_roles(
+        "hermes-platform",
+        timestamp=1,
+    )
+    return service
+
+
+def test_create_assignment_for_registered_role(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    assignment = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        assignment_id="assign_test_create",
+        timestamp=10,
+        required_capabilities=("code-change",),
+        backlog_item_id="backlog-1",
+        instructions="Implement the bounded change.",
+        created_by="operator",
+    )
+
+    assert assignment.assignment_id == "assign_test_create"
+    assert assignment.project_id == "hermes-platform"
+    assert assignment.role_id == "builder"
+    assert assignment.status == m.AssignmentStatus.PENDING
+    assert assignment.assigned_agent_id is None
+    assert assignment.version == 1
+    assert assignment.created_at == 10
+    assert assignment.updated_at == 10
+
+
+def test_create_assignment_requires_registered_role(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+
+    with pytest.raises(svc.RoleNotFoundError):
+        service.create_assignment(
+            "hermes-platform",
+            "builder",
+            timestamp=10,
+        )
+
+
+def test_create_assignment_rejects_missing_capability(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="does not provide required capabilities",
+    ):
+        service.create_assignment(
+            "hermes-platform",
+            "builder",
+            timestamp=10,
+            required_capabilities=("security-review",),
+        )
+
+
+def test_create_assignment_rejects_inactive_role(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+
+    inactive = m.AgentRole(
+        role_id="inactive-role",
+        name="Inactive",
+        description="Inactive role.",
+        capabilities=(
+            m.RoleCapability(
+                capability_id="analysis",
+                description="Perform analysis.",
+            ),
+        ),
+        active=False,
+    )
+
+    service.store.append_role(
+        "hermes-platform",
+        inactive,
+        timestamp=1,
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="role is inactive",
+    ):
+        service.create_assignment(
+            "hermes-platform",
+            "inactive-role",
+            timestamp=10,
+        )
+
+
+def test_create_assignment_rejects_duplicate_identifier(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    service.create_assignment(
+        "hermes-platform",
+        "builder",
+        assignment_id="assign_duplicate",
+        timestamp=10,
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="assignment_id already exists",
+    ):
+        service.create_assignment(
+            "hermes-platform",
+            "builder",
+            assignment_id="assign_duplicate",
+            timestamp=20,
+        )
+
+
+def test_assignment_lookup_fails_closed(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+
+    assert service.find_assignment(
+        "hermes-platform",
+        "missing",
+    ) is None
+
+    with pytest.raises(
+        svc.AssignmentNotFoundError,
+        match="assignment is not registered",
+    ):
+        service.get_assignment(
+            "hermes-platform",
+            "missing",
+        )
+
+
+def test_assign_agent_moves_pending_to_assigned(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    created = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        assignment_id="assign_lifecycle",
+        timestamp=10,
+    )
+
+    assigned = service.assign_agent(
+        "hermes-platform",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=20,
+    )
+
+    assert assigned.status == m.AssignmentStatus.ASSIGNED
+    assert assigned.assigned_agent_id == "agent-builder-1"
+    assert assigned.version == 2
+    assert assigned.updated_at == 20
+
+
+def test_accept_assignment_moves_assigned_to_accepted(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    created = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        timestamp=10,
+    )
+    assigned = service.assign_agent(
+        "hermes-platform",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=20,
+    )
+
+    accepted = service.accept_assignment(
+        "hermes-platform",
+        assigned.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=30,
+    )
+
+    assert accepted.status == m.AssignmentStatus.ACCEPTED
+    assert accepted.version == 3
+    assert accepted.assigned_agent_id == "agent-builder-1"
+
+
+def test_activate_assignment_moves_accepted_to_active(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    created = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        timestamp=10,
+    )
+    assigned = service.assign_agent(
+        "hermes-platform",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=20,
+    )
+    accepted = service.accept_assignment(
+        "hermes-platform",
+        assigned.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=30,
+    )
+
+    active = service.activate_assignment(
+        "hermes-platform",
+        accepted.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=40,
+    )
+
+    assert active.status == m.AssignmentStatus.ACTIVE
+    assert active.version == 4
+    assert active.updated_at == 40
+
+
+def test_assignment_lifecycle_rejects_wrong_order(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    created = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        timestamp=10,
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentTransitionError,
+        match="cannot activate assignment",
+    ):
+        service.activate_assignment(
+            "hermes-platform",
+            created.assignment_id,
+            agent_id="agent-builder-1",
+            timestamp=20,
+        )
+
+
+def test_assignment_lifecycle_rejects_wrong_agent(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    created = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        timestamp=10,
+    )
+    assigned = service.assign_agent(
+        "hermes-platform",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=20,
+    )
+
+    with pytest.raises(
+        svc.AssignmentAgentMismatchError,
+        match="assignment belongs to agent",
+    ):
+        service.accept_assignment(
+            "hermes-platform",
+            assigned.assignment_id,
+            agent_id="agent-builder-2",
+            timestamp=30,
+        )
+
+
+def test_assignment_lifecycle_rejects_backward_timestamp(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    created = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        timestamp=20,
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentTransitionError,
+        match="timestamp must not move backwards",
+    ):
+        service.assign_agent(
+            "hermes-platform",
+            created.assignment_id,
+            agent_id="agent-builder-1",
+            timestamp=19,
+        )
+
+
+def test_assignment_versions_replay_deterministically(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    created = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        assignment_id="assign_replay",
+        timestamp=10,
+    )
+    service.assign_agent(
+        "hermes-platform",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=20,
+    )
+    service.accept_assignment(
+        "hermes-platform",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=30,
+    )
+    service.activate_assignment(
+        "hermes-platform",
+        created.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=40,
+    )
+
+    replayed = service.store.replay(
+        "hermes-platform"
+    ).get_assignment("assign_replay")
+
+    assert replayed is not None
+    assert replayed.status == m.AssignmentStatus.ACTIVE
+    assert replayed.version == 4
+
+
+def test_assignments_are_project_isolated(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+
+    service.bootstrap_builtin_roles("project-a", timestamp=1)
+    service.bootstrap_builtin_roles("project-b", timestamp=1)
+
+    assignment = service.create_assignment(
+        "project-a",
+        "builder",
+        assignment_id="assign_isolated",
+        timestamp=10,
+    )
+
+    assert service.get_assignment(
+        "project-a",
+        assignment.assignment_id,
+    ) == assignment
+    assert service.find_assignment(
+        "project-b",
+        assignment.assignment_id,
+    ) is None
+
+
+def test_list_assignments_filters_role_and_status(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    builder = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        assignment_id="assign_builder",
+        timestamp=10,
+    )
+    service.create_assignment(
+        "hermes-platform",
+        "reviewer",
+        assignment_id="assign_reviewer",
+        timestamp=11,
+    )
+    service.assign_agent(
+        "hermes-platform",
+        builder.assignment_id,
+        agent_id="agent-builder-1",
+        timestamp=20,
+    )
+
+    assigned = service.list_assignments(
+        "hermes-platform",
+        status=m.AssignmentStatus.ASSIGNED,
+    )
+    reviewers = service.list_assignments(
+        "hermes-platform",
+        role_id="reviewer",
+    )
+
+    assert tuple(
+        item.assignment_id for item in assigned
+    ) == ("assign_builder",)
+    assert tuple(
+        item.assignment_id for item in reviewers
+    ) == ("assign_reviewer",)

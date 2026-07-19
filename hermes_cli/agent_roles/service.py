@@ -14,9 +14,12 @@ from typing import Dict, Optional, Tuple
 
 from .models import (
     AgentRole,
+    Assignment,
+    AssignmentStatus,
     BuiltinRole,
     RoleCapability,
     builtin_agent_roles,
+    new_assignment_id,
 )
 from .store import (
     AgentRoleProjectState,
@@ -43,6 +46,22 @@ class InvalidRoleRegistrationError(AgentRoleServiceError):
 
 class BuiltinRoleConflictError(AgentRoleServiceError):
     """Raised when stored built-in role data differs from the catalog."""
+
+
+class AssignmentNotFoundError(AgentRoleServiceError):
+    """Raised when a requested assignment does not exist."""
+
+
+class InvalidAssignmentError(AgentRoleServiceError):
+    """Raised when an assignment violates role or capability policy."""
+
+
+class InvalidAssignmentTransitionError(AgentRoleServiceError):
+    """Raised when an assignment lifecycle transition is illegal."""
+
+
+class AssignmentAgentMismatchError(AgentRoleServiceError):
+    """Raised when the wrong agent attempts an assignment operation."""
 
 
 class AgentRoleService:
@@ -172,6 +191,298 @@ class AgentRoleService:
             ) from error
 
         return self.get_role(project_id, role.role_id)
+
+    def list_assignments(
+        self,
+        project_id: str,
+        *,
+        role_id: Optional[str] = None,
+        status: Optional[AssignmentStatus] = None,
+    ) -> Tuple[Assignment, ...]:
+        """Return latest assignment snapshots in deterministic order."""
+        assignments = tuple(
+            sorted(
+                self.store.replay(project_id).assignments.values(),
+                key=lambda assignment: assignment.assignment_id,
+            )
+        )
+
+        if role_id is not None:
+            assignments = tuple(
+                assignment
+                for assignment in assignments
+                if assignment.role_id == role_id
+            )
+
+        if status is not None:
+            assignments = tuple(
+                assignment
+                for assignment in assignments
+                if assignment.status == status
+            )
+
+        return assignments
+
+    def find_assignment(
+        self,
+        project_id: str,
+        assignment_id: str,
+    ) -> Optional[Assignment]:
+        """Return the latest assignment snapshot when present."""
+        return self.store.replay(project_id).get_assignment(
+            assignment_id
+        )
+
+    def get_assignment(
+        self,
+        project_id: str,
+        assignment_id: str,
+    ) -> Assignment:
+        """Return one assignment or fail closed."""
+        assignment = self.find_assignment(
+            project_id,
+            assignment_id,
+        )
+
+        if assignment is None:
+            raise AssignmentNotFoundError(
+                f"assignment is not registered in project "
+                f"{project_id!r}: {assignment_id!r}"
+            )
+
+        return assignment
+
+    def create_assignment(
+        self,
+        project_id: str,
+        role_id: str,
+        *,
+        timestamp: int,
+        required_capabilities: Tuple[str, ...] = (),
+        backlog_item_id: Optional[str] = None,
+        instructions: Optional[str] = None,
+        created_by: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        causation_id: Optional[str] = None,
+        metadata: Optional[Dict[str, object]] = None,
+        assignment_id: Optional[str] = None,
+    ) -> Assignment:
+        """Create a pending assignment for an active registered role."""
+        role = self.get_role(project_id, role_id)
+
+        if not role.active:
+            raise InvalidAssignmentError(
+                f"role is inactive and cannot receive assignments: "
+                f"{role_id}"
+            )
+
+        available_capabilities = set(
+            self.role_capability_ids(role)
+        )
+        missing_capabilities = tuple(
+            capability_id
+            for capability_id in required_capabilities
+            if capability_id not in available_capabilities
+        )
+
+        if missing_capabilities:
+            missing = ", ".join(missing_capabilities)
+            raise InvalidAssignmentError(
+                f"role {role_id!r} does not provide required "
+                f"capabilities: {missing}"
+            )
+
+        assignment = Assignment(
+            assignment_id=assignment_id or new_assignment_id(),
+            project_id=project_id,
+            role_id=role_id,
+            backlog_item_id=backlog_item_id,
+            status=AssignmentStatus.PENDING,
+            required_capabilities=required_capabilities,
+            instructions=instructions,
+            created_at=timestamp,
+            updated_at=timestamp,
+            created_by=created_by,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            version=1,
+            metadata={} if metadata is None else dict(metadata),
+        )
+
+        if self.find_assignment(
+            project_id,
+            assignment.assignment_id,
+        ) is not None:
+            raise InvalidAssignmentError(
+                f"assignment_id already exists: "
+                f"{assignment.assignment_id}"
+            )
+
+        self.store.append_assignment(
+            assignment,
+            timestamp=timestamp,
+        )
+
+        return self.get_assignment(
+            project_id,
+            assignment.assignment_id,
+        )
+
+    def assign_agent(
+        self,
+        project_id: str,
+        assignment_id: str,
+        *,
+        agent_id: str,
+        timestamp: int,
+        causation_id: Optional[str] = None,
+    ) -> Assignment:
+        """Assign one agent to a pending assignment."""
+        current = self.get_assignment(
+            project_id,
+            assignment_id,
+        )
+
+        self._require_status(
+            current,
+            AssignmentStatus.PENDING,
+            operation="assign agent",
+        )
+
+        return self._record_assignment_update(
+            current,
+            timestamp=timestamp,
+            status=AssignmentStatus.ASSIGNED,
+            assigned_agent_id=agent_id,
+            causation_id=causation_id,
+        )
+
+    def accept_assignment(
+        self,
+        project_id: str,
+        assignment_id: str,
+        *,
+        agent_id: str,
+        timestamp: int,
+        causation_id: Optional[str] = None,
+    ) -> Assignment:
+        """Record acceptance by the assigned agent."""
+        current = self.get_assignment(
+            project_id,
+            assignment_id,
+        )
+
+        self._require_status(
+            current,
+            AssignmentStatus.ASSIGNED,
+            operation="accept assignment",
+        )
+        self._require_assigned_agent(current, agent_id)
+
+        return self._record_assignment_update(
+            current,
+            timestamp=timestamp,
+            status=AssignmentStatus.ACCEPTED,
+            causation_id=causation_id,
+        )
+
+    def activate_assignment(
+        self,
+        project_id: str,
+        assignment_id: str,
+        *,
+        agent_id: str,
+        timestamp: int,
+        causation_id: Optional[str] = None,
+    ) -> Assignment:
+        """Move an accepted assignment into active execution."""
+        current = self.get_assignment(
+            project_id,
+            assignment_id,
+        )
+
+        self._require_status(
+            current,
+            AssignmentStatus.ACCEPTED,
+            operation="activate assignment",
+        )
+        self._require_assigned_agent(current, agent_id)
+
+        return self._record_assignment_update(
+            current,
+            timestamp=timestamp,
+            status=AssignmentStatus.ACTIVE,
+            causation_id=causation_id,
+        )
+
+    def _record_assignment_update(
+        self,
+        current: Assignment,
+        *,
+        timestamp: int,
+        status: AssignmentStatus,
+        assigned_agent_id: Optional[str] = None,
+        causation_id: Optional[str] = None,
+    ) -> Assignment:
+        """Validate and append the next immutable assignment snapshot."""
+        if timestamp < current.updated_at:
+            raise InvalidAssignmentTransitionError(
+                "assignment update timestamp must not move backwards"
+            )
+
+        payload = current.model_dump(mode="python")
+        payload.update(
+            {
+                "status": status,
+                "updated_at": timestamp,
+                "version": current.version + 1,
+            }
+        )
+
+        if assigned_agent_id is not None:
+            payload["assigned_agent_id"] = assigned_agent_id
+
+        if causation_id is not None:
+            payload["causation_id"] = causation_id
+
+        updated = Assignment.model_validate(payload)
+
+        self.store.append_assignment(
+            updated,
+            timestamp=timestamp,
+        )
+
+        return self.get_assignment(
+            current.project_id,
+            current.assignment_id,
+        )
+
+    @staticmethod
+    def _require_status(
+        assignment: Assignment,
+        expected: AssignmentStatus,
+        *,
+        operation: str,
+    ) -> None:
+        """Require one exact lifecycle state for an operation."""
+        if assignment.status != expected:
+            raise InvalidAssignmentTransitionError(
+                f"cannot {operation} while assignment is "
+                f"{assignment.status.value}; expected "
+                f"{expected.value}"
+            )
+
+    @staticmethod
+    def _require_assigned_agent(
+        assignment: Assignment,
+        agent_id: str,
+    ) -> None:
+        """Require the operation to be performed by the assigned agent."""
+        if assignment.assigned_agent_id != agent_id:
+            raise AssignmentAgentMismatchError(
+                f"assignment belongs to agent "
+                f"{assignment.assigned_agent_id!r}, not {agent_id!r}"
+            )
 
     @staticmethod
     def _validate_custom_role(role: AgentRole) -> None:

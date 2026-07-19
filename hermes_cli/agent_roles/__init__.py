@@ -33,7 +33,11 @@ from .store import (
 from .service import (
     AgentRoleService,
     AgentRoleServiceError,
+    AssignmentAgentMismatchError,
+    AssignmentNotFoundError,
     BuiltinRoleConflictError,
+    InvalidAssignmentError,
+    InvalidAssignmentTransitionError,
     InvalidRoleRegistrationError,
     RoleAlreadyRegisteredError,
     RoleNotFoundError,
@@ -70,4 +74,8 @@ __all__ = [
     "InvalidRoleRegistrationError",
     "RoleAlreadyRegisteredError",
     "RoleNotFoundError",
+    "AssignmentAgentMismatchError",
+    "AssignmentNotFoundError",
+    "InvalidAssignmentError",
+    "InvalidAssignmentTransitionError",
 ]
