@@ -272,8 +272,13 @@ class AgentRoleService:
         causation_id: Optional[str] = None,
         metadata: Optional[Dict[str, object]] = None,
         assignment_id: Optional[str] = None,
+        risk_level: str = "medium",
+        requested_paths: Tuple[str, ...] = (),
+        modifies_repository: bool = False,
+        human_approved: bool = False,
+        delegated_by_assignment_id: Optional[str] = None,
     ) -> Assignment:
-        """Create a pending assignment for an active registered role."""
+        """Create a pending assignment after enforcing role policy."""
         role = self.get_role(project_id, role_id)
 
         if not role.active:
@@ -281,6 +286,62 @@ class AgentRoleService:
                 f"role is inactive and cannot receive assignments: "
                 f"{role_id}"
             )
+
+        normalised_risk_level = risk_level.strip().lower()
+
+        if not normalised_risk_level:
+            raise InvalidAssignmentError(
+                "assignment risk_level must not be blank"
+            )
+
+        if normalised_risk_level not in role.policy.allowed_risk_levels:
+            allowed = ", ".join(role.policy.allowed_risk_levels)
+            raise InvalidAssignmentError(
+                f"role {role_id!r} does not permit risk level "
+                f"{normalised_risk_level!r}; allowed: {allowed}"
+            )
+
+        normalised_paths = self._normalise_requested_paths(
+            requested_paths
+        )
+        self._enforce_path_policy(role, normalised_paths)
+
+        if modifies_repository and not role.policy.may_modify_repository:
+            raise InvalidAssignmentError(
+                f"role {role_id!r} may not modify the repository"
+            )
+
+        if role.policy.requires_human_approval and not human_approved:
+            raise InvalidAssignmentError(
+                f"role {role_id!r} requires human approval"
+            )
+
+        if delegated_by_assignment_id is not None:
+            parent = self.get_assignment(
+                project_id,
+                delegated_by_assignment_id,
+            )
+            parent_role = self.get_role(
+                project_id,
+                parent.role_id,
+            )
+
+            if not parent_role.policy.may_delegate:
+                raise InvalidAssignmentError(
+                    f"role {parent_role.role_id!r} may not delegate "
+                    "assignments"
+                )
+
+            if parent.status not in {
+                AssignmentStatus.ACCEPTED,
+                AssignmentStatus.ACTIVE,
+                AssignmentStatus.BLOCKED,
+                AssignmentStatus.HANDOFF_REQUESTED,
+            }:
+                raise InvalidAssignmentError(
+                    "delegating assignment must be accepted, active, "
+                    "blocked, or awaiting handoff"
+                )
 
         available_capabilities = set(
             self.role_capability_ids(role)
@@ -312,7 +373,14 @@ class AgentRoleService:
             correlation_id=correlation_id,
             causation_id=causation_id,
             version=1,
-            metadata={} if metadata is None else dict(metadata),
+            metadata=self._assignment_metadata(
+                metadata,
+                risk_level=normalised_risk_level,
+                requested_paths=normalised_paths,
+                modifies_repository=modifies_repository,
+                human_approved=human_approved,
+                delegated_by_assignment_id=delegated_by_assignment_id,
+            ),
         )
 
         if self.find_assignment(
@@ -354,6 +422,30 @@ class AgentRoleService:
             AssignmentStatus.PENDING,
             operation="assign agent",
         )
+
+        role = self.get_role(project_id, current.role_id)
+        concurrent_statuses = {
+            AssignmentStatus.ASSIGNED,
+            AssignmentStatus.ACCEPTED,
+            AssignmentStatus.ACTIVE,
+            AssignmentStatus.BLOCKED,
+            AssignmentStatus.HANDOFF_REQUESTED,
+        }
+        concurrent_count = sum(
+            1
+            for assignment in self.list_assignments(
+                project_id,
+                role_id=current.role_id,
+            )
+            if assignment.status in concurrent_statuses
+        )
+
+        if concurrent_count >= role.policy.max_concurrent_assignments:
+            raise InvalidAssignmentError(
+                f"role {current.role_id!r} has reached its maximum "
+                f"of {role.policy.max_concurrent_assignments} "
+                "concurrent assignments"
+            )
 
         return self._record_assignment_update(
             current,
@@ -864,6 +956,141 @@ class AgentRoleService:
             current.project_id,
             current.assignment_id,
         )
+
+    @staticmethod
+    def _normalise_requested_paths(
+        requested_paths: Tuple[str, ...],
+    ) -> Tuple[str, ...]:
+        """Normalise repository-relative paths without resolving them."""
+        seen: set[str] = set()
+        normalised_paths: list[str] = []
+
+        for raw_path in requested_paths:
+            path = raw_path.strip().replace("\\", "/")
+
+            while path.startswith("./"):
+                path = path[2:]
+
+            path = path.strip("/")
+
+            if not path:
+                raise InvalidAssignmentError(
+                    "requested repository paths must not be blank"
+                )
+
+            parts = tuple(
+                part
+                for part in path.split("/")
+                if part not in {"", "."}
+            )
+
+            if ".." in parts:
+                raise InvalidAssignmentError(
+                    f"requested path may not traverse upwards: "
+                    f"{raw_path!r}"
+                )
+
+            path = "/".join(parts)
+
+            if path not in seen:
+                seen.add(path)
+                normalised_paths.append(path)
+
+        return tuple(normalised_paths)
+
+    @staticmethod
+    def _path_is_within(path: str, policy_path: str) -> bool:
+        """Return whether path equals or is below one policy path."""
+        normalised_policy_path = (
+            policy_path.strip().replace("\\", "/").strip("/")
+        )
+
+        if not normalised_policy_path:
+            return False
+
+        return (
+            path == normalised_policy_path
+            or path.startswith(f"{normalised_policy_path}/")
+        )
+
+    @classmethod
+    def _enforce_path_policy(
+        cls,
+        role: AgentRole,
+        requested_paths: Tuple[str, ...],
+    ) -> None:
+        """Fail closed when requested paths violate role policy."""
+        denied_paths = role.policy.denied_paths
+        allowed_paths = role.policy.allowed_paths
+
+        for path in requested_paths:
+            denied_match = next(
+                (
+                    denied
+                    for denied in denied_paths
+                    if cls._path_is_within(path, denied)
+                ),
+                None,
+            )
+
+            if denied_match is not None:
+                raise InvalidAssignmentError(
+                    f"role {role.role_id!r} is denied access to "
+                    f"path {path!r} by policy {denied_match!r}"
+                )
+
+            if allowed_paths and not any(
+                cls._path_is_within(path, allowed)
+                for allowed in allowed_paths
+            ):
+                allowed = ", ".join(allowed_paths)
+                raise InvalidAssignmentError(
+                    f"role {role.role_id!r} is not allowed to access "
+                    f"path {path!r}; allowed paths: {allowed}"
+                )
+
+    @staticmethod
+    def _assignment_metadata(
+        metadata: Optional[Dict[str, object]],
+        *,
+        risk_level: str,
+        requested_paths: Tuple[str, ...],
+        modifies_repository: bool,
+        human_approved: bool,
+        delegated_by_assignment_id: Optional[str],
+    ) -> Dict[str, object]:
+        """Attach an immutable replayable policy decision to metadata."""
+        output = {} if metadata is None else dict(metadata)
+
+        reserved_keys = {
+            "risk_level",
+            "requested_paths",
+            "modifies_repository",
+            "human_approved",
+            "delegated_by_assignment_id",
+        }
+        conflicts = reserved_keys.intersection(output)
+
+        if conflicts:
+            conflict_list = ", ".join(sorted(conflicts))
+            raise InvalidAssignmentError(
+                f"assignment metadata uses reserved policy keys: "
+                f"{conflict_list}"
+            )
+
+        output.update(
+            {
+                "risk_level": risk_level,
+                "requested_paths": requested_paths,
+                "modifies_repository": modifies_repository,
+                "human_approved": human_approved,
+                "delegated_by_assignment_id": (
+                    delegated_by_assignment_id
+                ),
+            }
+        )
+
+        return output
 
     @staticmethod
     def _require_status(

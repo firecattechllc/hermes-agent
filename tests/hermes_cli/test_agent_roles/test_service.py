@@ -22,6 +22,7 @@ def _custom_role(
     active: bool = True,
     built_in: bool = False,
     capabilities: tuple[m.RoleCapability, ...] | None = None,
+    policy: m.RolePolicy | None = None,
 ) -> m.AgentRole:
     if capabilities is None:
         capabilities = (
@@ -36,6 +37,7 @@ def _custom_role(
         name="Architecture",
         description="Reviews architecture and system boundaries.",
         capabilities=capabilities,
+        policy=m.RolePolicy() if policy is None else policy,
         built_in=built_in,
         active=active,
     )
@@ -1390,3 +1392,361 @@ def test_handoffs_and_results_are_project_isolated(
     assert len(service.list_results("project-a")) == 1
     assert service.list_results("project-b") == ()
     assert service.list_handoffs("project-b") == ()
+
+
+def test_create_assignment_records_governance_context(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    assignment = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        timestamp=10,
+        risk_level=" LOW ",
+        requested_paths=(
+            "./hermes_cli/agent_roles/service.py",
+            "hermes_cli/agent_roles/service.py",
+        ),
+        modifies_repository=True,
+        metadata={"source": "operator"},
+    )
+
+    assert assignment.metadata == {
+        "source": "operator",
+        "risk_level": "low",
+        "requested_paths": [
+            "hermes_cli/agent_roles/service.py",
+        ],
+        "modifies_repository": True,
+        "human_approved": False,
+        "delegated_by_assignment_id": None,
+    }
+
+
+def test_create_assignment_rejects_disallowed_risk_level(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="does not permit risk level",
+    ):
+        service.create_assignment(
+            "hermes-platform",
+            "builder",
+            timestamp=10,
+            risk_level="critical",
+        )
+
+
+def test_repository_change_requires_role_permission(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="may not modify the repository",
+    ):
+        service.create_assignment(
+            "hermes-platform",
+            "reviewer",
+            timestamp=10,
+            modifies_repository=True,
+        )
+
+
+def test_human_approval_role_fails_closed(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="requires human approval",
+    ):
+        service.create_assignment(
+            "hermes-platform",
+            "security",
+            timestamp=10,
+        )
+
+    approved = service.create_assignment(
+        "hermes-platform",
+        "security",
+        timestamp=20,
+        human_approved=True,
+    )
+
+    assert approved.metadata["human_approved"] is True
+
+
+def test_requested_path_must_be_inside_allowlist(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    role = _custom_role(
+        role_id="scoped-builder",
+        policy=m.RolePolicy(
+            may_modify_repository=True,
+            allowed_paths=("hermes_cli/agent_roles",),
+        ),
+    )
+    service.register_custom_role(
+        "hermes-platform",
+        role,
+        timestamp=1,
+    )
+
+    allowed = service.create_assignment(
+        "hermes-platform",
+        role.role_id,
+        timestamp=10,
+        requested_paths=(
+            "hermes_cli/agent_roles/service.py",
+        ),
+        modifies_repository=True,
+    )
+
+    assert allowed.metadata["requested_paths"] == [
+        "hermes_cli/agent_roles/service.py",
+    ]
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="is not allowed to access",
+    ):
+        service.create_assignment(
+            "hermes-platform",
+            role.role_id,
+            timestamp=20,
+            requested_paths=("hermes_cli/main.py",),
+            modifies_repository=True,
+        )
+
+
+def test_denied_path_overrides_broader_allowlist(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    role = _custom_role(
+        role_id="bounded-builder",
+        policy=m.RolePolicy(
+            may_modify_repository=True,
+            allowed_paths=("hermes_cli",),
+            denied_paths=("hermes_cli/secrets",),
+        ),
+    )
+    service.register_custom_role(
+        "hermes-platform",
+        role,
+        timestamp=1,
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="is denied access",
+    ):
+        service.create_assignment(
+            "hermes-platform",
+            role.role_id,
+            timestamp=10,
+            requested_paths=("hermes_cli/secrets/key.py",),
+            modifies_repository=True,
+        )
+
+
+def test_requested_path_rejects_parent_traversal(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="may not traverse upwards",
+    ):
+        service.create_assignment(
+            "hermes-platform",
+            "builder",
+            timestamp=10,
+            requested_paths=("../outside.py",),
+            modifies_repository=True,
+        )
+
+
+def test_assignment_metadata_rejects_reserved_policy_keys(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="reserved policy keys",
+    ):
+        service.create_assignment(
+            "hermes-platform",
+            "builder",
+            timestamp=10,
+            metadata={"risk_level": "critical"},
+        )
+
+
+def test_assign_agent_enforces_role_concurrency_limit(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    first = service.create_assignment(
+        "hermes-platform",
+        "release",
+        timestamp=10,
+        human_approved=True,
+        assignment_id="assign_release_one",
+    )
+    second = service.create_assignment(
+        "hermes-platform",
+        "release",
+        timestamp=10,
+        human_approved=True,
+        assignment_id="assign_release_two",
+    )
+
+    service.assign_agent(
+        "hermes-platform",
+        first.assignment_id,
+        agent_id="release-agent-1",
+        timestamp=20,
+    )
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="maximum of 1 concurrent assignments",
+    ):
+        service.assign_agent(
+            "hermes-platform",
+            second.assignment_id,
+            agent_id="release-agent-2",
+            timestamp=20,
+        )
+
+    assert service.get_assignment(
+        "hermes-platform",
+        second.assignment_id,
+    ).status == m.AssignmentStatus.PENDING
+
+
+def test_terminal_assignment_releases_concurrency_capacity(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+
+    first = service.create_assignment(
+        "hermes-platform",
+        "release",
+        timestamp=10,
+        human_approved=True,
+        assignment_id="assign_release_first",
+    )
+    second = service.create_assignment(
+        "hermes-platform",
+        "release",
+        timestamp=10,
+        human_approved=True,
+        assignment_id="assign_release_second",
+    )
+
+    service.assign_agent(
+        "hermes-platform",
+        first.assignment_id,
+        agent_id="release-agent-1",
+        timestamp=20,
+    )
+    service.accept_assignment(
+        "hermes-platform",
+        first.assignment_id,
+        agent_id="release-agent-1",
+        timestamp=30,
+    )
+    service.activate_assignment(
+        "hermes-platform",
+        first.assignment_id,
+        agent_id="release-agent-1",
+        timestamp=40,
+    )
+    service.complete_assignment(
+        "hermes-platform",
+        first.assignment_id,
+        agent_id="release-agent-1",
+        summary="Release validation complete.",
+        timestamp=50,
+    )
+
+    assigned = service.assign_agent(
+        "hermes-platform",
+        second.assignment_id,
+        agent_id="release-agent-2",
+        timestamp=60,
+    )
+
+    assert assigned.status == m.AssignmentStatus.ASSIGNED
+
+
+def test_delegation_requires_parent_role_permission(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    parent = _active_assignment(service)
+
+    with pytest.raises(
+        svc.InvalidAssignmentError,
+        match="may not delegate assignments",
+    ):
+        service.create_assignment(
+            "hermes-platform",
+            "tester",
+            timestamp=50,
+            delegated_by_assignment_id=parent.assignment_id,
+        )
+
+
+def test_planner_can_delegate_from_active_assignment(
+    tmp_path: Path,
+) -> None:
+    service = _bootstrapped_service(tmp_path)
+    parent = service.create_assignment(
+        "hermes-platform",
+        "planner",
+        timestamp=10,
+        assignment_id="assign_planner_parent",
+    )
+    service.assign_agent(
+        "hermes-platform",
+        parent.assignment_id,
+        agent_id="planner-agent-1",
+        timestamp=20,
+    )
+    service.accept_assignment(
+        "hermes-platform",
+        parent.assignment_id,
+        agent_id="planner-agent-1",
+        timestamp=30,
+    )
+    service.activate_assignment(
+        "hermes-platform",
+        parent.assignment_id,
+        agent_id="planner-agent-1",
+        timestamp=40,
+    )
+
+    child = service.create_assignment(
+        "hermes-platform",
+        "builder",
+        timestamp=50,
+        delegated_by_assignment_id=parent.assignment_id,
+    )
+
+    assert child.metadata["delegated_by_assignment_id"] == (
+        parent.assignment_id
+    )
