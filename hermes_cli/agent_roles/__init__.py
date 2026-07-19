@@ -56,6 +56,17 @@ from .service import (
     RoleNotFoundError,
 )
 
+from hermes_cli.agent_roles.launch import (
+    CURRENT_LAUNCH_SCHEMA_VERSION,
+    SUPPORTED_LAUNCH_SCHEMA_VERSIONS,
+    LaunchContract,
+    LaunchContractStatus,
+    LaunchEnvironment,
+    LaunchPolicy,
+    LaunchWorkspace,
+    LaunchWorkspaceMode,
+)
+
 __all__ = [
     "AgentRole",
     "Assignment",
@@ -101,4 +112,12 @@ __all__ = [
     "AssignmentNotFoundError",
     "InvalidAssignmentError",
     "InvalidAssignmentTransitionError",
+    "CURRENT_LAUNCH_SCHEMA_VERSION",
+    "SUPPORTED_LAUNCH_SCHEMA_VERSIONS",
+    "LaunchContract",
+    "LaunchContractStatus",
+    "LaunchEnvironment",
+    "LaunchPolicy",
+    "LaunchWorkspace",
+    "LaunchWorkspaceMode",
 ]
