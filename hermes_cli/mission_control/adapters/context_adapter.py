@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import hashlib
 from typing import Any, Dict, List, Optional
 
 from hermes_cli.mission_control import models as m
@@ -45,6 +46,11 @@ def _value_text(value: Any) -> str:
     if enum_value is not None:
         return str(enum_value)
     return str(value)
+
+
+def _stable_prefixed_id(prefix: str, *parts: Any) -> str:
+    raw = "|".join(str(part) for part in parts if part not in (None, ""))
+    return f"{prefix}_{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:24]}"
 
 
 # ── Context Adapter ─────────────────────────────────────────────────────────
@@ -204,7 +210,7 @@ class ContextAdapter:
         evidence_refs = getattr(launch, "evidence_refs", [])
         for ref in evidence_refs:
             sequence += 1
-            evidence_id = m.new_evidence_id()
+            evidence_id = _stable_prefixed_id("evdn", project_id, launch_id, ref)
             events.append(m.TelemetryEvent(
                 event_id=m.new_telemetry_event_id(),
                 event_type="evidence_requested",

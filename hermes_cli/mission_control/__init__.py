@@ -60,6 +60,13 @@ from hermes_cli.mission_control.service import (
 from hermes_cli.mission_control.adapters.context_adapter import (
     ContextAdapter,
 )
+from hermes_cli.mission_control.runtime import (
+    RuntimeTelemetryContext,
+    current_context,
+    mark_turn_result,
+    observe_hook,
+    telemetry_turn,
+)
 
 __all__ = [
     # Schema
@@ -106,4 +113,10 @@ __all__ = [
     "MissionControlService",
     # Adapters
     "ContextAdapter",
+    # Runtime telemetry
+    "RuntimeTelemetryContext",
+    "current_context",
+    "mark_turn_result",
+    "observe_hook",
+    "telemetry_turn",
 ]

@@ -73,6 +73,36 @@ class MissionControlService:
         )
         return event
 
+    def append_event_once(
+        self,
+        event: m.TelemetryEvent,
+    ) -> Optional[m.TelemetryEvent]:
+        """Append ``event`` unless its source idempotency key already exists."""
+        source_key = event.payload.get("source_idempotency_key")
+        with self._store.write_lock():
+            if source_key:
+                for existing in self._store.iter_events(project_id=event.project_id):
+                    if existing.payload.get("source_idempotency_key") == source_key:
+                        return None
+            elif any(
+                existing.event_id == event.event_id
+                for existing in self._store.iter_events(project_id=event.project_id)
+            ):
+                return None
+
+            if event.sequence == 0:
+                count = self._store.event_count(project_id=event.project_id)
+                event.sequence = count + 1
+            self._store._append_event_unlocked(event)
+        logger.debug(
+            "appended idempotent telemetry event %s (type=%s, project=%s, seq=%d)",
+            event.event_id,
+            event.event_type,
+            event.project_id,
+            event.sequence,
+        )
+        return event
+
     def append_events(
         self,
         events: List[m.TelemetryEvent],

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 
@@ -28,6 +29,75 @@ def _snapshot_to_dict(snapshot: m.MissionControlSnapshot) -> Dict[str, Any]:
     data = snapshot.model_dump(mode="json")
     data["integrity_hash"] = snapshot.integrity_hash()
     return data
+
+
+def _overview_to_dict(
+    service: MissionControlService,
+    project_id: str,
+    *,
+    limit: int,
+) -> Dict[str, Any]:
+    snapshot = service.get_snapshot(project_id, generated_by="cli")
+    events = service.get_events(project_id)
+    failures = [
+        event for event in events
+        if event.severity in {"error", "critical"} or event.event_type in {
+            "agent_error",
+            "agent_blocked",
+            "backlog_item_blocked",
+            "evidence_failed",
+            "promotion_rejected",
+        }
+    ]
+    blockers = [
+        item for item in snapshot.backlog_states
+        if item.state == m.BacklogItemState.BLOCKED
+    ]
+    return {
+        "project_id": project_id,
+        "event_count": snapshot.event_count,
+        "launches": _launch_rows(events),
+        "agents": [state.model_dump(mode="json") for state in snapshot.agent_states],
+        "backlog": [state.model_dump(mode="json") for state in snapshot.backlog_states],
+        "pending_approvals": [
+            state.model_dump(mode="json")
+            for state in snapshot.approval_states
+            if state.state == m.ApprovalState.PENDING
+        ],
+        "evidence": [state.model_dump(mode="json") for state in snapshot.evidence_states],
+        "promotions": [state.model_dump(mode="json") for state in snapshot.promotion_states],
+        "recent_events": [_event_to_dict(event) for event in events[-limit:]],
+        "failures": [_event_to_dict(event) for event in failures[-limit:]],
+        "blockers": [state.model_dump(mode="json") for state in blockers],
+        "integrity_hash": snapshot.integrity_hash(),
+    }
+
+
+def _print_overview(payload: Dict[str, Any]) -> None:
+    print(f"Mission Control Overview [{payload['project_id']}]")
+    print(f"  events:     {payload['event_count']}")
+    print(f"  launches:   {len(payload['launches'])}")
+    print(f"  agents:     {len(payload['agents'])}")
+    print(f"  backlog:    {len(payload['backlog'])}")
+    print(f"  approvals:  {len(payload['pending_approvals'])} pending")
+    print(f"  evidence:   {len(payload['evidence'])}")
+    print(f"  promotions: {len(payload['promotions'])}")
+    print(f"  failures:   {len(payload['failures'])}")
+    if payload["launches"]:
+        print("  recent launches:")
+        for launch in payload["launches"][-5:]:
+            print(
+                f"    {launch['launch_id']} "
+                f"status={launch.get('status') or 'unknown'} "
+                f"stage={launch.get('stage') or 'unknown'}"
+            )
+    if payload["recent_events"]:
+        print("  recent events:")
+        for event in payload["recent_events"][-5:]:
+            print(
+                f"    {event['sequence']:>6} {event['event_type']} "
+                f"{event.get('agent_id') or event.get('launch_id') or ''}"
+            )
 
 
 def _launch_rows(events: List[m.TelemetryEvent]) -> List[Dict[str, Any]]:
@@ -167,6 +237,25 @@ def _cmd_events(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_overview(args: argparse.Namespace) -> int:
+    service = _get_service()
+    try:
+        while True:
+            payload = _overview_to_dict(service, args.project, limit=args.limit)
+            if args.json:
+                _print_json(payload)
+            else:
+                _print_overview(payload)
+            if not args.watch:
+                return 0
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        return 0
+    except ValueError as exc:
+        print(f"mission-control overview: {exc}", file=sys.stderr)
+        return 1
+
+
 def build_mission_control_parser(
     parent_subparsers: argparse._SubParsersAction,
 ) -> argparse.ArgumentParser:
@@ -201,6 +290,14 @@ def build_mission_control_parser(
     p_events.add_argument("--limit", type=int, default=None, help="Limit returned events")
     p_events.add_argument("--json", action="store_true", help="Output JSON")
     p_events.set_defaults(_mission_control_handler=_cmd_events)
+
+    p_overview = sub.add_parser("overview", aliases=["operator"], help="Show read-only operator overview")
+    p_overview.add_argument("project", help="Project ID")
+    p_overview.add_argument("--limit", type=int, default=10, help="Recent event/failure limit")
+    p_overview.add_argument("--json", action="store_true", help="Output JSON")
+    p_overview.add_argument("--watch", action="store_true", help="Refresh continuously")
+    p_overview.add_argument("--interval", type=float, default=2.0, help="Refresh interval in seconds")
+    p_overview.set_defaults(_mission_control_handler=_cmd_overview)
 
     return parser
 

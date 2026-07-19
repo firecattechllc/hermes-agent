@@ -6210,17 +6210,22 @@ class AIAgent:
         # which may be observed from another thread.
         with scoped_runtime_main({}):
             try:
-                return run_conversation(
-                    self,
-                    user_message,
-                    system_message,
-                    conversation_history,
-                    task_id,
-                    stream_callback,
-                    persist_user_message,
-                    persist_user_timestamp=persist_user_timestamp,
-                    moa_config=moa_config,
-                )
+                from hermes_cli.mission_control.runtime import mark_turn_result, telemetry_turn
+
+                with telemetry_turn(self, user_message, task_id):
+                    result = run_conversation(
+                        self,
+                        user_message,
+                        system_message,
+                        conversation_history,
+                        task_id,
+                        stream_callback,
+                        persist_user_message,
+                        persist_user_timestamp=persist_user_timestamp,
+                        moa_config=moa_config,
+                    )
+                    mark_turn_result(result)
+                    return result
             finally:
                 reset_accounting_context(acct_token)
                 reset_conversation_context(token)

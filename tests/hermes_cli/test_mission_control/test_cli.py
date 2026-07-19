@@ -103,6 +103,20 @@ def test_mission_control_events_limit(monkeypatch, tmp_path: Path, capsys) -> No
     assert payload["events"][0]["event_id"] == "event_2"
 
 
+def test_mission_control_overview_json(monkeypatch, tmp_path: Path, capsys) -> None:
+    service = _service(tmp_path)
+    monkeypatch.setattr("hermes_cli.mission_control_commands._get_service", lambda: service)
+    args = _parser().parse_args(["mission-control", "overview", "proj_a", "--json"])
+
+    assert args.func(args) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["project_id"] == "proj_a"
+    assert payload["launches"][0]["launch_id"] == "launch_1"
+    assert payload["agents"][0]["agent_id"] == "agent_1"
+    assert "recent_events" in payload
+
+
 def test_main_builtin_subcommands_include_mission_control() -> None:
     from hermes_cli.main import _BUILTIN_SUBCOMMANDS
 

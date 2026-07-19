@@ -626,16 +626,24 @@ def _apply_event_to_projection(
     # ── Evidence state transitions ─────────────────────────────────────────
     elif etype == "evidence_requested":
         eid = event.payload.get("evidence_id", "unknown")
-        evidence_states[eid] = m.EvidenceStateSnapshot(
-            evidence_id=eid,
-            project_id=project_id,
-            launch_id=event.launch_id,
-            task_id=event.task_id,
-            backlog_id=event.backlog_id,
-            state=m.EvidenceState.PENDING,
-            source_path=event.payload.get("source_path"),
-            collected_at=event.timestamp,
-        )
+        if eid in evidence_states:
+            existing = evidence_states[eid]
+            data = existing.model_dump()
+            data.update(
+                source_path=event.payload.get("source_path") or existing.source_path,
+            )
+            evidence_states[eid] = m.EvidenceStateSnapshot(**data)
+        else:
+            evidence_states[eid] = m.EvidenceStateSnapshot(
+                evidence_id=eid,
+                project_id=project_id,
+                launch_id=event.launch_id,
+                task_id=event.task_id,
+                backlog_id=event.backlog_id,
+                state=m.EvidenceState.PENDING,
+                source_path=event.payload.get("source_path"),
+                collected_at=event.timestamp,
+            )
     elif etype == "evidence_collected":
         eid = event.payload.get("evidence_id", "unknown")
         if eid in evidence_states:
@@ -643,6 +651,8 @@ def _apply_event_to_projection(
             data = existing.model_dump()
             data.update(
                 state=m.EvidenceState.COLLECTED,
+                source_path=event.payload.get("source_path") or existing.source_path,
+                content_hash=event.payload.get("content_hash") or existing.content_hash,
                 collected_at=event.timestamp,
             )
             evidence_states[eid] = m.EvidenceStateSnapshot(**data)
@@ -654,6 +664,8 @@ def _apply_event_to_projection(
                 task_id=event.task_id,
                 backlog_id=event.backlog_id,
                 state=m.EvidenceState.COLLECTED,
+                source_path=event.payload.get("source_path"),
+                content_hash=event.payload.get("content_hash"),
                 collected_at=event.timestamp,
             )
     elif etype == "evidence_verified":
@@ -769,6 +781,7 @@ _default_store: Optional[MissionControlStore] = None
 def get_store() -> MissionControlStore:
     """Return the module-global store (created on first call)."""
     global _default_store
-    if _default_store is None:
+    root = _mission_control_root()
+    if _default_store is None or _default_store._root != root:
         _default_store = MissionControlStore()
     return _default_store

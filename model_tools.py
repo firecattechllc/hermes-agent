@@ -996,12 +996,39 @@ def _emit_post_tool_call_hook(
     result *after* the gate (parsing the result is only worth it when a
     listener will actually consume it).
     """
+    observer_status = status
+    observer_error_type = error_type
+    observer_error_message = error_message
+    if observer_status is None:
+        observer_status, observer_error_type, observer_error_message = (
+            _tool_result_observer_fields(result)
+        )
+
+    try:
+        from hermes_cli.mission_control.runtime import observe_hook
+
+        observe_hook(
+            "post_tool_call",
+            tool_name=function_name,
+            args=function_args if isinstance(function_args, dict) else {},
+            result=result,
+            task_id=task_id or "",
+            session_id=session_id or "",
+            tool_call_id=tool_call_id or "",
+            turn_id=turn_id or "",
+            api_request_id=api_request_id or "",
+            duration_ms=duration_ms,
+            status=observer_status,
+            error_type=observer_error_type,
+            error_message=observer_error_message,
+            middleware_trace=list(middleware_trace or []),
+        )
+    except Exception:
+        pass
     try:
         from hermes_cli.plugins import has_hook, invoke_hook
         if not has_hook("post_tool_call"):
             return
-        if status is None:
-            status, error_type, error_message = _tool_result_observer_fields(result)
         invoke_hook(
             "post_tool_call",
             tool_name=function_name,
@@ -1013,9 +1040,9 @@ def _emit_post_tool_call_hook(
             turn_id=turn_id or "",
             api_request_id=api_request_id or "",
             duration_ms=duration_ms,
-            status=status,
-            error_type=error_type,
-            error_message=error_message,
+            status=observer_status,
+            error_type=observer_error_type,
+            error_message=observer_error_message,
             middleware_trace=list(middleware_trace or []),
         )
     except Exception as _hook_err:

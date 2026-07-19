@@ -413,6 +413,7 @@ _default_store: Optional[ContextStore] = None
 def get_store() -> ContextStore:
     """Return the module-global store (created on first call)."""
     global _default_store
-    if _default_store is None:
+    root = _context_root()
+    if _default_store is None or _default_store._root != root:
         _default_store = ContextStore()
     return _default_store
