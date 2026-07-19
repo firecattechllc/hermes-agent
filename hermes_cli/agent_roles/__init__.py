@@ -18,6 +18,18 @@ from .models import (
     new_role_id,
 )
 
+from .store import (
+    AgentRoleProjectState,
+    AgentRoleStore,
+    AgentRoleStoreError,
+    AssignmentVersionError,
+    DuplicateRecordError,
+    InvalidProjectIdError,
+    JournalCorruptionError,
+    JournalEventType,
+    JournalRecord,
+)
+
 __all__ = [
     "AgentRole",
     "Assignment",
@@ -34,4 +46,13 @@ __all__ = [
     "new_handoff_id",
     "new_result_id",
     "new_role_id",
+    "AgentRoleProjectState",
+    "AgentRoleStore",
+    "AgentRoleStoreError",
+    "AssignmentVersionError",
+    "DuplicateRecordError",
+    "InvalidProjectIdError",
+    "JournalCorruptionError",
+    "JournalEventType",
+    "JournalRecord",
 ]
