@@ -139,6 +139,7 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "launch_validation_recorded",
     "agent_execution_recorded",
     "governed_workflow_recorded",
+    "workflow_execution_evidence_recorded",
 })
 
 
