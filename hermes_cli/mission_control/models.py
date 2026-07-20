@@ -141,6 +141,7 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "governed_workflow_recorded",
     "workflow_execution_evidence_recorded",
     "workflow_scheduling_recorded",
+    "workflow_dispatch_recorded",
 })
 
 

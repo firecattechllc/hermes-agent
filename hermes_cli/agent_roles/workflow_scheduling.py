@@ -348,6 +348,12 @@ class GovernedWorkflowSchedulingCoordinator:
             and item.available_at <= timestamp
         )
 
+    def get(
+        self, project_id: str, intent_id: str
+    ) -> Optional[WorkflowExecutionIntent]:
+        """Return the latest durable coordination revision, if present."""
+        return self._scheduling.get(project_id, intent_id)
+
     def claim(self, project_id: str, intent_id: str, *, claimed_by: str, timestamp: int, lease_seconds: int) -> WorkflowExecutionIntent:
         self._require_current_and_visible(project_id, intent_id)
         return self._persist_and_publish(lambda: self._scheduling.claim(

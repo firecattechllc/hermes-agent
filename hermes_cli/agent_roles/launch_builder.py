@@ -171,11 +171,6 @@ class LaunchContractBuilder:
         assignment: Assignment,
         role: AgentRole,
     ) -> None:
-        if assignment.project_id != role.project_id:
-            raise LaunchContractBuildError(
-                "assignment and role project_id must match"
-            )
-
         if assignment.role_id != role.role_id:
             raise LaunchContractBuildError(
                 "assignment role_id does not match supplied role"

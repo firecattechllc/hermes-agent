@@ -59,6 +59,24 @@ from .workflow_scheduling_visibility import (
     WorkflowSchedulingVisibilityRecord,
     WorkflowSchedulingVisibilityService,
 )
+from .workflow_dispatch import (
+    WORKFLOW_DISPATCH_SCHEMA_VERSION,
+    GovernedWorkflowDispatchCoordinator,
+    WorkflowDispatchError,
+    WorkflowDispatchOutcome,
+    WorkflowDispatchStatus,
+    WorkflowDispatchVisibilityError,
+)
+from .workflow_dispatch_store import (
+    WorkflowDispatchJournalRecord,
+    WorkflowDispatchStore,
+)
+from .workflow_dispatch_visibility import (
+    WORKFLOW_DISPATCH_VISIBILITY_EVENT,
+    WorkflowDispatchVisibilityAdapter,
+    WorkflowDispatchVisibilityRecord,
+    WorkflowDispatchVisibilityService,
+)
 
 from .models import (
     AgentRole,
@@ -197,6 +215,18 @@ from hermes_cli.agent_roles.execution_visibility import (
 )
 
 __all__ = [
+    "WORKFLOW_DISPATCH_SCHEMA_VERSION",
+    "GovernedWorkflowDispatchCoordinator",
+    "WorkflowDispatchError",
+    "WorkflowDispatchOutcome",
+    "WorkflowDispatchStatus",
+    "WorkflowDispatchVisibilityError",
+    "WorkflowDispatchJournalRecord",
+    "WorkflowDispatchStore",
+    "WORKFLOW_DISPATCH_VISIBILITY_EVENT",
+    "WorkflowDispatchVisibilityAdapter",
+    "WorkflowDispatchVisibilityRecord",
+    "WorkflowDispatchVisibilityService",
     "AgentRole",
     "Assignment",
     "AssignmentHandoff",
