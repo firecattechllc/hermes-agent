@@ -41,6 +41,24 @@ from .workflow_execution_visibility import (
     WorkflowExecutionVisibilityRecord,
     WorkflowExecutionVisibilityService,
 )
+from .workflow_scheduling import (
+    WORKFLOW_SCHEDULING_SCHEMA_VERSION,
+    CoordinationStatus,
+    GovernedWorkflowSchedulingCoordinator,
+    SchedulingVisibilityError,
+    WorkflowExecutionIntent,
+    WorkflowSchedulingError,
+)
+from .workflow_scheduling_store import (
+    WorkflowSchedulingJournalRecord,
+    WorkflowSchedulingStore,
+)
+from .workflow_scheduling_visibility import (
+    WORKFLOW_SCHEDULING_VISIBILITY_EVENT,
+    WorkflowSchedulingVisibilityAdapter,
+    WorkflowSchedulingVisibilityRecord,
+    WorkflowSchedulingVisibilityService,
+)
 
 from .models import (
     AgentRole,
@@ -307,4 +325,16 @@ __all__ = [
     "WorkflowExecutionVisibilityAdapter",
     "WorkflowExecutionVisibilityRecord",
     "WorkflowExecutionVisibilityService",
+    "WORKFLOW_SCHEDULING_SCHEMA_VERSION",
+    "CoordinationStatus",
+    "GovernedWorkflowSchedulingCoordinator",
+    "SchedulingVisibilityError",
+    "WorkflowExecutionIntent",
+    "WorkflowSchedulingError",
+    "WorkflowSchedulingJournalRecord",
+    "WorkflowSchedulingStore",
+    "WORKFLOW_SCHEDULING_VISIBILITY_EVENT",
+    "WorkflowSchedulingVisibilityAdapter",
+    "WorkflowSchedulingVisibilityRecord",
+    "WorkflowSchedulingVisibilityService",
 ]

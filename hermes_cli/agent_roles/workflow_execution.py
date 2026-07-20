@@ -510,6 +510,16 @@ class WorkflowExecutionEvidenceService:
     def __init__(self, projector: Optional[WorkflowExecutionProjector] = None) -> None:
         self.projector = projector or WorkflowExecutionProjector()
 
+    @staticmethod
+    def node_run_id_for(
+        run_id: str,
+        assignment_id: str,
+        plan_id: str,
+    ) -> str:
+        """Return the canonical Step 7 identity for one workflow node run."""
+        node_seed = "|".join((run_id, assignment_id, plan_id))
+        return f"node_run_{hashlib.sha256(node_seed.encode()).hexdigest()[:24]}"
+
     def create_run(
         self,
         workflow: GovernedWorkflow,
@@ -554,8 +564,11 @@ class WorkflowExecutionEvidenceService:
             or plan.role_id != stage.role_id
         ):
             raise ValueError("node execution plan does not match current workflow stage")
-        node_seed = "|".join((summary.run_id, plan.assignment_id, plan.plan_id))
-        node_run_id = f"node_run_{hashlib.sha256(node_seed.encode()).hexdigest()[:24]}"
+        node_run_id = self.node_run_id_for(
+            summary.run_id,
+            plan.assignment_id,
+            plan.plan_id,
+        )
         return self._next_event(
             summary,
             workflow,
