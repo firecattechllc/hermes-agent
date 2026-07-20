@@ -77,6 +77,25 @@ from .workflow_dispatch_visibility import (
     WorkflowDispatchVisibilityRecord,
     WorkflowDispatchVisibilityService,
 )
+from .runtime_execution import (
+    RUNTIME_EXECUTION_SCHEMA_VERSION,
+    TERMINAL_RUNTIME_EXECUTION_STATES,
+    GovernedRuntimeExecutionCoordinator,
+    RuntimeExecutionError,
+    RuntimeExecutionPublicationError,
+    RuntimeExecutionRecord,
+    RuntimeExecutionState,
+)
+from .runtime_execution_store import (
+    RuntimeExecutionJournalRecord,
+    RuntimeExecutionStore,
+)
+from .runtime_execution_visibility import (
+    RUNTIME_EXECUTION_VISIBILITY_EVENT,
+    RuntimeExecutionVisibilityAdapter,
+    RuntimeExecutionVisibilityRecord,
+    RuntimeExecutionVisibilityService,
+)
 
 from .models import (
     AgentRole,
@@ -215,6 +234,19 @@ from hermes_cli.agent_roles.execution_visibility import (
 )
 
 __all__ = [
+    "RUNTIME_EXECUTION_SCHEMA_VERSION",
+    "TERMINAL_RUNTIME_EXECUTION_STATES",
+    "GovernedRuntimeExecutionCoordinator",
+    "RuntimeExecutionError",
+    "RuntimeExecutionPublicationError",
+    "RuntimeExecutionRecord",
+    "RuntimeExecutionState",
+    "RuntimeExecutionJournalRecord",
+    "RuntimeExecutionStore",
+    "RUNTIME_EXECUTION_VISIBILITY_EVENT",
+    "RuntimeExecutionVisibilityAdapter",
+    "RuntimeExecutionVisibilityRecord",
+    "RuntimeExecutionVisibilityService",
     "WORKFLOW_DISPATCH_SCHEMA_VERSION",
     "GovernedWorkflowDispatchCoordinator",
     "WorkflowDispatchError",
