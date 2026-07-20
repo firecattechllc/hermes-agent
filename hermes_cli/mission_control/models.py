@@ -138,6 +138,7 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "launch_contract_published",
     "launch_validation_recorded",
     "agent_execution_recorded",
+    "governed_workflow_recorded",
 })
 
 

@@ -1,5 +1,23 @@
 """Specialized Agent Roles domain package."""
 
+from .workflow import (
+    AuthorizationDecision,
+    GovernedWorkflow,
+    GovernedWorkflowService,
+    WorkflowAuthorization,
+    WorkflowDecision,
+    WorkflowEvent,
+    WorkflowStage,
+    WorkflowState,
+)
+from .workflow_store import GovernedWorkflowStore
+from .workflow_coordinator import (
+    GovernedWorkflowCoordinator,
+    WorkflowCoordinationError,
+    WorkflowNotFoundError,
+    WorkflowVisibilityError,
+)
+
 from .models import (
     AgentRole,
     Assignment,
@@ -234,4 +252,17 @@ __all__ = [
     "ExecutionVisibilityAdapter",
     "ExecutionVisibilityRecord",
     "ExecutionVisibilityService",
+    "AuthorizationDecision",
+    "GovernedWorkflow",
+    "GovernedWorkflowService",
+    "GovernedWorkflowStore",
+    "WorkflowAuthorization",
+    "WorkflowDecision",
+    "WorkflowEvent",
+    "WorkflowStage",
+    "WorkflowState",
+    "GovernedWorkflowCoordinator",
+    "WorkflowCoordinationError",
+    "WorkflowNotFoundError",
+    "WorkflowVisibilityError",
 ]
