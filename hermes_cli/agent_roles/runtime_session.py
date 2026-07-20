@@ -52,10 +52,16 @@ def _optional_text(
 
 
 class RuntimeSessionState(str, Enum):
-    """Pre-execution runtime-session states."""
+    """Governed runtime-session states."""
 
     CREATED = "created"
     READY = "ready"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+    CANCELLED = "cancelled"
+    POLICY_DENIED = "policy_denied"
 
 
 class RuntimeSessionTransition(str, Enum):
@@ -63,6 +69,12 @@ class RuntimeSessionTransition(str, Enum):
 
     CREATED = "created"
     MARKED_READY = "marked_ready"
+    STARTED = "started"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+    CANCELLED = "cancelled"
+    POLICY_DENIED = "policy_denied"
 
 
 class RuntimeSessionEvent(BaseModel):
@@ -196,86 +208,123 @@ class RuntimeSession(BaseModel):
 
     @model_validator(mode="after")
     def _validate_session(self) -> "RuntimeSession":
-        if (
-            self.schema_version
-            != RUNTIME_SESSION_SCHEMA_VERSION
-        ):
-            raise ValueError(
-                "unsupported runtime session schema version"
-            )
+        if self.schema_version != RUNTIME_SESSION_SCHEMA_VERSION:
+            raise ValueError("unsupported runtime session schema version")
 
         if self.updated_at < self.created_at:
-            raise ValueError(
-                "updated_at cannot precede created_at"
-            )
-
-        if self.execution_started:
-            raise ValueError(
-                "pre-execution runtime session cannot report "
-                "execution"
-            )
+            raise ValueError("updated_at cannot precede created_at")
 
         if self.process_id is not None:
             raise ValueError(
-                "pre-execution runtime session cannot contain "
-                "process_id"
+                "governed runtime session does not retain process_id"
             )
 
-        if self.events[0].transition != (
-            RuntimeSessionTransition.CREATED
+        if (
+            self.state
+            in {
+                RuntimeSessionState.CREATED,
+                RuntimeSessionState.READY,
+            }
+            and self.execution_started
         ):
             raise ValueError(
-                "runtime session must begin with created event"
+                "pre-execution runtime session cannot report execution"
             )
 
+        if self.events[0].transition != (RuntimeSessionTransition.CREATED):
+            raise ValueError("runtime session must begin with created event")
+
         if self.events[0].state != RuntimeSessionState.CREATED:
-            raise ValueError(
-                "created event must record created state"
-            )
+            raise ValueError("created event must record created state")
 
         previous_timestamp = self.created_at
 
         for event in self.events:
             if event.timestamp < previous_timestamp:
                 raise ValueError(
-                    "runtime session events must be "
-                    "chronological"
+                    "runtime session events must be chronological"
                 )
 
             previous_timestamp = event.timestamp
 
         if self.events[-1].state != self.state:
             raise ValueError(
-                "latest runtime session event must match "
-                "session state"
+                "latest runtime session event must match session state"
             )
 
         if self.events[-1].timestamp != self.updated_at:
             raise ValueError(
-                "latest runtime session event timestamp must "
-                "match updated_at"
+                "latest runtime session event timestamp must match updated_at"
             )
 
         if self.state == RuntimeSessionState.CREATED:
             if len(self.events) != 1:
                 raise ValueError(
-                    "created runtime session must contain only "
-                    "its creation event"
+                    "created runtime session must contain only its creation event"
                 )
 
         if self.state == RuntimeSessionState.READY:
             if len(self.events) != 2:
                 raise ValueError(
-                    "ready runtime session requires exactly "
-                    "one ready transition"
+                    "ready runtime session requires exactly one ready transition"
                 )
 
             if self.events[-1].transition != (
                 RuntimeSessionTransition.MARKED_READY
             ):
                 raise ValueError(
-                    "ready runtime session requires "
-                    "marked_ready transition"
+                    "ready runtime session requires marked_ready transition"
+                )
+
+        execution_states = {
+            RuntimeSessionState.RUNNING,
+            RuntimeSessionState.SUCCEEDED,
+            RuntimeSessionState.FAILED,
+            RuntimeSessionState.BLOCKED,
+            RuntimeSessionState.CANCELLED,
+            RuntimeSessionState.POLICY_DENIED,
+        }
+        terminal_states = execution_states - {RuntimeSessionState.RUNNING}
+
+        if self.state in execution_states:
+            if not self.execution_started:
+                raise ValueError(
+                    "execution state requires execution_started=true"
+                )
+            if len(self.events) < 3:
+                raise ValueError(
+                    "execution state requires a started transition"
+                )
+            if (
+                self.events[1].transition
+                != RuntimeSessionTransition.MARKED_READY
+                or self.events[1].state
+                != RuntimeSessionState.READY
+            ):
+                raise ValueError(
+                    "execution requires a ready transition before start"
+                )
+            if self.events[2].transition != RuntimeSessionTransition.STARTED:
+                raise ValueError(
+                    "execution must begin with started transition"
+                )
+
+        if (
+            self.state == RuntimeSessionState.RUNNING
+            and len(self.events) != 3
+        ):
+            raise ValueError(
+                "running session requires exactly one started transition"
+            )
+
+        if self.state in terminal_states:
+            if len(self.events) != 4:
+                raise ValueError(
+                    "terminal session requires exactly one terminal transition"
+                )
+            if self.events[-1].transition.value != self.state.value:
+                raise ValueError(
+                    "terminal transition must match session state"
                 )
 
         return self
@@ -294,16 +343,14 @@ class RuntimeSessionFactory:
         """Create a session from one accepted dry-run receipt."""
         self._validate_inputs(contract, receipt)
 
-        session_seed = "|".join(
-            (
-                contract.project_id,
-                contract.contract_id,
-                receipt.receipt_id,
-                receipt.request_fingerprint,
-                receipt.adapter_name,
-                receipt.adapter_version,
-            )
-        )
+        session_seed = "|".join((
+            contract.project_id,
+            contract.contract_id,
+            receipt.receipt_id,
+            receipt.request_fingerprint,
+            receipt.adapter_name,
+            receipt.adapter_version,
+        ))
         session_digest = hashlib.sha256(
             session_seed.encode("utf-8")
         ).hexdigest()[:24]
@@ -332,8 +379,7 @@ class RuntimeSessionFactory:
                     state=RuntimeSessionState.CREATED,
                     timestamp=created_at,
                     reason=(
-                        "runtime session created from accepted "
-                        "dry-run handoff"
+                        "runtime session created from accepted dry-run handoff"
                     ),
                 ),
             ),
@@ -346,14 +392,12 @@ class RuntimeSessionFactory:
     ) -> None:
         if receipt.contract_id != contract.contract_id:
             raise ValueError(
-                "handoff receipt contract_id does not match "
-                "launch contract"
+                "handoff receipt contract_id does not match launch contract"
             )
 
         if receipt.runtime != contract.environment.runtime:
             raise ValueError(
-                "handoff receipt runtime does not match "
-                "launch contract"
+                "handoff receipt runtime does not match launch contract"
             )
 
         if receipt.mode != RuntimeHandoffMode.DRY_RUN:
@@ -367,26 +411,21 @@ class RuntimeSessionFactory:
             )
 
         if not receipt.accepted:
-            raise ValueError(
-                "runtime session requires accepted=true receipt"
-            )
+            raise ValueError("runtime session requires accepted=true receipt")
 
         if receipt.reasons:
             raise ValueError(
-                "accepted runtime handoff receipt cannot contain "
-                "rejection reasons"
+                "accepted runtime handoff receipt cannot contain rejection reasons"
             )
 
         if receipt.execution_started:
             raise ValueError(
-                "runtime session cannot be created after "
-                "execution starts"
+                "runtime session cannot be created after execution starts"
             )
 
         if receipt.process_id is not None:
             raise ValueError(
-                "runtime session cannot be created from receipt "
-                "with process_id"
+                "runtime session cannot be created from receipt with process_id"
             )
 
 
@@ -423,14 +462,11 @@ class RuntimeSessionService:
         """Return a new immutable session in READY state."""
         if session.state != RuntimeSessionState.CREATED:
             raise ValueError(
-                "only created runtime sessions can be "
-                "marked ready"
+                "only created runtime sessions can be marked ready"
             )
 
         if ready_at < session.updated_at:
-            raise ValueError(
-                "ready_at cannot precede current session state"
-            )
+            raise ValueError("ready_at cannot precede current session state")
 
         reason = _required_text(reason, "reason")
 
@@ -441,9 +477,7 @@ class RuntimeSessionService:
                 "events": session.events
                 + (
                     RuntimeSessionEvent(
-                        transition=(
-                            RuntimeSessionTransition.MARKED_READY
-                        ),
+                        transition=(RuntimeSessionTransition.MARKED_READY),
                         state=RuntimeSessionState.READY,
                         timestamp=ready_at,
                         reason=reason,
@@ -451,3 +485,83 @@ class RuntimeSessionService:
                 ),
             }
         )
+
+    def start(
+        self,
+        session: RuntimeSession,
+        *,
+        started_at: int,
+        reason: str = "governed execution started",
+    ) -> RuntimeSession:
+        """Start a ready session without launching a process implicitly."""
+        return self._transition(
+            session,
+            expected=RuntimeSessionState.READY,
+            state=RuntimeSessionState.RUNNING,
+            transition=RuntimeSessionTransition.STARTED,
+            timestamp=started_at,
+            reason=reason,
+            execution_started=True,
+        )
+
+    def finish(
+        self,
+        session: RuntimeSession,
+        *,
+        state: RuntimeSessionState,
+        finished_at: int,
+        reason: str,
+    ) -> RuntimeSession:
+        """Finish a running session in exactly one terminal state."""
+        terminal = {
+            RuntimeSessionState.SUCCEEDED,
+            RuntimeSessionState.FAILED,
+            RuntimeSessionState.BLOCKED,
+            RuntimeSessionState.CANCELLED,
+            RuntimeSessionState.POLICY_DENIED,
+        }
+        if state not in terminal:
+            raise ValueError("finish requires a terminal runtime state")
+        return self._transition(
+            session,
+            expected=RuntimeSessionState.RUNNING,
+            state=state,
+            transition=RuntimeSessionTransition(state.value),
+            timestamp=finished_at,
+            reason=reason,
+            execution_started=True,
+        )
+
+    @staticmethod
+    def _transition(
+        session: RuntimeSession,
+        *,
+        expected: RuntimeSessionState,
+        state: RuntimeSessionState,
+        transition: RuntimeSessionTransition,
+        timestamp: int,
+        reason: str,
+        execution_started: bool,
+    ) -> RuntimeSession:
+        if session.state != expected:
+            raise ValueError(
+                f"only {expected.value} runtime sessions can transition "
+                f"to {state.value}"
+            )
+        if timestamp < session.updated_at:
+            raise ValueError(
+                "transition timestamp cannot precede current session state"
+            )
+        event = RuntimeSessionEvent(
+            transition=transition,
+            state=state,
+            timestamp=timestamp,
+            reason=_required_text(reason, "reason"),
+        )
+        return RuntimeSession.model_validate({
+            **session.model_dump(mode="python"),
+            "state": state,
+            "updated_at": timestamp,
+            "execution_started": execution_started,
+            "events": session.events + (event,),
+        })

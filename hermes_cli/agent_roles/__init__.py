@@ -110,6 +110,32 @@ from hermes_cli.agent_roles.runtime_session import (
     RuntimeSessionTransition,
 )
 
+from hermes_cli.agent_roles.execution_planning import (
+    EXECUTION_PLAN_SCHEMA_VERSION,
+    ExecutionAction,
+    ExecutionPlanStep,
+    RoleExecutionPlan,
+    RoleExecutionPlanner,
+)
+
+from hermes_cli.agent_roles.execution import (
+    EXECUTION_RESULT_SCHEMA_VERSION,
+    ExecutionEvidence,
+    ExecutionOutcome,
+    ExecutionResult,
+    FailureCategory,
+    GovernedExecutionService,
+    PolicyDecision,
+    RetryDecision,
+)
+
+from hermes_cli.agent_roles.execution_visibility import (
+    EXECUTION_EVENT_TYPE,
+    ExecutionVisibilityAdapter,
+    ExecutionVisibilityRecord,
+    ExecutionVisibilityService,
+)
+
 __all__ = [
     "AgentRole",
     "Assignment",
@@ -191,4 +217,21 @@ __all__ = [
     "RuntimeSessionService",
     "RuntimeSessionState",
     "RuntimeSessionTransition",
+    "EXECUTION_PLAN_SCHEMA_VERSION",
+    "ExecutionAction",
+    "ExecutionPlanStep",
+    "RoleExecutionPlan",
+    "RoleExecutionPlanner",
+    "EXECUTION_RESULT_SCHEMA_VERSION",
+    "ExecutionEvidence",
+    "ExecutionOutcome",
+    "ExecutionResult",
+    "FailureCategory",
+    "GovernedExecutionService",
+    "PolicyDecision",
+    "RetryDecision",
+    "EXECUTION_EVENT_TYPE",
+    "ExecutionVisibilityAdapter",
+    "ExecutionVisibilityRecord",
+    "ExecutionVisibilityService",
 ]
