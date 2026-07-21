@@ -131,6 +131,28 @@ from .runtime_supervision_visibility import (
     RuntimeSupervisionVisibilityService,
 )
 
+from .runtime_recovery import (
+    RUNTIME_RECOVERY_SCHEMA_VERSION,
+    GovernedRuntimeRecoveryCoordinator,
+    RuntimeRecoveryAuthorization,
+    RuntimeRecoveryError,
+    RuntimeRecoveryPublicationError,
+)
+from .runtime_recovery_store import (
+    RUNTIME_RECOVERY_JOURNAL,
+    RuntimeRecoveryAction,
+    RuntimeRecoveryDecision,
+    RuntimeRecoveryRecord,
+    RuntimeRecoveryState,
+    RuntimeRecoveryStore,
+)
+from .runtime_recovery_visibility import (
+    RUNTIME_RECOVERY_VISIBILITY_EVENT,
+    RuntimeRecoveryVisibilityAdapter,
+    RuntimeRecoveryVisibilityRecord,
+    RuntimeRecoveryVisibilityService,
+)
+
 from .models import (
     AgentRole,
     Assignment,
@@ -268,6 +290,21 @@ from hermes_cli.agent_roles.execution_visibility import (
 )
 
 __all__ = [
+    "RUNTIME_RECOVERY_SCHEMA_VERSION",
+    "GovernedRuntimeRecoveryCoordinator",
+    "RuntimeRecoveryAuthorization",
+    "RuntimeRecoveryError",
+    "RuntimeRecoveryPublicationError",
+    "RUNTIME_RECOVERY_JOURNAL",
+    "RuntimeRecoveryAction",
+    "RuntimeRecoveryDecision",
+    "RuntimeRecoveryRecord",
+    "RuntimeRecoveryState",
+    "RuntimeRecoveryStore",
+    "RUNTIME_RECOVERY_VISIBILITY_EVENT",
+    "RuntimeRecoveryVisibilityAdapter",
+    "RuntimeRecoveryVisibilityRecord",
+    "RuntimeRecoveryVisibilityService",
     "RUNTIME_SUPERVISION_SCHEMA_VERSION",
     "GovernedRuntimeSupervisionCoordinator",
     "RuntimeSupervisionError",
