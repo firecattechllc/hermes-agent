@@ -206,6 +206,17 @@ from .runtime_recovery_closure_visibility import (
     RuntimeRecoveryClosureVisibilityRecord,
     RuntimeRecoveryClosureVisibilityService,
 )
+from .runtime_recovery_audit import (
+    MAX_RUNTIME_RECOVERY_AUDIT_REFS,
+    RUNTIME_RECOVERY_AUDIT_SCHEMA_VERSION,
+    RuntimeRecoveryAuditBuilder,
+    RuntimeRecoveryAuditEvent,
+    RuntimeRecoveryAuditEventType,
+    RuntimeRecoveryAuditStore,
+    RuntimeRecoveryAuditVerificationResult,
+    verify_runtime_recovery_audit_chain,
+    verify_runtime_recovery_audit_sources,
+)
 
 from .models import (
     AgentRole,
@@ -344,6 +355,15 @@ from hermes_cli.agent_roles.execution_visibility import (
 )
 
 __all__ = [
+    "MAX_RUNTIME_RECOVERY_AUDIT_REFS",
+    "RUNTIME_RECOVERY_AUDIT_SCHEMA_VERSION",
+    "RuntimeRecoveryAuditBuilder",
+    "RuntimeRecoveryAuditEvent",
+    "RuntimeRecoveryAuditEventType",
+    "RuntimeRecoveryAuditStore",
+    "RuntimeRecoveryAuditVerificationResult",
+    "verify_runtime_recovery_audit_chain",
+    "verify_runtime_recovery_audit_sources",
     "RUNTIME_RECOVERY_CLOSURE_SCHEMA_VERSION",
     "GovernedRuntimeRecoveryClosureCoordinator",
     "RuntimeRecoveryClosureError",
