@@ -171,6 +171,23 @@ from .runtime_recovery_execution_visibility import (
     RuntimeRecoveryExecutionVisibilityRecord,
     RuntimeRecoveryExecutionVisibilityService,
 )
+from .runtime_recovery_reconciliation import (
+    GovernedRuntimeRecoveryReconciliationCoordinator,
+    RuntimeRecoveryReconciliationError,
+    RuntimeRecoveryReconciliationPublicationError,
+)
+from .runtime_recovery_reconciliation_store import (
+    RUNTIME_RECOVERY_RECONCILIATION_SCHEMA_VERSION,
+    RuntimeRecoveryReconciliationRecord,
+    RuntimeRecoveryReconciliationState,
+    RuntimeRecoveryReconciliationStore,
+)
+from .runtime_recovery_reconciliation_visibility import (
+    RUNTIME_RECOVERY_RECONCILIATION_VISIBILITY_EVENT,
+    RuntimeRecoveryReconciliationVisibilityAdapter,
+    RuntimeRecoveryReconciliationVisibilityRecord,
+    RuntimeRecoveryReconciliationVisibilityService,
+)
 
 from .models import (
     AgentRole,
@@ -309,6 +326,17 @@ from hermes_cli.agent_roles.execution_visibility import (
 )
 
 __all__ = [
+    "RUNTIME_RECOVERY_RECONCILIATION_SCHEMA_VERSION",
+    "GovernedRuntimeRecoveryReconciliationCoordinator",
+    "RuntimeRecoveryReconciliationError",
+    "RuntimeRecoveryReconciliationPublicationError",
+    "RuntimeRecoveryReconciliationRecord",
+    "RuntimeRecoveryReconciliationState",
+    "RuntimeRecoveryReconciliationStore",
+    "RUNTIME_RECOVERY_RECONCILIATION_VISIBILITY_EVENT",
+    "RuntimeRecoveryReconciliationVisibilityAdapter",
+    "RuntimeRecoveryReconciliationVisibilityRecord",
+    "RuntimeRecoveryReconciliationVisibilityService",
     "RUNTIME_RECOVERY_EXECUTION_SCHEMA_VERSION",
     "GovernedRuntimeRecoveryExecutionCoordinator",
     "RuntimeRecoveryExecutionError",
