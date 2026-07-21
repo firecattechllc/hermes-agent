@@ -153,6 +153,25 @@ from .runtime_recovery_visibility import (
     RuntimeRecoveryVisibilityService,
 )
 
+from .runtime_recovery_execution import (
+    RUNTIME_RECOVERY_EXECUTION_SCHEMA_VERSION,
+    GovernedRuntimeRecoveryExecutionCoordinator,
+    RuntimeRecoveryExecutionError,
+    RuntimeRecoveryExecutionPublicationError,
+)
+from .runtime_recovery_execution_store import (
+    RUNTIME_RECOVERY_EXECUTION_JOURNAL,
+    RuntimeRecoveryExecutionRecord,
+    RuntimeRecoveryExecutionState,
+    RuntimeRecoveryExecutionStore,
+)
+from .runtime_recovery_execution_visibility import (
+    RUNTIME_RECOVERY_EXECUTION_VISIBILITY_EVENT,
+    RuntimeRecoveryExecutionVisibilityAdapter,
+    RuntimeRecoveryExecutionVisibilityRecord,
+    RuntimeRecoveryExecutionVisibilityService,
+)
+
 from .models import (
     AgentRole,
     Assignment,
@@ -290,6 +309,18 @@ from hermes_cli.agent_roles.execution_visibility import (
 )
 
 __all__ = [
+    "RUNTIME_RECOVERY_EXECUTION_SCHEMA_VERSION",
+    "GovernedRuntimeRecoveryExecutionCoordinator",
+    "RuntimeRecoveryExecutionError",
+    "RuntimeRecoveryExecutionPublicationError",
+    "RUNTIME_RECOVERY_EXECUTION_JOURNAL",
+    "RuntimeRecoveryExecutionRecord",
+    "RuntimeRecoveryExecutionState",
+    "RuntimeRecoveryExecutionStore",
+    "RUNTIME_RECOVERY_EXECUTION_VISIBILITY_EVENT",
+    "RuntimeRecoveryExecutionVisibilityAdapter",
+    "RuntimeRecoveryExecutionVisibilityRecord",
+    "RuntimeRecoveryExecutionVisibilityService",
     "RUNTIME_RECOVERY_SCHEMA_VERSION",
     "GovernedRuntimeRecoveryCoordinator",
     "RuntimeRecoveryAuthorization",

@@ -145,6 +145,7 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "runtime_execution_recorded",
     "runtime_supervision_recorded",
     "runtime_recovery_recorded",
+    "runtime_recovery_execution_recorded",
 })
 
 
