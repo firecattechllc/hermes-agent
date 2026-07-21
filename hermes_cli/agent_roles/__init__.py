@@ -112,6 +112,25 @@ from .runtime_execution_visibility import (
     RuntimeExecutionVisibilityService,
 )
 
+from .runtime_supervision import (
+    RUNTIME_SUPERVISION_SCHEMA_VERSION,
+    GovernedRuntimeSupervisionCoordinator,
+    RuntimeSupervisionError,
+    RuntimeSupervisionPublicationError,
+    SupervisionEvent,
+    SupervisionOutcome,
+)
+from .runtime_supervision_store import (
+    RuntimeSupervisionStore,
+    SupervisionStatus,
+)
+from .runtime_supervision_visibility import (
+    RUNTIME_SUPERVISION_VISIBILITY_EVENT,
+    RuntimeSupervisionVisibilityAdapter,
+    RuntimeSupervisionVisibilityRecord,
+    RuntimeSupervisionVisibilityService,
+)
+
 from .models import (
     AgentRole,
     Assignment,
@@ -249,6 +268,18 @@ from hermes_cli.agent_roles.execution_visibility import (
 )
 
 __all__ = [
+    "RUNTIME_SUPERVISION_SCHEMA_VERSION",
+    "GovernedRuntimeSupervisionCoordinator",
+    "RuntimeSupervisionError",
+    "RuntimeSupervisionPublicationError",
+    "SupervisionEvent",
+    "SupervisionOutcome",
+    "RuntimeSupervisionStore",
+    "SupervisionStatus",
+    "RUNTIME_SUPERVISION_VISIBILITY_EVENT",
+    "RuntimeSupervisionVisibilityAdapter",
+    "RuntimeSupervisionVisibilityRecord",
+    "RuntimeSupervisionVisibilityService",
     "RUNTIME_EXECUTION_SCHEMA_VERSION",
     "TERMINAL_RUNTIME_EXECUTION_STATES",
     "GovernedRuntimeExecutionCoordinator",
