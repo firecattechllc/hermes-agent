@@ -399,4 +399,13 @@ __all__ = [
     "WorkflowSchedulingVisibilityAdapter",
     "WorkflowSchedulingVisibilityRecord",
     "WorkflowSchedulingVisibilityService",
+    "WorkflowResultPublicationError",
+    "WorkflowResultError",
+    "WorkflowResultCoordinator",
 ]
+
+from .workflow_result import (
+    WorkflowResultCoordinator,
+    WorkflowResultError,
+    WorkflowResultPublicationError,
+)
