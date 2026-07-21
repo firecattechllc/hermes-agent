@@ -148,6 +148,27 @@ class WorkflowSchedulingStore:
     def get(self, project_id: str, intent_id: str) -> Optional[WorkflowExecutionIntent]:
         return self._latest(self._read(project_id)).get(intent_id.strip())
 
+    def get_revision(
+        self,
+        project_id: str,
+        intent_id: str,
+        version: int,
+    ) -> Optional[WorkflowExecutionIntent]:
+        """Return one exact immutable scheduling revision, if present."""
+        intent_id = intent_id.strip()
+        if not intent_id:
+            raise ValueError("workflow scheduling intent_id is required")
+        if version < 1:
+            raise ValueError("workflow scheduling version must be positive")
+
+        for record in self._read(project_id):
+            if (
+                record.intent_id == intent_id
+                and record.intent_version == version
+            ):
+                return record.intent
+        return None
+
     def list(self, project_id: str, *, status: Optional[CoordinationStatus] = None) -> Tuple[WorkflowExecutionIntent, ...]:
         values = tuple(self._latest(self._read(project_id)).values())
         if status is not None:

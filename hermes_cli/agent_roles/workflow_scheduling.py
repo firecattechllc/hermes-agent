@@ -187,6 +187,12 @@ class WorkflowExecutionIntent(BaseModel):
 class _SchedulingStore(Protocol):
     def create(self, intent: WorkflowExecutionIntent) -> WorkflowExecutionIntent: ...
     def get(self, project_id: str, intent_id: str) -> Optional[WorkflowExecutionIntent]: ...
+    def get_revision(
+        self,
+        project_id: str,
+        intent_id: str,
+        version: int,
+    ) -> Optional[WorkflowExecutionIntent]: ...
     def list(self, project_id: str, *, status: Optional[CoordinationStatus] = None) -> Tuple[WorkflowExecutionIntent, ...]: ...
     def claim(self, project_id: str, intent_id: str, *, claimed_by: str, timestamp: int, lease_seconds: int) -> WorkflowExecutionIntent: ...
     def transition(self, project_id: str, intent_id: str, *, status: CoordinationStatus, actor_id: str, timestamp: int, reason: str, evidence_refs: Tuple[str, ...] = (), available_at: Optional[int] = None, expected_claim_id: Optional[str] = None) -> WorkflowExecutionIntent: ...
@@ -353,6 +359,19 @@ class GovernedWorkflowSchedulingCoordinator:
     ) -> Optional[WorkflowExecutionIntent]:
         """Return the latest durable coordination revision, if present."""
         return self._scheduling.get(project_id, intent_id)
+
+    def get_revision(
+        self,
+        project_id: str,
+        intent_id: str,
+        version: int,
+    ) -> Optional[WorkflowExecutionIntent]:
+        """Return one exact immutable coordination revision, if present."""
+        return self._scheduling.get_revision(
+            project_id,
+            intent_id,
+            version,
+        )
 
     def claim(self, project_id: str, intent_id: str, *, claimed_by: str, timestamp: int, lease_seconds: int) -> WorkflowExecutionIntent:
         self._require_current_and_visible(project_id, intent_id)
