@@ -11,6 +11,11 @@ from .workflow import (
     WorkflowState,
 )
 from .workflow_store import GovernedWorkflowStore
+from .workflow_progression import (
+    WorkflowProgressionCoordinator,
+    WorkflowProgressionError,
+    WorkflowProgressionPublicationError,
+)
 from .workflow_coordinator import (
     GovernedWorkflowCoordinator,
     WorkflowCoordinationError,
@@ -369,6 +374,9 @@ __all__ = [
     "WorkflowCoordinationError",
     "WorkflowNotFoundError",
     "WorkflowVisibilityError",
+    "WorkflowProgressionCoordinator",
+    "WorkflowProgressionError",
+    "WorkflowProgressionPublicationError",
     "WORKFLOW_EXECUTION_SCHEMA_VERSION",
     "EvidenceActorSource",
     "ExecutionEventType",
