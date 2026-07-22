@@ -217,6 +217,17 @@ from .runtime_recovery_audit import (
     verify_runtime_recovery_audit_chain,
     verify_runtime_recovery_audit_sources,
 )
+from .runtime_recovery_certification import (
+    RUNTIME_RECOVERY_CERTIFICATION_SCHEMA_VERSION,
+    RuntimeRecoveryCertification,
+    RuntimeRecoveryCertificationArtifact,
+    RuntimeRecoveryCertificationBuilder,
+    RuntimeRecoveryCertificationCheck,
+    RuntimeRecoveryCertificationStatus,
+    RuntimeRecoveryCertificationVerificationResult,
+    runtime_recovery_certifications_requiring_attention,
+    verify_runtime_recovery_certification,
+)
 
 from .models import (
     AgentRole,
@@ -364,6 +375,15 @@ __all__ = [
     "RuntimeRecoveryAuditVerificationResult",
     "verify_runtime_recovery_audit_chain",
     "verify_runtime_recovery_audit_sources",
+    "RUNTIME_RECOVERY_CERTIFICATION_SCHEMA_VERSION",
+    "RuntimeRecoveryCertification",
+    "RuntimeRecoveryCertificationArtifact",
+    "RuntimeRecoveryCertificationBuilder",
+    "RuntimeRecoveryCertificationCheck",
+    "RuntimeRecoveryCertificationStatus",
+    "RuntimeRecoveryCertificationVerificationResult",
+    "runtime_recovery_certifications_requiring_attention",
+    "verify_runtime_recovery_certification",
     "RUNTIME_RECOVERY_CLOSURE_SCHEMA_VERSION",
     "GovernedRuntimeRecoveryClosureCoordinator",
     "RuntimeRecoveryClosureError",
