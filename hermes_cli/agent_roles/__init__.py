@@ -174,6 +174,27 @@ from .remote_maintenance_visibility import (
     REMOTE_MAINTENANCE_EVENT,
     RemoteMaintenanceVisibilityService,
 )
+from .fleet_inventory import (
+    GovernedInventoryExecutor,
+    InventoryApproval,
+    InventoryCertification,
+    InventoryEvidence,
+    InventoryExecution,
+    InventoryMode,
+    InventoryProposal,
+    InventoryResult,
+    InventoryRunner,
+    InventoryStep,
+    InventoryTarget,
+    SecretReference as InventorySecretReference,
+    certify_fleet_inventory,
+    diagnose_fleet_inventory,
+    redact_inventory_evidence,
+)
+from .fleet_inventory_visibility import (
+    INVENTORY_EVENT,
+    InventoryVisibilityService,
+)
 
 from .runtime_recovery_execution import (
     RUNTIME_RECOVERY_EXECUTION_SCHEMA_VERSION,
