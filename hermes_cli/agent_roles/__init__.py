@@ -217,6 +217,33 @@ from .model_routing_visibility import (
     ModelRoutingVisibilityRecord,
     ModelRoutingVisibilityService,
 )
+from .model_execution import (
+    MODEL_EXECUTION_SCHEMA_VERSION,
+    ApprovalEvidence,
+    BudgetAuthorization,
+    DeterministicModelAdapter,
+    GovernedModelExecutionService,
+    ModelExecutionAttempt,
+    ModelExecutionErrorClass,
+    ModelExecutionEvidence,
+    ModelExecutionRequest,
+    ModelExecutionState,
+    InMemoryModelExecutionStore,
+    ModelProviderAdapter,
+    ProviderExecutionResult,
+    ProviderUsage,
+)
+from .model_execution_store import (
+    MODEL_EXECUTION_JOURNAL,
+    ModelExecutionJournalRecord,
+    ModelExecutionStore,
+)
+from .model_execution_visibility import (
+    MODEL_EXECUTION_EVENT,
+    ModelExecutionVisibilityAdapter,
+    ModelExecutionVisibilityRecord,
+    ModelExecutionVisibilityService,
+)
 
 from .runtime_recovery_execution import (
     RUNTIME_RECOVERY_EXECUTION_SCHEMA_VERSION,
@@ -462,6 +489,27 @@ from hermes_cli.agent_roles.execution_visibility import (
 )
 
 __all__ = [
+    "MODEL_EXECUTION_SCHEMA_VERSION",
+    "ApprovalEvidence",
+    "BudgetAuthorization",
+    "DeterministicModelAdapter",
+    "GovernedModelExecutionService",
+    "ModelExecutionAttempt",
+    "ModelExecutionErrorClass",
+    "ModelExecutionEvidence",
+    "ModelExecutionRequest",
+    "ModelExecutionState",
+    "InMemoryModelExecutionStore",
+    "ModelExecutionStore",
+    "MODEL_EXECUTION_JOURNAL",
+    "ModelExecutionJournalRecord",
+    "ModelProviderAdapter",
+    "ProviderExecutionResult",
+    "ProviderUsage",
+    "MODEL_EXECUTION_EVENT",
+    "ModelExecutionVisibilityAdapter",
+    "ModelExecutionVisibilityRecord",
+    "ModelExecutionVisibilityService",
     "MODEL_ROUTING_SCHEMA_VERSION",
     "CandidateDisposition",
     "CandidateScore",

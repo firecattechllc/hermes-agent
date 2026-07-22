@@ -151,6 +151,7 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "remote_maintenance_recorded",
     "inventory_recorded",
     "model_routing_recorded",
+    "model_execution_recorded",
 })
 
 
