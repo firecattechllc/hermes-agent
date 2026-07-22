@@ -2051,6 +2051,12 @@ def invoke_hook(hook_name: str, **kwargs: Any) -> List[Any]:
 
     Returns a list of non-``None`` return values from plugin callbacks.
     """
+    try:
+        from hermes_cli.mission_control.runtime import observe_hook
+
+        observe_hook(hook_name, **kwargs)
+    except Exception:
+        pass
     return get_plugin_manager().invoke_hook(hook_name, **kwargs)
 
 

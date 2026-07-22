@@ -431,7 +431,20 @@ from hermes_cli.subcommands.gui import build_gui_parser
 from hermes_cli.subcommands.logs import build_logs_parser
 from hermes_cli.subcommands.prompt_size import build_prompt_size_parser
 from hermes_cli.subcommands.memory import build_memory_parser
+from hermes_cli.subcommands.engineering_memory import (
+    build_engineering_memory_parser,
+    cmd_engineering_memory,
+)
 from hermes_cli.subcommands.acp import build_acp_parser
+from hermes_cli.subcommands.context import build_context_parser, cmd_context
+from hermes_cli.subcommands.mission_control import (
+    build_mission_control_parser,
+    cmd_mission_control,
+)
+from hermes_cli.subcommands.autonomous_backlog import (
+    build_autonomous_backlog_parser,
+    cmd_autonomous_backlog,
+)
 from hermes_cli.subcommands.tools import build_tools_parser
 from hermes_cli.subcommands.insights import build_insights_parser
 from hermes_cli.subcommands.skills import build_skills_parser
@@ -13085,9 +13098,11 @@ _BUILTIN_SUBCOMMANDS = frozenset(
     {
         "acp", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
         "computer-use",
-        "config", "console", "cron", "curator", "dashboard", "serve", "debug", "doctor",
+        "config", "console", "context", "cron", "curator", "dashboard", "serve", "debug", "doctor",
         "dump", "fallback", "gateway", "hooks", "import", "insights",
-        "gui", "desktop", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate", "moa",
+        "gui", "desktop", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory",
+        "engineering-memory", "eng-memory", "engineering_memory",
+        "mission-control", "mission_control", "migrate", "moa",
         "journey", "memory-graph", "learning",
         "model", "pairing", "pets", "plugins", "portal", "postinstall", "profile",
         "project", "proxy",
@@ -14083,6 +14098,32 @@ def main():
     # memory command  (parser built in hermes_cli/subcommands/memory.py)
     # =========================================================================
     build_memory_parser(subparsers, cmd_memory=cmd_memory)
+
+    # =========================================================================
+    # engineering-memory command
+    # =========================================================================
+    build_engineering_memory_parser(
+        subparsers,
+        cmd_engineering_memory=cmd_engineering_memory,
+    )
+
+    # =========================================================================
+    # context command  (parser built in hermes_cli/subcommands/context.py)
+    # =========================================================================
+    build_context_parser(subparsers, cmd_context=cmd_context)
+
+    # =========================================================================
+    # mission-control command  (parser built in hermes_cli/subcommands/mission_control.py)
+    # =========================================================================
+    build_mission_control_parser(subparsers, cmd_mission_control=cmd_mission_control)
+
+    # =========================================================================
+    # autonomous-backlog command
+    # =========================================================================
+    build_autonomous_backlog_parser(
+        subparsers,
+        cmd_autonomous_backlog=cmd_autonomous_backlog,
+    )
 
     # =========================================================================
     # tools command  (parser built in hermes_cli/subcommands/tools.py)
