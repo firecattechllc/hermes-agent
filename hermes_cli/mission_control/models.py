@@ -160,6 +160,14 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "intelligence_optimization_applied",
     "intelligence_recovery_recommended",
     "intelligence_budget_pressure_detected",
+    # Step 29 system integration certification and release preparation
+    "system_integration_certification_started",
+    "system_integration_certification_recorded",
+    "system_integration_certification_blocked",
+    "release_readiness_recorded",
+    "release_readiness_blocked",
+    "evidence_chain_certified",
+    "rollback_readiness_recorded",
 })
 
 
