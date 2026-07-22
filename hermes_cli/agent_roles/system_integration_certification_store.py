@@ -87,12 +87,15 @@ class _ArtifactStore(Generic[Artifact]):
         return tuple(records)
 
     def list(self) -> Tuple[Artifact, ...]:
-        return tuple(record.artifact for record in self._read())
+        with self._lock():
+            return tuple(record.artifact for record in self._read())
 
     def get(self, artifact_id: str) -> Optional[Artifact]:
         return next((item for item in self.list() if getattr(item, self.id_field) == artifact_id), None)
 
     def save(self, artifact: Artifact, *, idempotency_key: str) -> Artifact:
+        if not idempotency_key.strip() or len(idempotency_key) > 256:
+            raise ValueError("Step 29 idempotency key must be non-empty and bounded")
         artifact_id = getattr(artifact, self.id_field)
         with self._lock():
             records = self._read()

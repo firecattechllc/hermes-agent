@@ -5,6 +5,8 @@ import pytest
 from hermes_cli.agent_roles import (
     SYSTEM_INTEGRATION_EVENT_TYPES,
     CertificationFinding,
+    EvidenceChainManifest,
+    EvidenceReference,
     FailureClassification,
     FindingSeverity,
     IntegrationIdentity,
@@ -39,6 +41,10 @@ def test_architecture_inventory_and_end_to_end_scenario_are_deterministic():
     assert {item.step_range for item in inventory} >= {"1-4", "24", "25", "26", "27", "28"}
     first = certification(); second = certification()
     assert first == second
+    assert all(check.passed for check in first.integration_checks)
+    assert {name for check in first.integration_checks for name in check.interfaces} >= {
+        "model_routing", "intelligence_engine",
+    }
     assert first.status.value == "certified"
     assert first.visibility.fallback_outcome == "transient_failure_recovered"
     assert tuple(item.sequence for item in first.evidence_chain.references) == tuple(range(1, 10))
@@ -47,20 +53,45 @@ def test_architecture_inventory_and_end_to_end_scenario_are_deterministic():
 
 def test_identity_associations_fail_closed():
     identity = certification().identity
-    validate_associations(identity, {"project_id": identity.project_id, "correlation_id": identity.correlation_id})
+    validate_associations(identity, identity.model_dump(mode="json"))
+    with pytest.raises(ValueError, match="set mismatch"):
+        validate_associations(identity, {"project_id": identity.project_id})
     with pytest.raises(ValueError, match="identity mismatch"):
-        validate_associations(identity, {"project_id": "wrong"})
+        validate_associations(identity, {**identity.model_dump(mode="json"), "project_id": "wrong"})
     with pytest.raises(ValueError, match="ambiguous idempotency"):
         IntegrationIdentity(**{**identity.model_dump(), "idempotency_keys": ("same", "same")})
 
 
 def test_governance_invariants_are_machine_readable_and_failures_are_critical():
-    invariants = certify_governance()
+    names = {item.invariant_id for item in certification().governance_invariants}
+    evidence = {name: True for name in names}
+    invariants = certify_governance(evidence)
     assert len(invariants) == 15 and all(item.passed for item in invariants)
-    failed = certify_governance({"no_spending_without_authorization": False})
+    failed = certify_governance({**evidence, "no_spending_without_authorization": False})
     assert next(item for item in failed if not item.passed).severity is FindingSeverity.CRITICAL
-    names = {item.invariant_id for item in invariants}
     assert {"merge_requires_operator", "release_requires_operator", "deployment_requires_operator", "credential_access_requires_operator", "destructive_action_requires_operator"} <= names
+    with pytest.raises(ValueError, match="missing governance"):
+        certify_governance({"merge_requires_operator": True})
+    assert certification().status.value == "certified"
+    assert build_integration_scenario(
+        source_commit="14272ebb1", branch="step29-system-integration-certification",
+        governance_results={"credential_access_requires_operator": False},
+    ).status.value == "blocked"
+
+
+def test_evidence_chain_rejects_association_schema_hash_order_and_duplicates():
+    chain = certification().evidence_chain
+    first = chain.references[0]
+    with pytest.raises(ValueError, match="project/task"):
+        EvidenceChainManifest.build((first, chain.references[1].model_copy(update={"project_id": "wrong"})))
+    with pytest.raises(ValueError, match="schema version"):
+        EvidenceChainManifest.build((first.model_copy(update={"schema_version": 2}),))
+    with pytest.raises(ValueError, match="duplicate evidence"):
+        EvidenceChainManifest.build((first, first.model_copy(update={"sequence": 2})))
+    with pytest.raises(ValueError, match="hash mismatch"):
+        EvidenceChainManifest(references=chain.references, chain_hash="0" * 64)
+    with pytest.raises(ValueError, match="sensitive"):
+        EvidenceReference(**{**first.model_dump(), "reference": "evidence://token=secret"})
 
 
 def test_failure_matrix_covers_faults_and_governance_does_not_retry():
@@ -102,6 +133,22 @@ def test_invalid_schema_is_rejected(tmp_path):
         store.list()
 
 
+def test_store_rejects_invalid_json_and_lists_in_journal_order(tmp_path):
+    store = SystemIntegrationCertificationStore(tmp_path)
+    first = certification()
+    second = build_integration_scenario(
+        source_commit="second", branch="step29-system-integration-certification", generated_at=30,
+    )
+    store.save(first, idempotency_key="one")
+    store.save(second, idempotency_key="two")
+    assert store.list() == (first, second)
+    with pytest.raises(ValueError, match="collision"):
+        store.save(first, idempotency_key="different-key")
+    store.journal_path.write_text("not-json\n")
+    with pytest.raises(ValueError, match="invalid Step 29 journal record"):
+        store.list()
+
+
 @pytest.mark.parametrize(("severity", "expected"), [(None, ReleaseDisposition.READY_FOR_OPERATOR_REVIEW), (FindingSeverity.ADVISORY, ReleaseDisposition.CONDITIONALLY_READY), (FindingSeverity.BLOCKING, ReleaseDisposition.BLOCKED), (FindingSeverity.CRITICAL, ReleaseDisposition.FAILED)])
 def test_release_dispositions_and_operator_gate(tmp_path, severity, expected):
     findings = () if severity is None else (finding(severity),)
@@ -125,6 +172,25 @@ def test_release_manifest_and_visibility_are_deterministic_and_sanitized():
     assert all(event.event_type in SYSTEM_INTEGRATION_EVENT_TYPES for event in events)
     assert all(event.project_id == artifact.identity.project_id for event in events)
     assert "deterministic-adapter-model" not in json.dumps([event.model_dump(mode="json") for event in events])
+
+
+def test_release_suite_accounting_is_exact_and_certification_failure_blocks():
+    artifact = certification()
+    for kwargs in (
+        {"required_suites": ("focused", "focused"), "passed_suites": ("focused",)},
+        {"required_suites": ("focused",), "passed_suites": ("focused",), "failed_suites": ("focused",)},
+        {"required_suites": ("focused", "mission-control"), "passed_suites": ("focused",)},
+    ):
+        with pytest.raises(ValueError, match="suite"):
+            build_release_readiness(artifact, repository_clean=True, **kwargs)
+    blocked = build_integration_scenario(
+        source_commit="14272ebb1", branch="step29-system-integration-certification",
+        governance_results={"deployment_requires_operator": False},
+    )
+    readiness = build_release_readiness(
+        blocked, repository_clean=True, required_suites=("focused",), passed_suites=("focused",),
+    )
+    assert readiness.disposition is ReleaseDisposition.BLOCKED
 
 
 def test_all_step29_event_types_registered_deliberately():

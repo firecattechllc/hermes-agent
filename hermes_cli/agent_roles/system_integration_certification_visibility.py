@@ -44,6 +44,8 @@ class SystemIntegrationCertificationVisibilityAdapter:
         _assert_sanitized(base)
         types = [SYSTEM_INTEGRATION_CERTIFICATION_STARTED, EVIDENCE_CHAIN_CERTIFIED, SYSTEM_INTEGRATION_CERTIFICATION_RECORDED]
         if certification.status is not CertificationStatus.CERTIFIED: types.append(SYSTEM_INTEGRATION_CERTIFICATION_BLOCKED)
+        if any(kind not in certification.identity.mission_control_event_ids for kind in types):
+            raise ValueError("Step 29 Mission Control event association mismatch")
         return tuple(TelemetryEvent(event_id=_event_id(kind, certification.certification_id), event_type=kind, project_id=certification.identity.project_id, task_id=certification.identity.task_id, timestamp=certification.generated_at, severity="error" if kind == SYSTEM_INTEGRATION_CERTIFICATION_BLOCKED else "info", correlation_id=certification.identity.correlation_id, causation_id=certification.identity.request_id, payload={**base, "step29_event": kind, "source_idempotency_key": f"{certification.certification_id}:{kind}"}) for kind in types)
 
     def readiness_events(self, readiness: ReleaseReadiness, *, project_id: str, task_id: str, correlation_id: str) -> Tuple[TelemetryEvent, ...]:

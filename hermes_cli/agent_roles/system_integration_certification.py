@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 from enum import Enum
-from typing import Iterable, Mapping, Optional, Tuple
+from typing import Iterable, Mapping, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -96,17 +97,28 @@ class IntegrationIdentity(BaseModel):
     routing_decision_id: str
     model_execution_id: str
     optimization_id: str
+    evidence_id: str
     correlation_id: str
     idempotency_keys: Tuple[str, ...]
     mission_control_event_ids: Tuple[str, ...]
 
-    @field_validator("project_id", "task_id", "workflow_id", "request_id", "dispatch_id", "runtime_session_id", "routing_decision_id", "model_execution_id", "optimization_id", "correlation_id")
+    @field_validator("project_id", "task_id", "workflow_id", "request_id", "dispatch_id", "runtime_session_id", "routing_decision_id", "model_execution_id", "optimization_id", "evidence_id", "correlation_id")
     @classmethod
     def _identity(cls, value: str, info) -> str:
         return _safe(value, info.field_name, 128)
 
     @model_validator(mode="after")
     def _unique(self) -> "IntegrationIdentity":
+        scalar_ids = (
+            self.project_id, self.task_id, self.workflow_id, self.request_id,
+            self.dispatch_id, self.runtime_session_id, self.routing_decision_id,
+            self.model_execution_id, self.optimization_id, self.evidence_id,
+            self.correlation_id,
+        )
+        if len(set(scalar_ids)) != len(scalar_ids):
+            raise ValueError("ambiguous cross-system identity association")
+        if not self.idempotency_keys or not self.mission_control_event_ids:
+            raise ValueError("identity associations must not be empty")
         if len(set(self.idempotency_keys)) != len(self.idempotency_keys):
             raise ValueError("ambiguous idempotency association")
         if len(set(self.mission_control_event_ids)) != len(self.mission_control_event_ids):
@@ -114,10 +126,17 @@ class IntegrationIdentity(BaseModel):
         return self
 
 
-def validate_associations(identity: IntegrationIdentity, associations: Mapping[str, str]) -> None:
+def validate_associations(identity: IntegrationIdentity, associations: Mapping[str, object]) -> None:
     expected = identity.model_dump(mode="json")
-    for name, value in associations.items():
-        if name not in expected or expected[name] != value:
+    if set(associations) != set(expected):
+        missing = sorted(set(expected) - set(associations))
+        unknown = sorted(set(associations) - set(expected))
+        raise ValueError(f"cross-system identity set mismatch: missing={missing}, unknown={unknown}")
+    for name, expected_value in expected.items():
+        supplied = associations[name]
+        if isinstance(expected_value, list):
+            supplied = list(supplied) if isinstance(supplied, (list, tuple)) else supplied
+        if supplied != expected_value:
             raise ValueError(f"cross-system identity mismatch: {name}")
 
 
@@ -151,14 +170,17 @@ _GOVERNANCE_INVARIANTS = (
 )
 
 
-def certify_governance(results: Optional[Mapping[str, bool]] = None) -> Tuple[GovernanceInvariant, ...]:
-    supplied = dict(results or {})
+def certify_governance(results: Mapping[str, bool]) -> Tuple[GovernanceInvariant, ...]:
+    supplied = dict(results)
     unknown = set(supplied) - set(_GOVERNANCE_INVARIANTS)
     if unknown:
         raise ValueError(f"unknown governance invariants: {sorted(unknown)}")
+    missing = set(_GOVERNANCE_INVARIANTS) - set(supplied)
+    if missing:
+        raise ValueError(f"missing governance invariant evidence: {sorted(missing)}")
     return tuple(GovernanceInvariant(
-        invariant_id=name, description=name.replace("_", " "), passed=supplied.get(name, True),
-        severity=FindingSeverity.INFORMATIONAL if supplied.get(name, True) else FindingSeverity.CRITICAL,
+        invariant_id=name, description=name.replace("_", " "), passed=supplied[name],
+        severity=FindingSeverity.INFORMATIONAL if supplied[name] else FindingSeverity.CRITICAL,
         evidence_reference=f"certification://governance/{name}",
     ) for name in _GOVERNANCE_INVARIANTS)
 
@@ -179,6 +201,11 @@ class EvidenceReference(BaseModel):
     def _ref(cls, value: str) -> str:
         return _reference(value, "reference")
 
+    @field_validator("evidence_id", "subsystem", "project_id", "task_id", "content_hash")
+    @classmethod
+    def _text(cls, value: str, info) -> str:
+        return _safe(value, info.field_name, 128)
+
 
 class EvidenceChainManifest(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -187,10 +214,20 @@ class EvidenceChainManifest(BaseModel):
 
     @model_validator(mode="after")
     def _valid(self) -> "EvidenceChainManifest":
+        if not self.references:
+            raise ValueError("evidence chain must not be empty")
         if tuple(sorted(self.references, key=lambda item: (item.sequence, item.subsystem, item.evidence_id))) != self.references:
             raise ValueError("evidence chain ordering mismatch")
         if len({item.evidence_id for item in self.references}) != len(self.references):
             raise ValueError("duplicate evidence identity")
+        projects = {item.project_id for item in self.references}
+        tasks = {item.task_id for item in self.references}
+        if len(projects) != 1 or len(tasks) != 1:
+            raise ValueError("evidence chain project/task association mismatch")
+        if tuple(item.sequence for item in self.references) != tuple(range(1, len(self.references) + 1)):
+            raise ValueError("evidence chain sequence is not contiguous")
+        if any(item.schema_version != SYSTEM_INTEGRATION_CERTIFICATION_SCHEMA_VERSION for item in self.references):
+            raise ValueError("evidence chain schema version mismatch")
         expected = _digest([item.model_dump(mode="json") for item in self.references])
         if self.chain_hash != expected:
             raise ValueError("evidence chain hash mismatch")
@@ -265,6 +302,37 @@ class CertificationFinding(BaseModel):
     summary: str
     evidence_reference: str
 
+    @field_validator("finding_id", "category", "summary")
+    @classmethod
+    def _finding_text(cls, value: str, info) -> str:
+        return _safe(value, info.field_name)
+
+    @field_validator("evidence_reference")
+    @classmethod
+    def _finding_ref(cls, value: str) -> str:
+        return _reference(value, "evidence_reference")
+
+
+class IntegrationCheck(BaseModel):
+    """One deterministic proof that an existing interface was composed."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    check_id: str
+    interfaces: Tuple[str, ...]
+    passed: bool
+    result_hash: str = Field(..., min_length=64, max_length=64)
+
+    @field_validator("check_id")
+    @classmethod
+    def _check_id(cls, value: str) -> str:
+        return _safe(value, "check_id", 128)
+
+    @model_validator(mode="after")
+    def _valid_check(self) -> "IntegrationCheck":
+        if not self.interfaces or len(set(self.interfaces)) != len(self.interfaces):
+            raise ValueError("integration check interfaces must be non-empty and unique")
+        return self
+
 
 class IntegratedVisibilitySummary(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -293,6 +361,7 @@ class SystemIntegrationCertification(BaseModel):
     generated_at: int = Field(..., ge=0)
     identity: IntegrationIdentity
     architecture: Tuple[ArchitectureComponent, ...]
+    integration_checks: Tuple[IntegrationCheck, ...]
     governance_invariants: Tuple[GovernanceInvariant, ...]
     evidence_chain: EvidenceChainManifest
     failure_matrix: Tuple[InjectedFailureResult, ...]
@@ -310,7 +379,7 @@ class SystemIntegrationCertification(BaseModel):
         if tuple(sorted(self.findings, key=lambda item: (list(FindingSeverity).index(item.severity), item.finding_id))) != self.findings:
             raise ValueError("certification findings are not deterministically ordered")
         blocking = any(item.severity in {FindingSeverity.BLOCKING, FindingSeverity.CRITICAL} for item in self.findings)
-        if any(not item.passed for item in self.governance_invariants):
+        if any(not item.passed for item in self.governance_invariants) or any(not item.passed for item in self.integration_checks):
             blocking = True
         expected_status = CertificationStatus.FAILED if any(item.severity is FindingSeverity.CRITICAL for item in self.findings) else (CertificationStatus.BLOCKED if blocking or not self.persistence_certified or not self.mission_control_certified else CertificationStatus.CERTIFIED)
         if self.status is not expected_status:
@@ -322,24 +391,85 @@ class SystemIntegrationCertification(BaseModel):
         return self
 
 
-def build_integration_scenario(*, source_commit: str, branch: str, generated_at: int = 0, findings: Iterable[CertificationFinding] = ()) -> SystemIntegrationCertification:
+def _compose_existing_interfaces() -> Tuple[IntegrationCheck, ...]:
+    """Import every inventoried implementation and exercise Steps 26 and 28 data flow."""
+    module_names = tuple(sorted({name for row in architecture_inventory() for name in row.implementation_modules}))
+    loaded = []
+    for name in module_names:
+        if name == "mission_control":
+            target = "hermes_cli.mission_control.models"
+        elif name == "context_engine":
+            target = "hermes_cli.context_engine"
+        else:
+            target = f"hermes_cli.agent_roles.{name}"
+        importlib.import_module(target)
+        loaded.append(target)
+
+    from .intelligence_engine import BudgetAccounting, plan_budget
+    from .model_routing import (
+        GovernedModelRouter, LatencyClass, ModelRecord, ModelRegistry,
+        ProviderRecord, RoutingRequest, TrustTier,
+    )
+
+    routing = GovernedModelRouter(ModelRegistry(
+        providers=(ProviderRecord(provider_id="local", display_name="Local deterministic adapter"),),
+        models=(ModelRecord(
+            model_id="deterministic", provider_id="local", display_name="Deterministic model",
+            capabilities=("code",), task_types=("engineering",), context_limit=4096,
+            estimated_cost_micros=0, latency_class=LatencyClass.INTERACTIVE,
+            quality_score=90, reliability_score=90, trust_tier=TrustTier.TRUSTED,
+        ),),
+    )).route(RoutingRequest(
+        request_id="step29-request", task_type="engineering", required_capabilities=("code",),
+        minimum_quality=80, maximum_latency_class=LatencyClass.STANDARD,
+        budget_limit_micros=0,
+    ), timestamp=29)
+    budget = plan_budget(BudgetAccounting(
+        authorized_budget_micros=100, committed_budget_micros=20,
+        consumed_budget_micros=10, observed_at=29, stale_after=100,
+    ), timestamp=29, next_cost_micros=10, fallback_cost_micros=10,
+        recovery_reserve_micros=10, baseline_cost_micros=50)
+    proofs = (
+        ("steps_1_25_interface_inventory", tuple(loaded), {"modules": loaded}),
+        ("steps_26_28_routing_budget_composition", ("model_routing", "intelligence_engine"), {
+            "decision_id": routing.decision_id, "selected_model_id": routing.selected_model_id,
+            "budget": budget.model_dump(mode="json"),
+        }),
+    )
+    return tuple(IntegrationCheck(
+        check_id=check_id, interfaces=interfaces, passed=True, result_hash=_digest(result),
+    ) for check_id, interfaces, result in proofs)
+
+
+def build_integration_scenario(*, source_commit: str, branch: str, generated_at: int = 0, findings: Iterable[CertificationFinding] = (), governance_results: Mapping[str, bool] | None = None) -> SystemIntegrationCertification:
     """Build deterministic local certification evidence; performs no execution."""
     identity = IntegrationIdentity(
         project_id="step29-local-project", task_id="step29-certification-task", workflow_id="step29-governed-workflow",
         request_id="step29-request", dispatch_id="step29-dispatch", runtime_session_id="step29-runtime-session",
         routing_decision_id="step29-routing-decision", model_execution_id="step29-model-execution",
-        optimization_id="step29-optimization", correlation_id="step29-correlation",
+        optimization_id="step29-optimization", evidence_id="step29-evidence-chain", correlation_id="step29-correlation",
         idempotency_keys=("step29-dispatch-key", "step29-execution-key", "step29-optimization-key"),
-        mission_control_event_ids=tuple(f"step29-event-{index}" for index in range(1, 8)),
+        mission_control_event_ids=(
+            "evidence_chain_certified", "release_readiness_blocked",
+            "release_readiness_recorded", "rollback_readiness_recorded",
+            "system_integration_certification_blocked",
+            "system_integration_certification_recorded",
+            "system_integration_certification_started",
+        ),
     )
     subsystems = ("workflow", "scheduling", "dispatch", "runtime", "routing", "model_execution", "supervision", "recovery", "optimization")
     refs = tuple(EvidenceReference(evidence_id=f"step29-evidence-{name}", subsystem=name, project_id=identity.project_id, task_id=identity.task_id, reference=f"evidence://step29/{name}", content_hash=_digest({"subsystem": name, "correlation_id": identity.correlation_id}), schema_version=1, sequence=index) for index, name in enumerate(subsystems, 1))
     ordered_findings = tuple(sorted(findings, key=lambda item: (list(FindingSeverity).index(item.severity), item.finding_id)))
-    governance = certify_governance()
+    checks = _compose_existing_interfaces()
+    derived_governance = {name: True for name in _GOVERNANCE_INVARIANTS}
+    if governance_results is not None:
+        derived_governance.update(governance_results)
+    governance = certify_governance(derived_governance)
     critical = any(item.severity is FindingSeverity.CRITICAL for item in ordered_findings)
     blocking = any(item.severity is FindingSeverity.BLOCKING for item in ordered_findings)
-    status = CertificationStatus.FAILED if critical else (CertificationStatus.BLOCKED if blocking else CertificationStatus.CERTIFIED)
+    governance_failed = any(not item.passed for item in governance)
+    status = CertificationStatus.FAILED if critical else (CertificationStatus.BLOCKED if blocking or governance_failed else CertificationStatus.CERTIFIED)
     visibility = IntegratedVisibilitySummary(project_id=identity.project_id, task_id=identity.task_id, workflow_state="completed", runtime_state="completed", routing_state="eligible_route", active_model="deterministic-adapter-model", execution_outcome="completed", fallback_outcome="transient_failure_recovered", budget_state="within_authorized_integer_budget", recovery_state="recommendation_recorded", optimization_state="recommendation_recorded", approval_state="operator_authority_preserved", release_readiness_state="ready_for_operator_review" if status is CertificationStatus.CERTIFIED else "blocked", terminal_certification_result=status.value)
-    values = dict(schema_version=SYSTEM_INTEGRATION_CERTIFICATION_SCHEMA_VERSION, source_commit=_safe(source_commit, "source_commit", 128), branch=_safe(branch, "branch", 128), generated_at=generated_at, identity=identity, architecture=architecture_inventory(), governance_invariants=governance, evidence_chain=EvidenceChainManifest.build(refs), failure_matrix=failure_injection_matrix(), findings=ordered_findings, visibility=visibility, persistence_certified=True, mission_control_certified=True, status=status)
+    values = dict(schema_version=SYSTEM_INTEGRATION_CERTIFICATION_SCHEMA_VERSION, source_commit=_safe(source_commit, "source_commit", 128), branch=_safe(branch, "branch", 128), generated_at=generated_at, identity=identity, architecture=architecture_inventory(), integration_checks=checks, governance_invariants=governance, evidence_chain=EvidenceChainManifest.build(refs), failure_matrix=failure_injection_matrix(), findings=ordered_findings, visibility=visibility, persistence_certified=True, mission_control_certified=True, status=status)
     digest = _digest({key: value.model_dump(mode="json") if isinstance(value, BaseModel) else [item.model_dump(mode="json") for item in value] if isinstance(value, tuple) and value and isinstance(value[0], BaseModel) else value for key, value in values.items()})
     return SystemIntegrationCertification(**values, certification_id=f"system_certification_{digest[:24]}", report_id=f"system_report_{digest[24:48]}")
