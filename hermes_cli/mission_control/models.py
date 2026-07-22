@@ -152,6 +152,14 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "inventory_recorded",
     "model_routing_recorded",
     "model_execution_recorded",
+    # Governed intelligence and efficiency visibility
+    "intelligence_optimization_requested",
+    "intelligence_optimization_recorded",
+    "intelligence_optimization_blocked",
+    "intelligence_optimization_approval_required",
+    "intelligence_optimization_applied",
+    "intelligence_recovery_recommended",
+    "intelligence_budget_pressure_detected",
 })
 
 
