@@ -152,6 +152,28 @@ from .runtime_recovery_visibility import (
     RuntimeRecoveryVisibilityRecord,
     RuntimeRecoveryVisibilityService,
 )
+from .remote_maintenance import (
+    ApprovalScope,
+    CertificationObservation,
+    CommandMode,
+    FleetFinding,
+    GovernedMaintenanceExecutor,
+    MaintenanceEvidence,
+    RemoteTarget,
+    RepairApproval,
+    RepairCertification,
+    RepairExecution,
+    RepairProposal,
+    RollbackManifest,
+    SSHInspectionAdapter,
+    SecretReference,
+    certify_hydra_live,
+    diagnose_hydra_live,
+)
+from .remote_maintenance_visibility import (
+    REMOTE_MAINTENANCE_EVENT,
+    RemoteMaintenanceVisibilityService,
+)
 
 from .runtime_recovery_execution import (
     RUNTIME_RECOVERY_EXECUTION_SCHEMA_VERSION,
