@@ -13096,6 +13096,9 @@ def _build_provider_choices() -> list[str]:
 # to parse.
 _BUILTIN_SUBCOMMANDS = frozenset(
     {
+        "autonomous-backlog",
+        "autonomous_backlog",
+        "backlog",
         "acp", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
         "computer-use",
         "config", "console", "context", "cron", "curator", "dashboard", "serve", "debug", "doctor",
