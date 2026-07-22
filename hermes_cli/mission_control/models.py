@@ -148,6 +148,26 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "runtime_recovery_execution_recorded",
     "runtime_recovery_reconciliation_recorded",
     "runtime_recovery_closure_recorded",
+    "remote_maintenance_recorded",
+    "inventory_recorded",
+    "model_routing_recorded",
+    "model_execution_recorded",
+    # Governed intelligence and efficiency visibility
+    "intelligence_optimization_requested",
+    "intelligence_optimization_recorded",
+    "intelligence_optimization_blocked",
+    "intelligence_optimization_approval_required",
+    "intelligence_optimization_applied",
+    "intelligence_recovery_recommended",
+    "intelligence_budget_pressure_detected",
+    # Step 29 system integration certification and release preparation
+    "system_integration_certification_started",
+    "system_integration_certification_recorded",
+    "system_integration_certification_blocked",
+    "release_readiness_recorded",
+    "release_readiness_blocked",
+    "evidence_chain_certified",
+    "rollback_readiness_recorded",
 })
 
 

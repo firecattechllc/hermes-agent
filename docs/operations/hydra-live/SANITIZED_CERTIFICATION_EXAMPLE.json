@@ -1,0 +1,21 @@
+{
+  "target_id": "hydra-live-sim",
+  "certified": true,
+  "checks": {
+    "hydra_live_active": true,
+    "tcp_3130_expected_owner": true,
+    "heartbeat_three_consecutive": true,
+    "apt_tailscale_healthy": true,
+    "stale_snap_absent_or_disabled": true,
+    "ssh_preserved": true,
+    "no_unexpected_failed_services": true,
+    "evidence_secret_free": true
+  },
+  "evidence": [
+    {"command_id": "service_state", "output": "active"},
+    {"command_id": "listening_sockets", "output": "hydra-live.service hydra-lived LISTEN :3130"},
+    {"command_id": "timer_state", "output": "success success success"},
+    {"command_id": "tailscale_status", "output": "APT active connected; Snap disabled"},
+    {"command_id": "ssh_probe", "output": "connected"}
+  ]
+}
