@@ -195,6 +195,28 @@ from .fleet_inventory_visibility import (
     INVENTORY_EVENT,
     InventoryVisibilityService,
 )
+from .model_routing import (
+    MODEL_ROUTING_SCHEMA_VERSION,
+    CandidateDisposition,
+    CandidateScore,
+    GovernedModelRouter,
+    LatencyClass,
+    ModelRecord,
+    ModelRegistry,
+    ProviderRecord,
+    RoutingDecision,
+    RoutingPolicy,
+    RoutingPolicyOutcome,
+    RoutingRequest,
+    RoutingWeights,
+    TrustTier,
+)
+from .model_routing_visibility import (
+    MODEL_ROUTING_EVENT,
+    ModelRoutingVisibilityAdapter,
+    ModelRoutingVisibilityRecord,
+    ModelRoutingVisibilityService,
+)
 
 from .runtime_recovery_execution import (
     RUNTIME_RECOVERY_EXECUTION_SCHEMA_VERSION,
@@ -440,6 +462,24 @@ from hermes_cli.agent_roles.execution_visibility import (
 )
 
 __all__ = [
+    "MODEL_ROUTING_SCHEMA_VERSION",
+    "CandidateDisposition",
+    "CandidateScore",
+    "GovernedModelRouter",
+    "LatencyClass",
+    "ModelRecord",
+    "ModelRegistry",
+    "ProviderRecord",
+    "RoutingDecision",
+    "RoutingPolicy",
+    "RoutingPolicyOutcome",
+    "RoutingRequest",
+    "RoutingWeights",
+    "TrustTier",
+    "MODEL_ROUTING_EVENT",
+    "ModelRoutingVisibilityAdapter",
+    "ModelRoutingVisibilityRecord",
+    "ModelRoutingVisibilityService",
     "MAX_RUNTIME_RECOVERY_AUDIT_REFS",
     "RUNTIME_RECOVERY_AUDIT_SCHEMA_VERSION",
     "RuntimeRecoveryAuditBuilder",
