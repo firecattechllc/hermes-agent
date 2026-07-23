@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Mapping
+from datetime import UTC, datetime
+from typing import Any
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,7 +16,7 @@ class CompanyResearchRequest:
     ticker: str | None = None
     questions: tuple[str, ...] = ()
 
-    def normalized(self) -> "CompanyResearchRequest":
+    def normalized(self) -> CompanyResearchRequest:
         company = self.company.strip()
         ticker = self.ticker.strip().upper() if self.ticker else None
         questions = tuple(q.strip() for q in self.questions if q.strip())
