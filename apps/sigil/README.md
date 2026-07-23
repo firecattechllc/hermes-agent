@@ -49,3 +49,11 @@ Sigil can now submit FinBERT inference through the governed Hermes `POST /task`
 interface. The transport requires authenticated HTTPS (or loopback HTTP for
 tests), enforces time and response-size limits, denies dangerous capabilities,
 and validates task correlation and completion before accepting a result.
+
+## Step 5: Governed Titan FinBERT task executor
+
+Sigil now includes the server-side execution boundary for Hermes-link FinBERT
+tasks. It accepts only the versioned financial-sentiment task contract, denies
+dangerous capabilities, enforces local-only inference constraints and document
+limits, invokes an injected certified local runtime, normalizes probabilities,
+and returns a strictly correlated completed-task result.

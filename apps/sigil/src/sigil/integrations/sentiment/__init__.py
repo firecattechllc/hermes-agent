@@ -18,10 +18,19 @@ __all__ = [
     "DeterministicFinancialSentimentAnalyzer",
     "FinancialSentimentPort",
     "GovernedSentimentRouter",
+    "GovernedTitanFinBERTTaskExecutor",
     "HermesLinkTitanFinBERTTransport",
     "HermesTaskClient",
+    "LocalFinBERTInference",
     "TitanFinBERTAnalyzer",
     "TitanFinBERTError",
+    "TitanFinBERTTaskError",
     "TitanFinBERTTransport",
     "UrlLibHermesTaskClient",
 ]
+
+from sigil.integrations.sentiment.titan_executor import (
+    GovernedTitanFinBERTTaskExecutor,
+    LocalFinBERTInference,
+    TitanFinBERTTaskError,
+)
