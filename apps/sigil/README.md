@@ -28,3 +28,10 @@ python -m pip install -e '.[dev]'
 pytest
 ruff check .
 ```
+
+## Step 2: Financial intelligence
+
+Sigil now includes normalized instruments, filing metadata, source provenance,
+confidence scoring, sentiment contracts, and a governed offline financial-text
+analysis workflow. FinBERT implementations plug in through
+`FinancialSentimentPort`.
