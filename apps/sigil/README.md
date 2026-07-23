@@ -73,3 +73,12 @@ financial evidence records with exact source spans, stable SHA-256 identities,
 deterministic ordering, and a hashed extraction manifest. Extraction remains
 offline and side-effect free; Hermes retains orchestration, approvals,
 knowledge-graph operations, and durable evidence storage.
+
+## Step 8: Governed financial-evidence repository
+
+Sigil can now persist validated Step 7 extraction manifests in an explicit
+caller-supplied local repository using immutable canonical JSON records,
+append-safe idempotent writes, SHA-256 integrity checks, bounded exact queries,
+and read-only deterministic audits. The repository stores evidence without
+interpreting it and does not perform analysis, network access, model inference,
+trading, or direct Hermes knowledge-graph mutation.

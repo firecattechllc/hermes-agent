@@ -1,4 +1,4 @@
-"""Governed financial-document ingestion and evidence-extraction contracts."""
+"""Governed financial-document ingestion, extraction, and repository contracts."""
 
 from .evidence import (
     SUPPORTED_EVIDENCE_TYPES,
@@ -17,18 +17,50 @@ from .ingestion import (
     IngestedDocument,
     SourceProvenance,
 )
+from .repository import (
+    DEFAULT_QUERY_LIMIT,
+    MAX_QUERY_LIMIT,
+    REPOSITORY_SCHEMA_VERSION,
+    FinancialEvidenceAuditIssue,
+    FinancialEvidenceAuditResult,
+    FinancialEvidenceConflictError,
+    FinancialEvidenceNotFoundError,
+    FinancialEvidenceQuery,
+    FinancialEvidenceQueryResult,
+    FinancialEvidenceRepositoryError,
+    FinancialEvidenceRepositoryIntegrityError,
+    FinancialEvidenceRepositoryManifest,
+    FinancialEvidenceRepositoryRecord,
+    FinancialEvidenceWriteResult,
+    GovernedFinancialEvidenceRepository,
+)
 
 __all__ = [
+    "DEFAULT_QUERY_LIMIT",
     "DocumentChunk",
     "DocumentIngestionError",
     "EvidenceExtractionManifest",
     "EvidenceSpan",
+    "FinancialEvidenceAuditIssue",
+    "FinancialEvidenceAuditResult",
+    "FinancialEvidenceConflictError",
     "FinancialDocument",
     "FinancialDocumentIngestor",
     "FinancialEvidenceExtractionError",
+    "FinancialEvidenceNotFoundError",
+    "FinancialEvidenceQuery",
+    "FinancialEvidenceQueryResult",
     "FinancialEvidenceRecord",
+    "FinancialEvidenceRepositoryError",
+    "FinancialEvidenceRepositoryIntegrityError",
+    "FinancialEvidenceRepositoryManifest",
+    "FinancialEvidenceRepositoryRecord",
+    "FinancialEvidenceWriteResult",
     "GovernedFinancialEvidenceExtractor",
+    "GovernedFinancialEvidenceRepository",
     "IngestedDocument",
+    "MAX_QUERY_LIMIT",
+    "REPOSITORY_SCHEMA_VERSION",
     "SUPPORTED_EVIDENCE_TYPES",
     "SUPPORTED_EXTRACTOR_VERSION",
     "SourceProvenance",
