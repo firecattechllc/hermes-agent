@@ -441,6 +441,7 @@ from hermes_cli.subcommands.mission_control import (
     build_mission_control_parser,
     cmd_mission_control,
 )
+from hermes_cli.subcommands.link import build_link_parser, cmd_link
 from hermes_cli.subcommands.autonomous_backlog import (
     build_autonomous_backlog_parser,
     cmd_autonomous_backlog,
@@ -13105,7 +13106,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "dump", "fallback", "gateway", "hooks", "import", "insights",
         "gui", "desktop", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory",
         "engineering-memory", "eng-memory", "engineering_memory",
-        "mission-control", "mission_control", "migrate", "moa",
+        "mission-control", "mission_control", "link", "migrate", "moa",
         "journey", "memory-graph", "learning",
         "model", "pairing", "pets", "plugins", "portal", "postinstall", "profile",
         "project", "proxy",
@@ -14119,6 +14120,9 @@ def main():
     # mission-control command  (parser built in hermes_cli/subcommands/mission_control.py)
     # =========================================================================
     build_mission_control_parser(subparsers, cmd_mission_control=cmd_mission_control)
+
+    # Governed Mac / Titan Hermes communication link.
+    build_link_parser(subparsers, cmd_link=cmd_link)
 
     # =========================================================================
     # autonomous-backlog command

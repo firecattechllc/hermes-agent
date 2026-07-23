@@ -154,6 +154,13 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "model_execution_recorded",
     # Step 31 Big Sister / Little Sister learning hierarchy
     "learning_hierarchy_recorded",
+    # Step 32 governed Mac / Titan communication link
+    "link_message_queued",
+    "link_message_received",
+    "link_message_delivered",
+    "link_message_acknowledged",
+    "link_message_rejected",
+    "link_message_failed",
     # Governed intelligence and efficiency visibility
     "intelligence_optimization_requested",
     "intelligence_optimization_recorded",
