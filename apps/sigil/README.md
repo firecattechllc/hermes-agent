@@ -82,3 +82,15 @@ append-safe idempotent writes, SHA-256 integrity checks, bounded exact queries,
 and read-only deterministic audits. The repository stores evidence without
 interpreting it and does not perform analysis, network access, model inference,
 trading, or direct Hermes knowledge-graph mutation.
+
+## Step 9: Governed external financial-data providers
+
+Sigil now has a provider-neutral, immutable acquisition boundary with an explicit
+adapter registry, exact HTTPS host and operation allowlists, runtime-only credential
+injection, bounded transport/retries/rate limits/cache, normalized JSON envelopes, and
+non-secret provenance. The initial SEC EDGAR adapter supports bounded company
+submissions and company facts requests by validated CIK and requires an honest
+caller-supplied SEC user-agent identity. Step 9 obtains data only; it does not interpret
+it, recommend investments, trade, schedule collection, or write into evidence or graph
+stores. See
+[`GOVERNED_EXTERNAL_FINANCIAL_DATA_PROVIDERS.md`](docs/GOVERNED_EXTERNAL_FINANCIAL_DATA_PROVIDERS.md).
