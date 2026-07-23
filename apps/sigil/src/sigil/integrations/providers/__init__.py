@@ -1,5 +1,20 @@
 """Public API for Sigil's governed external financial-data providers."""
 
+from .alpaca import (
+    ALPACA_ADAPTER_VERSION,
+    ALPACA_ADJUSTMENTS,
+    ALPACA_ALLOWED_HOSTS,
+    ALPACA_API_KEY_ID_ENVIRONMENT_VARIABLE,
+    ALPACA_API_SECRET_KEY_ENVIRONMENT_VARIABLE,
+    ALPACA_FEEDS,
+    ALPACA_MAX_HISTORICAL_LIMIT,
+    ALPACA_PROVIDER_ID,
+    ALPACA_SUPPORTED_OPERATIONS,
+    ALPACA_TIMEFRAMES,
+    AlpacaMarketDataProvider,
+    alpaca_request,
+    normalize_alpaca_symbol,
+)
 from .models import (
     MAX_RESPONSE_BYTES,
     MAX_TIMEOUT_SECONDS,
@@ -41,6 +56,16 @@ from .transport import (
 )
 
 __all__ = [
+    "ALPACA_ADAPTER_VERSION",
+    "ALPACA_ADJUSTMENTS",
+    "ALPACA_ALLOWED_HOSTS",
+    "ALPACA_API_KEY_ID_ENVIRONMENT_VARIABLE",
+    "ALPACA_API_SECRET_KEY_ENVIRONMENT_VARIABLE",
+    "ALPACA_FEEDS",
+    "ALPACA_MAX_HISTORICAL_LIMIT",
+    "ALPACA_PROVIDER_ID",
+    "ALPACA_SUPPORTED_OPERATIONS",
+    "ALPACA_TIMEFRAMES",
     "MAX_RESPONSE_BYTES",
     "MAX_TIMEOUT_SECONDS",
     "PROVIDER_SCHEMA_VERSION",
@@ -49,6 +74,7 @@ __all__ = [
     "SEC_PROVIDER_ID",
     "SEC_SUPPORTED_OPERATIONS",
     "SEC_USER_AGENT_ENVIRONMENT_VARIABLE",
+    "AlpacaMarketDataProvider",
     "BoundedMemoryCache",
     "BoundedRateLimiter",
     "CredentialPlacement",
@@ -70,7 +96,9 @@ __all__ = [
     "GovernedHTTPSTransport",
     "MappingCredentialResolver",
     "SECEdgarProvider",
+    "alpaca_request",
     "freeze_json",
+    "normalize_alpaca_symbol",
     "normalize_cik",
     "redact_text",
     "sec_request",

@@ -94,3 +94,12 @@ caller-supplied SEC user-agent identity. Step 9 obtains data only; it does not i
 it, recommend investments, trade, schedule collection, or write into evidence or graph
 stores. See
 [`GOVERNED_EXTERNAL_FINANCIAL_DATA_PROVIDERS.md`](docs/GOVERNED_EXTERNAL_FINANCIAL_DATA_PROVIDERS.md).
+
+### Step 9A: Governed Alpaca read-only market data
+
+The optional Alpaca adapter adds four bounded, GET-only stock market-data operations
+through the same provider-neutral boundary: latest bar, latest quote, latest trade,
+and historical bars. It is restricted to `data.alpaca.markets`, requires both
+runtime-only Alpaca headers, and cannot access brokerage state or place trades,
+including paper trades. See
+[`GOVERNED_ALPACA_MARKET_DATA_ADAPTER.md`](docs/GOVERNED_ALPACA_MARKET_DATA_ADAPTER.md).
