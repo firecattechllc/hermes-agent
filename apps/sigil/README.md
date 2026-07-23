@@ -65,3 +65,11 @@ provenance, compute deterministic SHA-256 identities, reject duplicate content,
 produce stable overlapping chunks, and emit evidence-ready manifests for Hermes
 storage. This boundary remains offline and does not browse, download, summarize,
 trade, or create a competing evidence database.
+
+## Step 7: Governed financial-evidence extraction
+
+Sigil can now turn validated Step 6 chunks into bounded, keyword-matched
+financial evidence records with exact source spans, stable SHA-256 identities,
+deterministic ordering, and a hashed extraction manifest. Extraction remains
+offline and side-effect free; Hermes retains orchestration, approvals,
+knowledge-graph operations, and durable evidence storage.
