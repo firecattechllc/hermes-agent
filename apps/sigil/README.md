@@ -57,3 +57,11 @@ tasks. It accepts only the versioned financial-sentiment task contract, denies
 dangerous capabilities, enforces local-only inference constraints and document
 limits, invokes an injected certified local runtime, normalizes probabilities,
 and returns a strictly correlated completed-task result.
+
+## Step 6: Governed financial-document ingestion
+
+Sigil can now validate and normalize bounded financial documents, preserve source
+provenance, compute deterministic SHA-256 identities, reject duplicate content,
+produce stable overlapping chunks, and emit evidence-ready manifests for Hermes
+storage. This boundary remains offline and does not browse, download, summarize,
+trade, or create a competing evidence database.
