@@ -152,6 +152,8 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "inventory_recorded",
     "model_routing_recorded",
     "model_execution_recorded",
+    # Step 31 Big Sister / Little Sister learning hierarchy
+    "learning_hierarchy_recorded",
     # Governed intelligence and efficiency visibility
     "intelligence_optimization_requested",
     "intelligence_optimization_recorded",
