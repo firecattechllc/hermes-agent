@@ -161,6 +161,9 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "link_message_acknowledged",
     "link_message_rejected",
     "link_message_failed",
+    # Step 33 whole-system knowledge and continuous discovery
+    "knowledge_snapshot_recorded",
+    "knowledge_drift_recorded",
     # Governed intelligence and efficiency visibility
     "intelligence_optimization_requested",
     "intelligence_optimization_recorded",
