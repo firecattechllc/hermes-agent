@@ -42,3 +42,10 @@ Sigil can now route financial sentiment analysis through a versioned,
 transport-neutral Titan FinBERT adapter. Requests require local-only inference,
 forbid downloads and external APIs, validate model identity and response shape,
 and may use an explicitly governed deterministic fallback.
+
+## Step 4: Hermes-link FinBERT transport
+
+Sigil can now submit FinBERT inference through the governed Hermes `POST /task`
+interface. The transport requires authenticated HTTPS (or loopback HTTP for
+tests), enforces time and response-size limits, denies dangerous capabilities,
+and validates task correlation and completion before accepting a result.
