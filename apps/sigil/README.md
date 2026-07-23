@@ -35,3 +35,10 @@ Sigil now includes normalized instruments, filing metadata, source provenance,
 confidence scoring, sentiment contracts, and a governed offline financial-text
 analysis workflow. FinBERT implementations plug in through
 `FinancialSentimentPort`.
+
+## Step 3: Governed Titan FinBERT adapter
+
+Sigil can now route financial sentiment analysis through a versioned,
+transport-neutral Titan FinBERT adapter. Requests require local-only inference,
+forbid downloads and external APIs, validate model identity and response shape,
+and may use an explicitly governed deterministic fallback.
