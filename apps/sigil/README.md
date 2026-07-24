@@ -175,3 +175,16 @@ remain explicit. Construction and same-security comparison are offline and
 side-effect free; a dossier cannot browse, recommend, approve, trade, mutate
 Steps 9B–13, or write to the Hermes knowledge graph. See
 [`GOVERNED_RESEARCH_DOSSIER_ENGINE.md`](docs/GOVERNED_RESEARCH_DOSSIER_ENGINE.md).
+
+### Step 15: Governed investment thesis and counter-thesis engine
+
+Sigil can now transform one exact Step 14 dossier into immutable,
+SHA-256-identified thesis and independently evidenced counter-thesis arguments.
+The engine preserves claim provenance, contradictions, gaps, staleness,
+assumptions, causal interpretations, catalysts, risks, testable invalidation
+conditions, falsification tests, monitoring contracts, valuation dependencies,
+and optional portfolio/risk relevance. Transparent confidence, completeness,
+and review-readiness classifications fail closed; readiness is never a trade
+approval. Construction, audit, regeneration, and comparison are offline,
+deterministic, non-advisory, and side-effect free. See
+[`GOVERNED_INVESTMENT_THESIS_ENGINE.md`](docs/GOVERNED_INVESTMENT_THESIS_ENGINE.md).
