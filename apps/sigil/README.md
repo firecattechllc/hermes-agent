@@ -137,3 +137,17 @@ Caller-supplied freshness policy produces an explicit fail-closed pre-trade elig
 A separate read-only reconciliation service compares broker truth with Step 10 intent and
 history without mutating either system or treating absence as retry authority. See
 [`GOVERNED_BROKERAGE_PORTFOLIO_STATE.md`](docs/GOVERNED_BROKERAGE_PORTFOLIO_STATE.md).
+
+### Step 12: Governed portfolio ledger and performance accounting
+
+Sigil now derives an immutable, exact-decimal portfolio accounting view from
+provenance-backed broker activity and Step 11 observations. A caller-supplied
+local repository persists closed normalized event types as canonical JSON in a
+strict SHA-256 hash chain with atomic locked append, bounded storage, exact
+idempotency, and fail-closed corruption detection. Deterministic replay produces
+cash, FIFO lots, basis, realized and unrealized gain or loss, valuation,
+time-weighted and bounded money-weighted returns, benchmark comparison, and
+governed period-close artifacts. Reconciliation remains read-only, incomplete
+history is never called lifetime performance, and no accounting result can
+authorize a trade. See
+[`GOVERNED_PORTFOLIO_LEDGER_ACCOUNTING.md`](docs/GOVERNED_PORTFOLIO_LEDGER_ACCOUNTING.md).
