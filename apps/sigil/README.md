@@ -163,3 +163,15 @@ closed on stale, partial, unavailable, margin/short, or blocking-limit
 conditions; eligibility is advisory and can never approve or execute a trade.
 See
 [`GOVERNED_PORTFOLIO_RISK_ENGINE.md`](docs/GOVERNED_PORTFOLIO_RISK_ENGINE.md).
+
+### Step 14: Governed research dossier engine
+
+Sigil can now organize exact issuer/security identity, verified evidence claims,
+normalized financial history, deterministic derived analyses, business and
+governance context, filings, risks, sentiment, valuation, and optional portfolio
+and risk relevance into an immutable SHA-256-identified dossier. Conflicts,
+gaps, staleness, truncation, questions, completeness, and conclusion provenance
+remain explicit. Construction and same-security comparison are offline and
+side-effect free; a dossier cannot browse, recommend, approve, trade, mutate
+Steps 9B–13, or write to the Hermes knowledge graph. See
+[`GOVERNED_RESEARCH_DOSSIER_ENGINE.md`](docs/GOVERNED_RESEARCH_DOSSIER_ENGINE.md).
