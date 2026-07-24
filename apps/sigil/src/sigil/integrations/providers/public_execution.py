@@ -902,6 +902,20 @@ class PublicExecutionJournal:
         self._used_cancellation_approvals: set[str] = set()
         self._executions: dict[str, PublicOrderExecution] = {}
         self._evidence: list[PublicAuditEvidence] = []
+        self._retryable_after_reconciliation: set[str] = set()
+
+    def record_proposal(self, proposal: GovernedEquityTradeProposal) -> None:
+        del proposal
+
+    def record_portfolio_snapshot(
+        self, proposal: GovernedEquityTradeProposal, snapshot: PublicPortfolioSnapshot
+    ) -> None:
+        del proposal, snapshot
+
+    def record_preflight(
+        self, proposal: GovernedEquityTradeProposal, preflight: PublicPreflightRecord
+    ) -> None:
+        del proposal, preflight
 
     def record_intent(
         self, intent: PublicSubmissionIntent, approval: GovernedTradeApproval
@@ -934,6 +948,41 @@ class PublicExecutionJournal:
         if approval.approval_id in self._used_cancellation_approvals:
             raise FinancialDataValidationError("cancellation approval has already been consumed")
         self._used_cancellation_approvals.add(approval.approval_id)
+
+    def record_cancellation_intent(
+        self,
+        execution: PublicOrderExecution,
+        approval: PublicCancellationApproval,
+        at: datetime,
+    ) -> None:
+        del execution, approval, at
+
+    def record_reconciliation_attempt(
+        self, execution: PublicOrderExecution, at: datetime
+    ) -> None:
+        del execution, at
+
+    def record_reconciliation_result(
+        self,
+        execution: PublicOrderExecution,
+        *,
+        broker_order_exists: bool,
+        at: datetime,
+    ) -> None:
+        del at
+        if broker_order_exists:
+            self._retryable_after_reconciliation.discard(execution.intent_id)
+        else:
+            self._retryable_after_reconciliation.add(execution.intent_id)
+
+    def record_submission_not_started(
+        self, execution: PublicOrderExecution, *, reason: str, at: datetime
+    ) -> None:
+        del reason, at
+        self._retryable_after_reconciliation.add(execution.intent_id)
+
+    def submission_retry_permitted(self, intent_id: str) -> bool:
+        return intent_id in self._retryable_after_reconciliation
 
     def append_evidence(self, evidence: PublicAuditEvidence) -> None:
         if any(item.evidence_id == evidence.evidence_id for item in self._evidence):
@@ -1311,6 +1360,7 @@ class PublicEquityExecutionProvider:
         now = self._clock()
         proposal.ensure_current(now)
         policy.validate(proposal)
+        self._journal.record_proposal(proposal)
         self._evidence(
             "proposal_created",
             proposal.proposal_id,
@@ -1329,6 +1379,7 @@ class PublicEquityExecutionProvider:
         )
         portfolio = self.account_portfolio(proposal.account_id)
         self._validate_portfolio_safety(proposal, portfolio, now)
+        self._journal.record_portfolio_snapshot(proposal, portfolio)
         body = _public_body(proposal)
         body_hash = _digest(body)
         self._evidence(
@@ -1358,6 +1409,7 @@ class PublicEquityExecutionProvider:
             portfolio.cash_only_buying_power
         ):
             raise FinancialDataValidationError("insufficient cash-only buying power")
+        self._journal.record_preflight(proposal, record)
         self._evidence(
             "preflight_accepted",
             record.preflight_id,
@@ -1444,8 +1496,15 @@ class PublicEquityExecutionProvider:
         if _digest(body) != intent.body_hash:
             raise FinancialDataValidationError("submission intent body collision")
         execution = self._journal.execution(intent.order_id)
-        if execution.state != PublicExecutionState.UNKNOWN_RECONCILIATION_REQUIRED:
+        if execution.state not in {
+            PublicExecutionState.SUBMISSION_INTENT_RECORDED,
+            PublicExecutionState.UNKNOWN_RECONCILIATION_REQUIRED,
+        }:
             raise FinancialDataValidationError("submission is not eligible for ambiguous retry")
+        if not self._journal.submission_retry_permitted(intent_id):
+            raise FinancialDataValidationError(
+                "submission requires reconciliation proving no broker order exists"
+            )
         return self._send_intent(account_id, intent, body, execution)
 
     def get_order(self, *, account_id: str, order_id: str) -> PublicOrderExecution:
@@ -1453,12 +1512,16 @@ class PublicEquityExecutionProvider:
         execution = self._journal.execution(order_id)
         if execution.account_binding != protected_account_binding(account_id):
             raise FinancialDataValidationError("order account binding mismatch")
+        self._journal.record_reconciliation_attempt(execution, self._clock())
         result = self._read(lambda token: self._transport.get_order(account_id, order_id, token))
         if result.status == 404:
             if execution.state != PublicExecutionState.UNKNOWN_RECONCILIATION_REQUIRED:
                 execution = execution.transition(
                     PublicExecutionState.UNKNOWN_RECONCILIATION_REQUIRED, at=self._clock()
                 )
+            self._journal.record_reconciliation_result(
+                execution, broker_order_exists=False, at=self._clock()
+            )
         else:
             if not isinstance(result.payload, dict):
                 raise FinancialDataValidationError("Public order response is malformed")
@@ -1467,6 +1530,9 @@ class PublicEquityExecutionProvider:
                 execution = execution.transition(
                     state, at=self._clock(), response_hash=result.response_hash
                 )
+            self._journal.record_reconciliation_result(
+                execution, broker_order_exists=True, at=self._clock()
+            )
         self._journal.save_execution(execution)
         self._evidence(
             "order_status_observed",
@@ -1497,7 +1563,17 @@ class PublicEquityExecutionProvider:
             raise FinancialDataValidationError("terminal Public orders cannot be cancelled")
         prior_state = execution.state
         self._journal.consume_cancellation(approval)
-        self._authenticated(lambda token: self._transport.cancel_order(account_id, order_id, token))
+        self._journal.record_cancellation_intent(execution, approval, now)
+        try:
+            self._authenticated(
+                lambda token: self._transport.cancel_order(account_id, order_id, token)
+            )
+        except FinancialDataTransportError:
+            execution = execution.transition(
+                PublicExecutionState.UNKNOWN_RECONCILIATION_REQUIRED, at=self._clock()
+            )
+            self._journal.save_execution(execution)
+            raise
         execution = execution.transition(PublicExecutionState.CANCELLATION_REQUESTED, at=now)
         self._journal.save_execution(execution)
         intent = self._journal.intent(execution.intent_id)
@@ -1522,6 +1598,13 @@ class PublicEquityExecutionProvider:
             result = self._authenticated(
                 lambda token: self._transport._submit_order_json(account_id, body, token)
             )
+        except (FinancialDataAuthenticationError, FinancialDataRateLimitError) as exc:
+            self._journal.record_submission_not_started(
+                execution,
+                reason=type(exc).__name__,
+                at=self._clock(),
+            )
+            raise
         except FinancialDataTransportError:
             if execution.state == PublicExecutionState.SUBMISSION_INTENT_RECORDED:
                 execution = execution.transition(

@@ -116,3 +116,14 @@ without an explicit finite policy. Margin, shorts, options, crypto, bonds, repla
 extended hours, autonomous scheduling, hosted MCP use, and arbitrary broker calls are
 forbidden. See
 [`GOVERNED_PUBLIC_EQUITY_TRADING_EXECUTION.md`](docs/GOVERNED_PUBLIC_EQUITY_TRADING_EXECUTION.md).
+
+### Step 10: Governed durable execution journal and reconciliation
+
+Sigil can now inject a caller-supplied local execution journal into Step 9B. The
+journal persists immutable canonical JSON lifecycle events in a SHA-256 hash chain,
+uses locked atomic append and file/directory durability barriers, rejects corruption
+and conflicts, and provides read-only recovery classifications. Submission and
+cancellation intent are durable before broker mutation; ambiguous outcomes require
+exact reconciliation with the original UUID and never trigger automatic broker
+mutation. Human approvals and all Step 9B trading restrictions remain unchanged. See
+[`GOVERNED_DURABLE_EXECUTION_JOURNAL.md`](docs/GOVERNED_DURABLE_EXECUTION_JOURNAL.md).
