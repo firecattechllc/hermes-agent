@@ -103,3 +103,16 @@ and historical bars. It is restricted to `data.alpaca.markets`, requires both
 runtime-only Alpaca headers, and cannot access brokerage state or place trades,
 including paper trades. See
 [`GOVERNED_ALPACA_MARKET_DATA_ADAPTER.md`](docs/GOVERNED_ALPACA_MARKET_DATA_ADAPTER.md).
+
+### Step 9B: Governed Public equity trading execution
+
+The optional Public adapter adds real-money-capable, policy-gated equity/ETF execution
+without turning provider acquisition into a mutation API. Every order requires a
+canonical immutable proposal, fresh portfolio safety checks, exact Public preflight, a
+separate exact single-use human approval, and a submission intent recorded before the
+outbound request. UUID order IDs are reused after ambiguous transport outcomes, status
+reconciliation is explicit, and cancellation has its own approval. Execution is disabled
+without an explicit finite policy. Margin, shorts, options, crypto, bonds, replacement,
+extended hours, autonomous scheduling, hosted MCP use, and arbitrary broker calls are
+forbidden. See
+[`GOVERNED_PUBLIC_EQUITY_TRADING_EXECUTION.md`](docs/GOVERNED_PUBLIC_EQUITY_TRADING_EXECUTION.md).
