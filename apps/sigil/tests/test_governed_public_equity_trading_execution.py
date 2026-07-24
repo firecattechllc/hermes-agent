@@ -12,6 +12,7 @@ from uuid import UUID
 
 import pytest
 
+from sigil.execution import DurableExecutionJournal, ExecutionJournalError
 from sigil.integrations.providers import (
     PUBLIC_ALLOWED_HOSTS,
     PUBLIC_API_SECRET_ENVIRONMENT_VARIABLE,
@@ -498,6 +499,61 @@ def test_exact_approval_and_submission_intent_precede_network() -> None:
     assert ACCOUNT_ID not in repr(journal.evidence())
 
 
+def test_durable_journal_submission_intent_precedes_network(tmp_path) -> None:
+    root = tmp_path / "execution-journal"
+    root.mkdir()
+    journal = DurableExecutionJournal(root)
+    provider, opener, _ = make_provider(
+        [
+            FakeResponse({"accessToken": TOKEN}),
+            FakeResponse(portfolio_payload()),
+            FakeResponse(preflight_payload()),
+            FakeResponse({"orderId": ORDER_ID}),
+        ],
+        journal=journal,  # type: ignore[arg-type]
+    )
+    trade = proposal()
+    preflight = perform_preflight(provider, trade)
+    approval = approval_for(trade, preflight)
+
+    def assert_durable_intent() -> None:
+        if len(opener.requests) == 4:
+            inspection = journal.inspect(trade.proposal_id)
+            assert inspection.last_event_type.value == "submission_intent_recorded"
+
+    opener.observer = assert_durable_intent
+    execution = provider.submit_approved_equity_order(trade, preflight, approval)
+
+    assert execution.state is PublicExecutionState.SUBMITTED
+    assert journal.execution(ORDER_ID).state is PublicExecutionState.SUBMITTED
+
+
+def test_submission_refuses_transport_when_journal_persistence_fails() -> None:
+    class FailingJournal(PublicExecutionJournal):
+        def record_intent(self, intent, approval) -> None:  # type: ignore[no-untyped-def]
+            del intent, approval
+            raise ExecutionJournalError("injected durable persistence failure")
+
+    journal = FailingJournal()
+    provider, opener, _ = make_provider(
+        [
+            FakeResponse({"accessToken": TOKEN}),
+            FakeResponse(portfolio_payload()),
+            FakeResponse(preflight_payload()),
+        ],
+        journal=journal,
+    )
+    trade = proposal()
+    preflight = perform_preflight(provider, trade)
+
+    with pytest.raises(ExecutionJournalError, match="persistence failure"):
+        provider.submit_approved_equity_order(
+            trade, preflight, approval_for(trade, preflight)
+        )
+
+    assert len(opener.requests) == 3
+
+
 def test_missing_modified_and_replayed_approval_rejected() -> None:
     provider, _, _ = make_provider(
         [
@@ -554,12 +610,14 @@ def test_governed_submission_api_accepts_no_account_body_or_token() -> None:
 
 
 def test_ambiguous_submission_reuses_same_order_id_and_body() -> None:
+    not_found = HTTPError("url", 404, "not found", {}, None)
     provider, opener, _ = make_provider(
         [
             FakeResponse({"accessToken": TOKEN}),
             FakeResponse(portfolio_payload()),
             FakeResponse(preflight_payload()),
             URLError("timeout"),
+            not_found,
             FakeResponse({"orderId": ORDER_ID}),
         ]
     )
@@ -570,11 +628,22 @@ def test_ambiguous_submission_reuses_same_order_id_and_body() -> None:
         provider.submit_approved_equity_order(trade, preflight, approval)
     execution = provider._journal.execution(ORDER_ID)  # type: ignore[attr-defined]
     assert execution.state == PublicExecutionState.UNKNOWN_RECONCILIATION_REQUIRED
+    with pytest.raises(FinancialDataValidationError, match="requires reconciliation"):
+        provider.retry_ambiguous_submission(
+            account_id=ACCOUNT_ID, intent_id=execution.intent_id, proposal=trade
+        )
+    provider.get_order(account_id=ACCOUNT_ID, order_id=ORDER_ID)
     retried = provider.retry_ambiguous_submission(
         account_id=ACCOUNT_ID, intent_id=execution.intent_id, proposal=trade
     )
-    first_body = opener.requests[-2].data  # type: ignore[attr-defined]
-    second_body = opener.requests[-1].data  # type: ignore[attr-defined]
+    submissions = [
+        request
+        for request in opener.requests
+        if request.method == "POST"  # type: ignore[attr-defined]
+        and request.full_url.endswith("/order")  # type: ignore[attr-defined]
+    ]
+    first_body = submissions[0].data  # type: ignore[attr-defined]
+    second_body = submissions[1].data  # type: ignore[attr-defined]
     assert first_body == second_body
     assert json.loads(second_body)["orderId"] == ORDER_ID
     assert len(provider._journal._intents) == 1  # type: ignore[attr-defined]
