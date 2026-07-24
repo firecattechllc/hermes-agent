@@ -151,3 +151,15 @@ governed period-close artifacts. Reconciliation remains read-only, incomplete
 history is never called lifetime performance, and no accounting result can
 authorize a trade. See
 [`GOVERNED_PORTFOLIO_LEDGER_ACCOUNTING.md`](docs/GOVERNED_PORTFOLIO_LEDGER_ACCOUNTING.md).
+
+### Step 13: Governed portfolio risk engine
+
+Sigil now derives immutable, exact-decimal portfolio exposure, concentration,
+liquidity, historical volatility/drawdown, correlation/covariance, benchmark
+beta and tracking error, historical VaR and expected shortfall, caller-defined
+stress results, and policy-limit violations from exact Step 11/12 and
+caller-supplied normalized inputs. Read-only proposed-trade simulation fails
+closed on stale, partial, unavailable, margin/short, or blocking-limit
+conditions; eligibility is advisory and can never approve or execute a trade.
+See
+[`GOVERNED_PORTFOLIO_RISK_ENGINE.md`](docs/GOVERNED_PORTFOLIO_RISK_ENGINE.md).
