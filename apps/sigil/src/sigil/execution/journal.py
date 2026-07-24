@@ -896,6 +896,10 @@ class DurableExecutionJournal:
     def audit(self) -> tuple[ExecutionRecoveryInspection, ...]:
         return tuple(self.inspect(execution_id) for execution_id in self.execution_ids())
 
+    def read_events(self, execution_id: str) -> tuple[ExecutionJournalEvent, ...]:
+        """Return validated immutable history without exposing mutation primitives."""
+        return self._load(execution_id)
+
     def inspect(self, execution_id: str) -> ExecutionRecoveryInspection:
         try:
             events = self._load(execution_id)

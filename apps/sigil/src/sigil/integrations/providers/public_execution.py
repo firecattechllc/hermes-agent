@@ -39,6 +39,7 @@ PUBLIC_ALLOWED_HOSTS = ("api.public.com",)
 PUBLIC_EXECUTION_SUPPORTED_OPERATIONS = (
     "account_portfolio",
     "cancel_approved_order",
+    "get_history",
     "get_order",
     "list_accounts",
     "preflight_equity_order",
@@ -74,6 +75,7 @@ _SAFE_TEXT_RE = re.compile(r"^[\x20-\x7e]+$", re.ASCII)
 _TOKEN_PATH = "/userapiauthservice/personal/access-tokens"
 _LIST_ACCOUNTS_PATH = "/userapigateway/trading/account"
 _PORTFOLIO_PATH_RE = re.compile(r"^/userapigateway/trading/[^/]+/portfolio/v2$")
+_HISTORY_PATH_RE = re.compile(r"^/userapigateway/trading/[^/]+/history$")
 _QUOTES_PATH_RE = re.compile(r"^/userapigateway/marketdata/[^/]+/quotes$")
 _PREFLIGHT_PATH_RE = re.compile(
     r"^/userapigateway/trading/[^/]+/preflight/single-leg$"
@@ -1049,6 +1051,16 @@ class _PublicGovernedTransport:
             token=token,
             endpoint_identity="/userapigateway/trading/{accountId}/portfolio/v2",
             expected=_PORTFOLIO_PATH_RE,
+        )
+
+    def get_history(self, account_id: str, token: str) -> PublicTransportResult:
+        account_id = normalize_public_account_id(account_id)
+        return self._send(
+            "GET",
+            f"/userapigateway/trading/{account_id}/history",
+            token=token,
+            endpoint_identity="/userapigateway/trading/{accountId}/history",
+            expected=_HISTORY_PATH_RE,
         )
 
     def quotes(

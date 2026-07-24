@@ -127,3 +127,13 @@ cancellation intent are durable before broker mutation; ambiguous outcomes requi
 exact reconciliation with the original UUID and never trigger automatic broker
 mutation. Human approvals and all Step 9B trading restrictions remain unchanged. See
 [`GOVERNED_DURABLE_EXECUTION_JOURNAL.md`](docs/GOVERNED_DURABLE_EXECUTION_JOURNAL.md).
+
+### Step 11: Governed brokerage account and portfolio state
+
+Sigil can now acquire bounded, read-only Public account, position, order, and execution state
+as immutable exact-decimal snapshots bound to one protected account. Canonical SHA-256
+identities cover normalized state, timestamps, provenance, completeness, and truncation.
+Caller-supplied freshness policy produces an explicit fail-closed pre-trade eligibility result.
+A separate read-only reconciliation service compares broker truth with Step 10 intent and
+history without mutating either system or treating absence as retry authority. See
+[`GOVERNED_BROKERAGE_PORTFOLIO_STATE.md`](docs/GOVERNED_BROKERAGE_PORTFOLIO_STATE.md).
