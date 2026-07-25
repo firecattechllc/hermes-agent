@@ -28,17 +28,25 @@ ALLOWED_TRANSITIONS = {
         DeliveryState.RETRYABLE,
     },
     DeliveryState.DELIVERED: {
+        DeliveryState.CLAIMED,
         DeliveryState.ACKNOWLEDGED,
         DeliveryState.FAILED,
         DeliveryState.RETRYABLE,
     },
     DeliveryState.RETRYABLE: {
+        DeliveryState.CLAIMED,
         DeliveryState.DELIVERED,
         DeliveryState.FAILED,
         DeliveryState.RETRYABLE,
         DeliveryState.DEAD_LETTERED,
     },
     DeliveryState.FAILED: {DeliveryState.RETRYABLE, DeliveryState.DEAD_LETTERED},
+    DeliveryState.CLAIMED: {
+        DeliveryState.ACKNOWLEDGED,
+        DeliveryState.REJECTED,
+        DeliveryState.RETRYABLE,
+        DeliveryState.DEAD_LETTERED,
+    },
     DeliveryState.ACKNOWLEDGED: set(),
     DeliveryState.REJECTED: set(),
     DeliveryState.DEAD_LETTERED: set(),
@@ -82,7 +90,15 @@ class LinkJournalRecord(BaseModel):
             "reason_code": reason_code,
             "previous_checksum": previous_checksum,
         }
-        return cls(**values, checksum=cls.calculate_checksum(**values))
+        return cls(
+            sequence=sequence,
+            envelope=envelope,
+            state=state,
+            recorded_at=recorded_at,
+            reason_code=reason_code,
+            previous_checksum=previous_checksum,
+            checksum=cls.calculate_checksum(**values),
+        )
 
     @model_validator(mode="after")
     def integrity(self) -> "LinkJournalRecord":
@@ -176,6 +192,104 @@ class HermesLinkStore:
     def get(self, message_id: str) -> Optional[HermesLinkEnvelope]:
         record = self._latest(self.records()).get(message_id)
         return None if record is None else record.envelope
+
+    def claim_next(
+        self,
+        *,
+        sender_node: str,
+        recipient_node: str,
+        now: int,
+        lease_seconds: int,
+    ) -> Optional[HermesLinkEnvelope]:
+        """Atomically claim one eligible inbound envelope.
+
+        An expired claim is recoverable after a worker restart. The durable,
+        deterministic response identity prevents recovery from creating a
+        second reply.
+        """
+        with self._lock():
+            records = self._read_unlocked(recover_torn_tail=True)
+            candidates = sorted(
+                self._latest(records).values(),
+                key=lambda item: (
+                    item.envelope.created_at,
+                    item.envelope.message_id,
+                ),
+            )
+            for latest in candidates:
+                envelope = latest.envelope
+                eligible = latest.state == DeliveryState.DELIVERED
+                eligible = eligible or (
+                    latest.state == DeliveryState.RETRYABLE
+                    and (
+                        envelope.retry.next_attempt_at is None
+                        or envelope.retry.next_attempt_at <= now
+                    )
+                )
+                eligible = eligible or (
+                    latest.state == DeliveryState.CLAIMED
+                    and envelope.retry.next_attempt_at is not None
+                    and envelope.retry.next_attempt_at <= now
+                )
+                if (
+                    not eligible
+                    or envelope.sender_node != sender_node
+                    or envelope.recipient_node != recipient_node
+                ):
+                    continue
+                retry = envelope.retry.model_copy(
+                    update={
+                        "last_attempt_at": now,
+                        "next_attempt_at": now + lease_seconds,
+                    }
+                )
+                claimed = envelope.model_copy(
+                    update={
+                        "delivery_state": DeliveryState.CLAIMED,
+                        "retry": retry,
+                    }
+                )
+                self._append_record_unlocked(
+                    records,
+                    claimed,
+                    state=DeliveryState.CLAIMED,
+                    reason_code="consumer_claimed",
+                    recorded_at=now,
+                )
+                return claimed
+        return None
+
+    def _append_record_unlocked(
+        self,
+        records: Tuple[LinkJournalRecord, ...],
+        envelope: HermesLinkEnvelope,
+        *,
+        state: DeliveryState,
+        reason_code: Optional[str],
+        recorded_at: int,
+    ) -> None:
+        if len(records) >= self.capacity:
+            raise OverflowError("Hermes-link journal capacity reached")
+        record = LinkJournalRecord.build(
+            sequence=len(records) + 1,
+            envelope=envelope,
+            state=state,
+            recorded_at=recorded_at,
+            reason_code=reason_code,
+            previous_checksum=records[-1].checksum if records else None,
+        )
+        payload = (record.model_dump_json() + "\n").encode()
+        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            remaining = memoryview(payload)
+            while remaining:
+                written = os.write(fd, remaining)
+                if written <= 0:
+                    raise OSError("Hermes-link journal write made no progress")
+                remaining = remaining[written:]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
     def list(
         self, *, state: Optional[DeliveryState] = None

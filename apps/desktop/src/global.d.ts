@@ -82,6 +82,9 @@ declare global {
         set: (name: string | null) => Promise<DesktopActiveProfile>
       }
       api: <T>(request: HermesApiRequest) => Promise<T>
+      titan: {
+        request: (request: TitanLinkRequest) => Promise<TitanLinkResult>
+      }
       notify: (payload: HermesNotification) => Promise<boolean>
       requestMicrophoneAccess: () => Promise<boolean>
       readFileDataUrl: (filePath: string) => Promise<string>
@@ -237,6 +240,24 @@ declare global {
         searchMarketplace: (query: string) => Promise<DesktopMarketplaceSearchItem[]>
       }
     }
+  }
+}
+
+type TitanLinkOperation = 'status' | 'queue' | 'chat' | 'task' | 'lesson' | 'latestReport'
+
+interface TitanLinkRequest {
+  operation: TitanLinkOperation
+  envelope?: Record<string, unknown>
+}
+
+interface TitanLinkResult {
+  ok: boolean
+  status?: number
+  data?: unknown
+  error?: {
+    code: string
+    message: string
+    retryable: boolean
   }
 }
 

@@ -236,6 +236,62 @@ export interface Translations {
     layoutEditorTitle: string
   }
 
+  titan: {
+    title: string
+    subtitle: string
+    toggle: string
+    openMissionControl: string
+    newConversation: string
+    empty: string
+    placeholder: string
+    send: string
+    modes: { chat: string; task: string; lesson: string }
+    quick: { status: string; work: string; report: string; queue: string; escalations: string }
+    states: {
+      online: string
+      offline: string
+      connecting: string
+      degraded: string
+      unauthorized: string
+      sending: string
+      queued: string
+      delivered: string
+      failed: string
+      rejected: string
+    }
+    activeModel: string
+    lastContact: string
+    notAvailable: string
+    correlationId: string
+    retry: string
+    copy: string
+    prohibited: string
+    overview: {
+      uptime: string
+      queueDepth: string
+      nursery: string
+      ollama: string
+      finbert: string
+      memoryIndex: string
+      pendingEscalations: string
+      latestEvidence: string
+    }
+    fields: {
+      title: string
+      instructions: string
+      priority: string
+      deadline: string
+      risk: string
+      expectedOutput: string
+      workspace: string
+      evidence: string
+      objective: string
+      validation: string
+      references: string
+      version: string
+    }
+  }
+
   keybinds: {
     title: string
     subtitle: (open: string) => string

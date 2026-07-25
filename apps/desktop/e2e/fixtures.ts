@@ -44,7 +44,7 @@ const CREDENTIAL_SUFFIXES: string[] = [
   '_CREDENTIALS',
   '_ACCESS_KEY',
   '_PRIVATE_KEY',
-  '_OAUTH_TOKEN',
+  '_OAUTH_TOKEN'
 ]
 
 const CREDENTIAL_NAMES = new Set([
@@ -59,7 +59,7 @@ const CREDENTIAL_NAMES = new Set([
   'OPENROUTER_BASE_URL',
   'OLLAMA_BASE_URL',
   'GROQ_BASE_URL',
-  'XAI_BASE_URL',
+  'XAI_BASE_URL'
 ])
 
 function isCredentialEnvVar(name: string): boolean {
@@ -67,7 +67,7 @@ function isCredentialEnvVar(name: string): boolean {
     return true
   }
 
-  return CREDENTIAL_SUFFIXES.some((suffix) => name.endsWith(suffix))
+  return CREDENTIAL_SUFFIXES.some(suffix => name.endsWith(suffix))
 }
 
 function stripCredentials(env: Record<string, string | undefined>): Record<string, string> {
@@ -112,12 +112,8 @@ export function createSandbox(prefix: string): Sandbox {
   // may resize after launch.
   fs.writeFileSync(
     path.join(userDataDir, 'window-state.json'),
-    JSON.stringify(
-      { x: 0, y: 0, width: 1220, height: 800, isMaximized: false },
-      null,
-      2,
-    ),
-    'utf8',
+    JSON.stringify({ x: 0, y: 0, width: 1220, height: 800, isMaximized: false }, null, 2),
+    'utf8'
   )
 
   return {
@@ -130,7 +126,7 @@ export function createSandbox(prefix: string): Sandbox {
       } catch {
         // best-effort
       }
-    },
+    }
   }
 }
 
@@ -218,7 +214,7 @@ export function buildAppEnv(sandbox: Sandbox, extra: Record<string, string> = {}
     // Clear dev-server override — we want the built dist/, not a vite server.
     // The dev-server check in main.ts looks for this env var; if it's set,
     // it loads from the vite URL instead of the local file.
-    ...extra,
+    ...extra
   }
 }
 
@@ -236,15 +232,13 @@ function assertDistBuilt(): void {
 
   if (!fs.existsSync(electronMain)) {
     throw new Error(
-      `Desktop dist not built. Run 'cd apps/desktop && npm run build' first.\n` +
-        `Missing: ${electronMain}`,
+      `Desktop dist not built. Run 'cd apps/desktop && npm run build' first.\n` + `Missing: ${electronMain}`
     )
   }
 
   if (!fs.existsSync(indexHtml)) {
     throw new Error(
-      `Desktop dist/index.html not found. Run 'cd apps/desktop && npm run build' first.\n` +
-        `Missing: ${indexHtml}`,
+      `Desktop dist/index.html not found. Run 'cd apps/desktop && npm run build' first.\n` + `Missing: ${indexHtml}`
     )
   }
 }
@@ -257,24 +251,28 @@ export function findElectron(): string {
   // In dev mode, we use the `electron` binary directly (not the packaged app).
   // The dev:electron script in package.json does exactly this: `electron .`
   // after building. We replicate that here.
-  const localElectron = path.join(REPO_ROOT, 'node_modules', 'electron', 'dist', 'electron')
+  const localCandidates = [
+    path.join(REPO_ROOT, 'node_modules', 'electron', 'dist', 'electron'),
+    path.join(REPO_ROOT, 'node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'MacOS', 'Electron'),
+    path.join(REPO_ROOT, 'node_modules', 'electron', 'dist', 'electron.exe')
+  ]
 
-  if (fs.existsSync(localElectron)) {
-    return localElectron
+  for (const localElectron of localCandidates) {
+    if (fs.existsSync(localElectron)) {
+      return localElectron
+    }
   }
 
   // Fall back to PATH
   const result = spawnSync('which', ['electron'], {
-    encoding: 'utf8',
+    encoding: 'utf8'
   })
 
   if (result.status === 0 && result.stdout.trim()) {
     return result.stdout.trim()
   }
 
-  throw new Error(
-    'Electron binary not found. Run "npm install" from the repo root to install devDependencies.',
-  )
+  throw new Error('Electron binary not found. Run "npm install" from the repo root to install devDependencies.')
 }
 
 /**
@@ -284,9 +282,7 @@ export function findElectron(): string {
  * @param env      - the process environment (already has HERMES_HOME etc.)
  * @returns the ElectronApplication + first Page
  */
-export async function launchDesktop(
-  env: Record<string, string>,
-): Promise<{ app: ElectronApplication; page: Page }> {
+export async function launchDesktop(env: Record<string, string>): Promise<{ app: ElectronApplication; page: Page }> {
   assertDistBuilt()
 
   const electronBin = findElectron()
@@ -298,10 +294,10 @@ export async function launchDesktop(
     args: [
       DESKTOP_ROOT, // `electron .` — the `.` is the desktop package dir
       '--disable-gpu',
-      '--no-sandbox',
+      '--no-sandbox'
     ],
     env,
-    cwd: DESKTOP_ROOT,
+    cwd: DESKTOP_ROOT
   })
 
   const page = await app.firstWindow()
@@ -330,7 +326,7 @@ export interface MockBackendFixture {
  *   3. Launch the desktop app
  *   4. Return handles for test interaction
  */
-export async function setupMockBackend(): Promise<MockBackendFixture> {
+export async function setupMockBackend(extraEnv: Record<string, string> = {}): Promise<MockBackendFixture> {
   // 1. Start mock server
   const mock = await startMockServer()
 
@@ -340,7 +336,7 @@ export async function setupMockBackend(): Promise<MockBackendFixture> {
   writeEnvFile(sandbox.hermesHome)
 
   // 3. Build env + launch
-  const env = buildAppEnv(sandbox)
+  const env = buildAppEnv(sandbox, extraEnv)
   const { app, page } = await launchDesktop(env)
 
   return {
@@ -352,7 +348,7 @@ export async function setupMockBackend(): Promise<MockBackendFixture> {
       await app.close().catch(() => undefined)
       await mock.close()
       sandbox.cleanup()
-    },
+    }
   }
 }
 
@@ -381,7 +377,7 @@ export async function setupNoProvider(): Promise<NoProviderFixture> {
     cleanup: async () => {
       await app.close().catch(() => undefined)
       sandbox.cleanup()
-    },
+    }
   }
 }
 
@@ -428,11 +424,16 @@ providers:
       mock-model: {}
     context_length: 4096
 `,
-    'utf8',
+    'utf8'
   )
   writeEnvFile(sandbox.hermesHome)
 
-  const env = buildAppEnv(sandbox, options.fakeError ? { HERMES_DESKTOP_BOOT_FAKE_ERROR: 'Failed to connect to Hermes backend: connection refused' } : {})
+  const env = buildAppEnv(
+    sandbox,
+    options.fakeError
+      ? { HERMES_DESKTOP_BOOT_FAKE_ERROR: 'Failed to connect to Hermes backend: connection refused' }
+      : {}
+  )
   const { app, page } = await launchDesktop(env)
 
   return {
@@ -442,7 +443,7 @@ providers:
     cleanup: async () => {
       await app.close().catch(() => undefined)
       sandbox.cleanup()
-    },
+    }
   }
 }
 
@@ -491,9 +492,7 @@ export interface PackagedAppFixture {
  */
 export async function setupPackagedApp(): Promise<PackagedAppFixture> {
   if (!packagedBinaryExists()) {
-    throw new Error(
-      `Built app binary not found: ${PACKAGED_BINARY_PATH}. Run 'npm run pack' first.`,
-    )
+    throw new Error(`Built app binary not found: ${PACKAGED_BINARY_PATH}. Run 'npm run pack' first.`)
   }
 
   const sandbox = createSandbox('packaged')
@@ -503,7 +502,7 @@ export async function setupPackagedApp(): Promise<PackagedAppFixture> {
   const env = buildAppEnv(sandbox, {
     // Fake boot: simulates progress steps without spawning the real backend.
     HERMES_DESKTOP_BOOT_FAKE: '1',
-    HERMES_DESKTOP_BOOT_FAKE_STEP_MS: '120',
+    HERMES_DESKTOP_BOOT_FAKE_STEP_MS: '120'
   })
 
   // Clear dev-server + hermes-root overrides — the packaged binary
@@ -515,7 +514,7 @@ export async function setupPackagedApp(): Promise<PackagedAppFixture> {
   const app = await _electron.launch({
     executablePath: PACKAGED_BINARY_PATH,
     args: ['--disable-gpu', '--no-sandbox'],
-    env,
+    env
   })
 
   const page = await app.firstWindow()
@@ -528,7 +527,7 @@ export async function setupPackagedApp(): Promise<PackagedAppFixture> {
     cleanup: async () => {
       await app.close().catch(() => undefined)
       sandbox.cleanup()
-    },
+    }
   }
 }
 
@@ -552,13 +551,16 @@ export async function setupPackagedApp(): Promise<PackagedAppFixture> {
  *     so checking the composer alone catches the app mid-boot at ~92%
  *     with the loading bar still showing.
  */
-export async function waitForAppReady(fixture: MockBackendFixture | NoProviderFixture | DeadBackendFixture, timeoutMs = 60_000): Promise<void> {
+export async function waitForAppReady(
+  fixture: MockBackendFixture | NoProviderFixture | DeadBackendFixture,
+  timeoutMs = 60_000
+): Promise<void> {
   const { page, app } = fixture
 
   // Wait for the composer to exist in the DOM (not necessarily interactive yet).
   await page.waitForSelector('textarea, [contenteditable="true"]', {
     state: 'attached',
-    timeout: timeoutMs,
+    timeout: timeoutMs
   })
 
   // Now poll until no full-screen overlay covers the viewport center.
@@ -594,7 +596,7 @@ export async function waitForAppReady(fixture: MockBackendFixture | NoProviderFi
       return true
     },
     undefined,
-    { timeout: timeoutMs },
+    { timeout: timeoutMs }
   )
 
   // On Electron 40.x, ready-to-show may never fire (electron/electron#51972)
@@ -607,13 +609,17 @@ export async function waitForAppReady(fixture: MockBackendFixture | NoProviderFi
     const deadline = Date.now() + timeoutMs
 
     while (Date.now() < deadline) {
-      const visible = await app.evaluate(({ BrowserWindow }) => {
-        const w = BrowserWindow.getAllWindows()[0]
+      const visible = await app
+        .evaluate(({ BrowserWindow }) => {
+          const w = BrowserWindow.getAllWindows()[0]
 
-        return w ? w.isVisible() : false
-      }).catch(() => false)
+          return w ? w.isVisible() : false
+        })
+        .catch(() => false)
 
-      if (visible) {break}
+      if (visible) {
+        break
+      }
       await page.waitForTimeout(500)
     }
   }
@@ -644,7 +650,7 @@ export async function waitForOnboarding(page: Page, timeoutMs = 60_000): Promise
       )
     },
     undefined,
-    { timeout: timeoutMs },
+    { timeout: timeoutMs }
   )
 }
 
@@ -675,6 +681,6 @@ export async function waitForBootFailure(page: Page, timeoutMs = 60_000): Promis
       return hasFailureUI || hasErrorToast
     },
     undefined,
-    { timeout: timeoutMs },
+    { timeout: timeoutMs }
   )
 }

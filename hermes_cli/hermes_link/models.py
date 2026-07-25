@@ -122,6 +122,7 @@ class MessagePriority(str, Enum):
 class DeliveryState(str, Enum):
     QUEUED = "queued"
     DELIVERED = "delivered"
+    CLAIMED = "claimed"
     ACKNOWLEDGED = "acknowledged"
     FAILED = "failed"
     REJECTED = "rejected"
@@ -225,6 +226,7 @@ class QueueCounts(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     queued: int = 0
     delivered: int = 0
+    claimed: int = 0
     acknowledged: int = 0
     failed: int = 0
     rejected: int = 0

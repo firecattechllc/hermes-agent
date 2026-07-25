@@ -130,6 +130,16 @@ class HermesLinkService:
         self.visibility.publish(acknowledged)
         return acknowledged
 
+    def reject(self, message_id: str, *, error_code: str) -> HermesLinkEnvelope:
+        current = self.store.get(message_id)
+        if current is None:
+            raise LinkPolicyError("message_not_found", "message does not exist")
+        rejected = self.store.append(
+            current, state=DeliveryState.REJECTED, reason_code=error_code
+        )
+        self.visibility.publish(rejected, reason_code=error_code)
+        return rejected
+
     def fail_delivery(
         self, message_id: str, *, error_code: str, now: Optional[int] = None
     ) -> HermesLinkEnvelope:

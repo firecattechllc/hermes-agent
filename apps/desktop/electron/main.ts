@@ -139,6 +139,7 @@ import {
   redactSecrets,
   SshConnection
 } from './ssh-connection'
+import { requestTitanLink } from './titan-link'
 import { nativeOverlayWidth as computeNativeOverlayWidth, macTitleBarOverlayHeight } from './titlebar-overlay-width'
 import { resolveBehindCount, shouldCountCommits } from './update-count'
 import { readLiveUpdateMarker, writeUpdateMarker } from './update-marker'
@@ -9051,6 +9052,8 @@ async function mergeRemoteProfileSessions(searchParams, remoteProfiles) {
 
   return { ...(base as any), sessions: merged.slice(offset, offset + limit), total, profile_totals: profileTotals }
 }
+
+ipcMain.handle('hermes:titan:request', async (_event, request) => requestTitanLink(request))
 
 ipcMain.handle('hermes:api', async (_event, request) => {
   // Remote-profile session requests would otherwise hit the local primary off

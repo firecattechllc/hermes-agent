@@ -66,6 +66,8 @@ import {
 } from '../chat/session-tile'
 import { $terminalTakeover, setTerminalTakeover } from '../right-sidebar/store'
 import { $workspaceIsPage } from '../routes'
+import { TitanChatDrawer } from '../titan/drawer'
+import { $titanDrawerOpen, setTitanDrawerOpen } from '../titan/store'
 
 import { FilesPane, LogsPane, PreviewRailPane, ReviewPaneContent } from './panes'
 import { ContribWiring, WiredPane } from './wiring'
@@ -161,6 +163,21 @@ registry.registerMany([
       uncloseable: true
     },
     render: renderWorkspacePane
+  },
+  {
+    id: 'titan-chat',
+    area: 'panes',
+    title: 'Titan Hermes',
+    data: {
+      placement: 'right',
+      collapsible: true,
+      independentSideVisibility: true,
+      dock: { pane: 'workspace', pos: 'right' },
+      width: '380px',
+      minWidth: '300px',
+      maxWidth: '640px'
+    },
+    render: () => <TitanChatDrawer />
   },
   {
     id: 'terminal',
@@ -327,6 +344,7 @@ const DEFAULT_TREE = split(
   [
     group(['sessions'], { id: 'grp-sessions' }),
     group(['workspace'], { id: 'grp-main' }),
+    group(['titan-chat'], { id: 'grp-titan' }),
     split(
       'column',
       [
@@ -346,7 +364,7 @@ const DEFAULT_TREE = split(
       'spl-right'
     )
   ],
-  [1, 3.4, 1.25],
+  [1, 3.4, 1.2, 1.25],
   'spl-root'
 )
 
@@ -553,6 +571,8 @@ const $previewVisible = computed([$previewTarget, $filePreviewTarget], (target, 
 )
 
 bindPaneVisibility('preview', $previewVisible, closeRightRail)
+
+bindPaneVisibility('titan-chat', $titanDrawerOpen, () => setTitanDrawerOpen(false))
 
 // Logs are optional chrome: off by default, toggled from ⌘K, persisted.
 const $logsOpen = persistentAtom('hermes.desktop.logsOpen', false, Codecs.bool)
