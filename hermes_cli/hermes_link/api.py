@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
+from contextlib import asynccontextmanager, suppress
 from typing import Callable, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -11,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from .models import HermesLinkEnvelope, MessageType
+from .processor import TitanConsumerLoop
 from .service import HermesLinkService, LinkPolicyError
 
 TokenVerifier = Callable[[str], bool]
@@ -23,12 +26,29 @@ def static_token_verifier(expected_token: str) -> TokenVerifier:
     return lambda supplied: hmac.compare_digest(supplied, expected_token)
 
 
-def create_app(service: HermesLinkService, *, token_verifier: TokenVerifier) -> FastAPI:
+def create_app(
+    service: HermesLinkService,
+    *,
+    token_verifier: TokenVerifier,
+    consumer: Optional[TitanConsumerLoop] = None,
+) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        task = None if consumer is None else asyncio.create_task(consumer.run())
+        try:
+            yield
+        finally:
+            if task is not None:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+
     app = FastAPI(
         title="Titan Hermes Link",
         version=service.service_version,
         docs_url=None,
         redoc_url=None,
+        lifespan=lifespan,
     )
 
     def authenticate(authorization: Optional[str] = Header(default=None)) -> None:

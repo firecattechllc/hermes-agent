@@ -187,7 +187,11 @@ export async function refreshTitan(): Promise<void> {
 
         const envelope = raw as Record<string, unknown>
 
-        if (envelope.sender_node !== 'titan-hermes' || typeof envelope.message_id !== 'string') {
+        if (
+          envelope.sender_node !== 'titan-hermes' ||
+          envelope.recipient_node !== 'mac-hermes' ||
+          typeof envelope.message_id !== 'string'
+        ) {
           continue
         }
 
@@ -201,9 +205,16 @@ export async function refreshTitan(): Promise<void> {
               ? payload.summary
               : JSON.stringify(payload, null, 2)
 
+        const correlationId =
+          typeof envelope.correlation_id === 'string' ? envelope.correlation_id : envelope.message_id
+
+        const correlatedMode = $titanMessages
+          .get()
+          .find(message => message.author === 'mac' && message.correlationId === correlationId)?.mode
+
         appendTitanMessage({
           id: envelope.message_id,
-          correlationId: typeof envelope.correlation_id === 'string' ? envelope.correlation_id : envelope.message_id,
+          correlationId,
           conversationId:
             typeof envelope.conversation_id === 'string' ? envelope.conversation_id : $titanConversationId.get(),
           author: envelope.message_type === 'escalation' ? 'specialist' : 'titan',
@@ -213,9 +224,9 @@ export async function refreshTitan(): Promise<void> {
           mode:
             envelope.message_type === 'task_result'
               ? 'task'
-              : envelope.message_type === 'lesson_package'
+              : envelope.message_type === 'lesson_package' || correlatedMode === 'lesson'
                 ? 'lesson'
-                : 'chat',
+                : (correlatedMode ?? 'chat'),
           evidenceReferences: Array.isArray(envelope.evidence_references)
             ? envelope.evidence_references.filter((item): item is string => typeof item === 'string')
             : []

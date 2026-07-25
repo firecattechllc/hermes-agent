@@ -19,6 +19,7 @@ test('rejects public Titan endpoints before transport', async () => {
 
   assert.equal(result.error?.code, 'invalid_private_endpoint')
   assert.equal(called, false)
+  assert.equal(JSON.stringify(result).includes('not-logged'), false)
 })
 
 test('maps authentication failure without exposing response detail', async () => {

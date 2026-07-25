@@ -73,9 +73,84 @@ suppression on Titan.
 
 Titan remains independently operational when the Mac app is closed. The
 desktop queue is an outbound convenience cache, not Titan's source of truth.
-Step 32 does not yet provide cancellation, automatic background replay while
-the desktop process is stopped, streaming, report history, or attachment
-transport; the UI does not simulate those capabilities.
+Titan's Step 34 consumer atomically claims eligible Mac-originated delivered
+envelopes in the Step 32 journal. Chat uses a loopback-only Ollama adapter;
+tasks and lessons return governed receipts without starting execution. Replies
+use a deterministic ID derived from the inbound message, preserve correlation
+and conversation IDs, and are fsynced before the inbound message is
+acknowledged. An expired claim can therefore be recovered after restart without
+creating a second reply. The desktop polls `/queue`; no streaming contract was
+added.
+
+## Titan runtime configuration
+
+The supported Titan entry point is:
+
+```bash
+/opt/hermes/current/venv/bin/python -m hermes_cli.hermes_link.runtime
+```
+
+It binds only to `127.0.0.1`. Configuration is environment-only:
+
+| Variable | Safe default | Purpose |
+| --- | --- | --- |
+| `HERMES_LINK_TOKEN` | none, required | Existing bearer secret |
+| `HERMES_LINK_QUEUE_PATH` | `~/.hermes/link-service/queue` | Existing Step 32 journal directory |
+| `HERMES_LINK_PORT` | `9320` | Loopback API port |
+| `HERMES_LINK_OLLAMA_URL` | `http://127.0.0.1:11434` | Loopback-only Ollama endpoint |
+| `HERMES_LINK_OLLAMA_MODEL` | `qwen3:8b` | Approved local model |
+| `HERMES_LINK_MODEL_TIMEOUT_SECONDS` | `60` | Explicit inference deadline |
+| `HERMES_LINK_MAXIMUM_INPUT_CHARS` | `16000` | Chat input bound |
+| `HERMES_LINK_MAXIMUM_OUTPUT_CHARS` | `16000` | Persisted reply bound |
+| `HERMES_LINK_MAXIMUM_OUTPUT_TOKENS` | `2048` | Ollama generation bound |
+| `HERMES_LINK_MAXIMUM_RETRIES` | `3` | Retry/dead-letter bound |
+| `HERMES_LINK_CLAIM_LEASE_SECONDS` | `120` | Restart recovery lease |
+| `HERMES_LINK_POLL_INTERVAL_SECONDS` | `1` | Idle queue polling interval |
+
+The Ollama URL rejects non-loopback hosts and authentication material. Requests
+disable thinking and expose no tools. Hidden reasoning is neither requested nor
+persisted.
+
+For the current Titan layout, deploy the reviewed checkout without changing the
+token, queue directory, Tailscale Serve, DNS, HTTPS, or authentication:
+
+```bash
+sudo -u hydra /opt/hermes/current/venv/bin/python -m compileall -q \
+  /opt/hermes/current/hermes_cli/hermes_link
+sudo systemctl restart hermes-link.service
+sudo systemctl status --no-pager hermes-link.service
+```
+
+If the existing service unit still invokes
+`~/.hermes/link-service/runtime/run_titan_link.py`, replace only that script's
+application construction with `hermes_cli.hermes_link.runtime.build_app()` or
+update `ExecStart` to the module command above. Preserve its existing
+environment file and loopback/Serve configuration. Back up the unit or runtime
+script before changing it.
+
+## Live reply-cycle certification
+
+Resolve the bearer token through the existing secret manager without printing
+it, then run from Mac:
+
+```bash
+curl --fail --silent --show-error \
+  -H "Authorization: Bearer ${HERMES_LINK_TOKEN}" \
+  "${HERMES_LINK_TITAN_URL}/status" | jq '{node_id, presence, queue_counts}'
+curl --fail --silent --show-error \
+  -H "Authorization: Bearer ${HERMES_LINK_TOKEN}" \
+  "${HERMES_LINK_TITAN_URL}/queue" |
+  jq '[.messages[] | select(
+    .sender_node == "titan-hermes" and
+    .recipient_node == "mac-hermes"
+  ) | {message_id, correlation_id, conversation_id, message_type, delivery_state}]'
+```
+
+Send one new uniquely identified chat through the desktop drawer. Certify that
+exactly one Titan reply has the same correlation and conversation IDs and that
+the original is `acknowledged`. Restart the service once and repeat the queue
+query; the reply count and reply message ID must remain unchanged. Do not expose
+the token or message bodies in captured evidence.
 
 ## Troubleshooting
 
@@ -89,3 +164,9 @@ transport; the UI does not simulate those capabilities.
   queue.” Stable message IDs are preserved across retries.
 - **Malformed response:** the client marks the connection degraded and does not
   invent missing values. Check the Titan service version and Step 32 schema.
+- **Claimed message after a crash:** wait for the configured claim lease. The
+  restarted worker reconciles a durable deterministic reply or safely retries.
+
+Current limitations remain cancellation, streaming, report history, attachment
+transport, and automatic privileged task/lesson execution. The UI does not
+simulate those capabilities.

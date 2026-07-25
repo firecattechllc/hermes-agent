@@ -7,6 +7,7 @@ let fixture: MockBackendFixture | null = null
 let titanServer: Server | null = null
 let titanUrl = ''
 const token = 'e2e-titan-token'
+let titanReplies: Record<string, unknown>[] = []
 
 test.beforeAll(async () => {
   titanServer = createServer((request, response) => {
@@ -49,7 +50,7 @@ test.beforeAll(async () => {
     }
 
     if (request.url === '/queue') {
-      response.end(JSON.stringify({ messages: [] }))
+      response.end(JSON.stringify({ messages: titanReplies }))
       return
     }
 
@@ -61,6 +62,16 @@ test.beforeAll(async () => {
       })
       request.on('end', () => {
         const envelope = JSON.parse(body) as Record<string, unknown>
+        titanReplies = [
+          {
+            ...envelope,
+            message_id: 'link-reply-e2e',
+            sender_node: 'titan-hermes',
+            recipient_node: 'mac-hermes',
+            payload: { message: 'Hello Mac from Titan' },
+            delivery_state: 'queued'
+          }
+        ]
         response.end(JSON.stringify({ ...envelope, delivery_state: 'delivered' }))
       })
       return
@@ -108,6 +119,9 @@ test('opens, chats, switches modes, and closes without replacing the main sessio
   await titanComposer.press('Enter')
   await expect(page.getByText('Hello Little Sister', { exact: true })).toBeVisible()
   await expect(page.getByText('Delivered', { exact: true })).toBeVisible()
+  await expect(page.getByText('Hello Mac from Titan', { exact: true })).toHaveCount(1, {
+    timeout: 20_000
+  })
 
   await page.getByRole('button', { name: 'Task', exact: true }).click()
   await expect(page.getByText('Risk classification', { exact: true })).toBeVisible()

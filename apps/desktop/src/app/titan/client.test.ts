@@ -152,4 +152,42 @@ describe('governed Titan client', () => {
     expect($titanStatus.get().activeModel).toBeNull()
     expect($titanStatus.get().presence).toBe('online')
   })
+
+  it('renders one correlated Titan reply across repeated queue refreshes', async () => {
+    request.mockResolvedValueOnce({
+      ok: true,
+      data: { message_id: 'link-outbound', delivery_state: 'delivered' }
+    })
+    const outbound = await sendTitanMessage('Hello Titan', 'chat')
+
+    const reply = {
+      message_id: 'link-reply',
+      correlation_id: outbound?.correlationId,
+      conversation_id: outbound?.conversationId,
+      sender_node: 'titan-hermes',
+      recipient_node: 'mac-hermes',
+      message_type: 'chat',
+      created_at: 2,
+      payload: { message: 'Hello Mac' },
+      evidence_references: ['evidence://titan/reply']
+    }
+
+    request
+      .mockResolvedValueOnce({ ok: true, data: { presence: 'online', evidence_timestamp: 2 } })
+      .mockResolvedValueOnce({ ok: true, data: { messages: [reply] } })
+      .mockResolvedValueOnce({ ok: true, data: { presence: 'online', evidence_timestamp: 3 } })
+      .mockResolvedValueOnce({ ok: true, data: { messages: [reply] } })
+
+    await refreshTitan()
+    await refreshTitan()
+
+    const replies = $titanMessages.get().filter(message => message.author === 'titan')
+    expect(replies).toHaveLength(1)
+    expect(replies[0]).toMatchObject({
+      content: 'Hello Mac',
+      correlationId: outbound?.correlationId,
+      conversationId: outbound?.conversationId
+    })
+    expect(JSON.stringify($titanMessages.get())).not.toContain('HERMES_LINK_TOKEN')
+  })
 })
