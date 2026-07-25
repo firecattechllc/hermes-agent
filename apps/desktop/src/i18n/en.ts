@@ -195,6 +195,68 @@ export const en: Translations = {
     layoutEditorTitle: 'Layout editor — ⌘-click resets the layout'
   },
 
+  titan: {
+    title: 'Titan Hermes',
+    subtitle: 'Little Sister',
+    toggle: 'Toggle Titan Hermes',
+    openMissionControl: 'Open Titan Mission Control',
+    newConversation: 'New Titan conversation',
+    empty: 'Start a governed conversation with Little Sister.',
+    placeholder: 'Message Titan Hermes…',
+    send: 'Send to Titan Hermes',
+    modes: { chat: 'Chat', task: 'Task', lesson: 'Lesson' },
+    quick: {
+      status: 'Ask status',
+      work: 'Show current work',
+      report: 'Show latest report',
+      queue: 'Show queue',
+      escalations: 'Escalation summary'
+    },
+    states: {
+      online: 'Online',
+      offline: 'Offline',
+      connecting: 'Connecting',
+      degraded: 'Degraded',
+      unauthorized: 'Unauthorized',
+      sending: 'Sending',
+      queued: 'Queued',
+      delivered: 'Delivered',
+      failed: 'Failed',
+      rejected: 'Rejected'
+    },
+    activeModel: 'Active local model',
+    lastContact: 'Last contact',
+    notAvailable: 'Not available',
+    correlationId: 'Correlation ID',
+    retry: 'Retry failed message',
+    copy: 'Copy message',
+    prohibited: 'This request crosses a governed risk boundary and cannot be sent as chat.',
+    overview: {
+      uptime: 'Uptime',
+      queueDepth: 'Queue depth',
+      nursery: 'Nursery',
+      ollama: 'Ollama',
+      finbert: 'FinBERT',
+      memoryIndex: 'Memory index',
+      pendingEscalations: 'Pending escalations',
+      latestEvidence: 'Latest evidence'
+    },
+    fields: {
+      title: 'Title',
+      instructions: 'Instructions',
+      priority: 'Priority',
+      deadline: 'Optional deadline',
+      risk: 'Risk classification',
+      expectedOutput: 'Expected output',
+      workspace: 'Workspace or project scope',
+      evidence: 'Evidence requirements',
+      objective: 'Objective',
+      validation: 'Validation criteria',
+      references: 'Source or evidence references',
+      version: 'Lesson version'
+    }
+  },
+
   keybinds: {
     title: 'Keyboard shortcuts',
     subtitle: open => `Click a shortcut to rebind it · ${open} reopens this panel.`,

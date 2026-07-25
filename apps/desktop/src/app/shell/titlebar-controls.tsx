@@ -2,6 +2,7 @@ import { useStore } from '@nanostores/react'
 import { type ComponentProps, type MouseEvent, type ReactNode, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
+import { $titanConnection, $titanDrawerOpen, $titanUnread, setTitanDrawerOpen } from '@/app/titan/store'
 import { toggleLayoutEditMode } from '@/components/pane-shell/edit-mode'
 import { resetLayoutTree } from '@/components/pane-shell/tree/store'
 import { Button } from '@/components/ui/button'
@@ -122,6 +123,9 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   // show/hide affordances.
   const leftEdge = { open: sidebarOpen, toggle: toggleSidebarOpen }
   const rightEdge = { open: fileBrowserOpen, toggle: toggleFileBrowserOpen }
+  const titanOpen = useStore($titanDrawerOpen)
+  const titanConnection = useStore($titanConnection)
+  const titanUnread = useStore($titanUnread)
 
   const leftToolbarTools: TitlebarTool[] = [
     {
@@ -161,6 +165,38 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
 
   // Static system tools — always pinned to the screen's right edge.
   const systemTools: TitlebarTool[] = [
+    {
+      active: titanOpen,
+      icon: (
+        <span className="relative inline-flex">
+          <Codicon name="comment-discussion" />
+          <span
+            aria-hidden="true"
+            className={cn(
+              'absolute -right-1 -top-1 size-1.5 rounded-full',
+              titanConnection === 'online'
+                ? 'bg-green-500'
+                : titanConnection === 'degraded'
+                  ? 'bg-amber-500'
+                  : titanConnection === 'unauthorized'
+                    ? 'bg-red-500'
+                    : 'bg-(--ui-text-quaternary)'
+            )}
+          />
+          {titanUnread > 0 && (
+            <span className="absolute -bottom-2 -right-2 min-w-3 rounded-full bg-(--ui-accent) px-0.5 text-center text-[0.5rem] leading-3 text-white">
+              {Math.min(titanUnread, 99)}
+            </span>
+          )}
+        </span>
+      ),
+      id: 'titan-chat',
+      label: t.titan.toggle,
+      onSelect: () => {
+        triggerHaptic(titanOpen ? 'tap' : 'open')
+        setTitanDrawerOpen(!titanOpen)
+      }
+    },
     {
       className: 'group/tool',
       // Hover + held ⌘/Ctrl morphs the glyph into its reset form (see

@@ -383,7 +383,23 @@ export function TreeSplit({ node, root, rootRow }: { node: SplitNode; root?: boo
       return false
     }
 
-    const side = rootChildSide(node.children[i], paneFor)
+    const child = node.children[i]
+
+    const hasIndependentVisiblePane = allPaneIds(child).some(id => {
+      const contribution = paneFor(id)
+
+      const independent = Boolean(
+        (contribution?.data as { independentSideVisibility?: boolean } | undefined)?.independentSideVisibility
+      )
+
+      return independent && !hiddenPanes.has(id)
+    })
+
+    if (hasIndependentVisiblePane) {
+      return false
+    }
+
+    const side = rootChildSide(child, paneFor)
 
     return side !== null && collapsedSides.has(side)
   }

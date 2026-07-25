@@ -190,6 +190,68 @@ export const zh: Translations = {
     layoutEditorTitle: '布局编辑器 — ⌘ 点击重置布局'
   },
 
+  titan: {
+    title: 'Titan Hermes',
+    subtitle: 'Little Sister',
+    toggle: '切换 Titan Hermes',
+    openMissionControl: '打开 Titan 任务控制台',
+    newConversation: '新建 Titan 对话',
+    empty: '开始与 Little Sister 的受治理对话。',
+    placeholder: '发送消息给 Titan Hermes…',
+    send: '发送给 Titan Hermes',
+    modes: { chat: '聊天', task: '任务', lesson: '课程' },
+    quick: {
+      status: '询问状态',
+      work: '显示当前工作',
+      report: '显示最新报告',
+      queue: '显示队列',
+      escalations: '升级摘要'
+    },
+    states: {
+      online: '在线',
+      offline: '离线',
+      connecting: '连接中',
+      degraded: '降级',
+      unauthorized: '未授权',
+      sending: '发送中',
+      queued: '已排队',
+      delivered: '已送达',
+      failed: '失败',
+      rejected: '已拒绝'
+    },
+    activeModel: '当前本地模型',
+    lastContact: '最近联系',
+    notAvailable: '不可用',
+    correlationId: '关联 ID',
+    retry: '重试失败消息',
+    copy: '复制消息',
+    prohibited: '此请求跨越治理风险边界，不能作为聊天发送。',
+    overview: {
+      uptime: '运行时间',
+      queueDepth: '队列深度',
+      nursery: 'Nursery',
+      ollama: 'Ollama',
+      finbert: 'FinBERT',
+      memoryIndex: '记忆索引',
+      pendingEscalations: '待处理升级',
+      latestEvidence: '最新证据'
+    },
+    fields: {
+      title: '标题',
+      instructions: '说明',
+      priority: '优先级',
+      deadline: '可选截止日期',
+      risk: '风险分类',
+      expectedOutput: '预期输出',
+      workspace: '工作区或项目范围',
+      evidence: '证据要求',
+      objective: '目标',
+      validation: '验证标准',
+      references: '来源或证据引用',
+      version: '课程版本'
+    }
+  },
+
   keybinds: {
     title: '键盘快捷键',
     subtitle: open => `点击快捷键即可重新绑定 · ${open} 可重新打开此面板。`,

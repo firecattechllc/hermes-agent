@@ -192,6 +192,11 @@ export const ja = defineLocale({
     openSettings: '設定を開く',
     openStarmap: 'メモリグラフを開く'
   },
+  titan: {
+    title: 'Titan Hermes',
+    subtitle: 'Little Sister',
+    toggle: 'Titan Hermes を切り替える'
+  },
 
   language: {
     label: '言語',

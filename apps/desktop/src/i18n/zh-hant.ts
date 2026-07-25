@@ -186,6 +186,11 @@ export const zhHant = defineLocale({
     openSettings: '開啟設定',
     openStarmap: '開啟記憶圖譜'
   },
+  titan: {
+    title: 'Titan Hermes',
+    subtitle: 'Little Sister',
+    toggle: '切換 Titan Hermes'
+  },
 
   language: {
     label: '語言',
