@@ -1,15 +1,76 @@
 import type { SigilOperatorAdapter, SigilSnapshot, SimulatedOperatorAction } from './types'
 
+type SigilRuntimeSnapshot = {
+  revision: number
+  connection: {
+    status: string
+    last_refresh_at: string
+  }
+  balances: {
+    cash: string
+    portfolio_value: string
+  }
+  automation: {
+    state: string
+  }
+  proposals: Array<{
+    id: string
+    symbol: string
+    side: 'BUY' | 'SELL'
+    quantity: number
+    estimated_notional: string
+    strategy: string
+    status: string
+    evidence_references: string[]
+    risk_results: string[]
+  }>
+  executions: Array<{
+    id: string
+    order_id: string
+    symbol: string
+    status: string
+    timestamp: string
+  }>
+  reconciliation: Array<{
+    order_id: string
+    status: string
+    required: boolean
+  }>
+  audit: Array<{
+    id: string
+    timestamp: string
+    order_id: string
+    proposal_id: string
+    status: string
+    evidence_reference: string
+    summary: string
+    details: Readonly<Record<string, unknown>>
+  }>
+}
+
+type RuntimeBridgeResponse =
+  | { ok: true; result: SigilRuntimeSnapshot }
+  | { ok: false; error: string; message: string }
+
+type RuntimeDesktopApi = {
+  getRuntimeSnapshot?: () => Promise<RuntimeBridgeResponse>
+  controlPaperCycle?: (
+    action: 'start' | 'pause' | 'stop'
+  ) => Promise<RuntimeBridgeResponse>
+}
+
+function runtimeDesktopApi(): RuntimeDesktopApi | undefined {
+  return (window as Window & { sigilDesktop?: RuntimeDesktopApi }).sigilDesktop
+}
+
 function currency(value: string): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value))
 }
 
 function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
   return {
-    revision: runtime.revision,
     dataState: runtime.connection.status === 'connected' ? 'ready' : 'stale',
     lastUpdated: runtime.connection.last_refresh_at,
-    degradedServices: runtime.connection.degraded_services,
     environment: 'paper',
     simulation: true,
     brokerConnection: runtime.connection.status === 'connected' ? 'connected' : 'disconnected',
@@ -17,17 +78,6 @@ function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
     systemHealth: runtime.connection.status === 'connected' ? 'Runtime connected' : 'Runtime degraded',
     cash: currency(runtime.balances.cash),
     portfolioValue: currency(runtime.balances.portfolio_value),
-    positions: runtime.positions.map(position => ({
-      symbol: position.symbol,
-      quantity: position.quantity,
-      marketValue: currency(position.market_value)
-    })),
-    automation: {
-      state: runtime.automation.state,
-      cycleCount: runtime.automation.cycle_count,
-      lastCycleAt: runtime.automation.last_cycle_at,
-      nextCycleAt: runtime.automation.next_cycle_at
-    },
     activeStrategies: runtime.automation.state === 'running' ? 1 : 0,
     pendingApprovals: runtime.proposals.filter(proposal => proposal.status === 'pending').length,
     killSwitch: 'armed',
@@ -51,7 +101,10 @@ function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
       quantity: proposal.quantity,
       estimatedNotional: currency(proposal.estimated_notional),
       strategy: proposal.strategy,
-      status: proposal.status,
+      status:
+        proposal.status === 'approved' || proposal.status === 'rejected'
+          ? proposal.status
+          : 'pending',
       evidenceReferences: proposal.evidence_references,
       riskResults: proposal.risk_results
     })),
@@ -84,7 +137,7 @@ function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
 
 export class DesktopSigilOperatorAdapter implements SigilOperatorAdapter {
   async readSnapshot(): Promise<SigilSnapshot> {
-    const response = await window.sigilDesktop?.getRuntimeSnapshot?.()
+    const response = await runtimeDesktopApi()?.getRuntimeSnapshot?.()
 
     if (!response?.ok) {
       throw new Error(response?.message ?? 'The governed local backend bridge is unavailable.')
@@ -94,7 +147,7 @@ export class DesktopSigilOperatorAdapter implements SigilOperatorAdapter {
   }
 
   async controlPaperCycle(action: 'start' | 'pause' | 'stop'): Promise<SigilSnapshot> {
-    const response = await window.sigilDesktop?.controlPaperCycle?.(action)
+    const response = await runtimeDesktopApi()?.controlPaperCycle?.(action)
 
     if (!response?.ok) {
       throw new Error(response?.message ?? 'Paper automation control failed safely.')
