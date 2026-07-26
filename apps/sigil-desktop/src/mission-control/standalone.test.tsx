@@ -74,4 +74,90 @@ describe('standalone Sigil Mission Control', () => {
     expect(INITIAL_SIGIL_SNAPSHOT.environment).toBe('paper')
     expect(INITIAL_SIGIL_SNAPSHOT.simulation).toBe(true)
   })
+
+  it('renders refreshable read-only provider data without credential fields', async () => {
+    const original = window.sigilDesktop
+    window.sigilDesktop = {
+      productName: 'Sigil',
+      persistenceNamespace: 'test',
+      brokerSubmissionAvailable: false,
+      getBackendStatus: async () => ({
+        ok: false,
+        error: 'unused',
+        message: 'unused'
+      }),
+      explainProposal: async () => ({
+        ok: false,
+        error: 'unused',
+        message: 'unused'
+      }),
+      getProviderSnapshot: async () => ({
+        ok: true,
+        result: {
+          checked_at: '2026-07-26T16:00:00Z',
+          broker_submission_available: false,
+          credentials_exposed: false,
+          alpaca: {
+            status: 'connected',
+            message: 'Read-only market data is current.',
+            symbols: [
+              {
+                symbol: 'MSFT',
+                price: '452.80',
+                observed_at: '2026-07-26T15:59:00Z',
+                source: 'Alpaca IEX latest bar'
+              }
+            ]
+          },
+          public: {
+            status: 'connected',
+            message: 'Read-only account access is current.',
+            accounts: [
+              {
+                masked_account_id: '•••• 1234',
+                cash: '1250.00',
+                portfolio_value: '1500.00',
+                positions: [{ symbol: 'AAPL', quantity: '2' }]
+              }
+            ]
+          }
+        }
+      })
+    }
+
+    try {
+      render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
+
+      expect(await screen.findByText('Read-only provider health')).toBeTruthy()
+      expect(screen.getAllByText('MSFT').length).toBeGreaterThan(0)
+      expect(screen.getByText('•••• 1234')).toBeTruthy()
+      expect(screen.getByText(/secrets exposed: no/i)).toBeTruthy()
+      expect(screen.queryByText(/alpaca-secret|public-secret/i)).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: /Refresh providers/i }))
+      await waitFor(() => expect(screen.getByText('Read-only market data is current.')).toBeTruthy())
+    } finally {
+      window.sigilDesktop = original
+    }
+  })
+
+  it('confirmation-gates local paper automation controls', async () => {
+    const adapter = new MockSigilOperatorAdapter() as MockSigilOperatorAdapter & {
+      controlPaperCycle: (action: 'start' | 'pause' | 'stop') => Promise<typeof INITIAL_SIGIL_SNAPSHOT>
+    }
+
+    adapter.controlPaperCycle = async action => ({
+      ...INITIAL_SIGIL_SNAPSHOT,
+      automationState: action === 'start' ? 'running' : action === 'pause' ? 'paused' : 'stopped',
+      automationCycleCount: 1
+    })
+
+    render(<SigilOperatorView adapter={adapter} />)
+    await screen.findByTestId('sigil-operator')
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    expect(screen.getByText('Confirm paper automation start')).toBeTruthy()
+    expect(screen.getByText(/cannot submit to a broker/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Start paper automation' }))
+    expect(await screen.findByText('Paper automation running')).toBeTruthy()
+  })
 })

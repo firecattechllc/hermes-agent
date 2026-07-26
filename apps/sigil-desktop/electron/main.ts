@@ -11,6 +11,7 @@ export const SIGIL_BACKEND_STATUS_CHANNEL = 'sigil:get-backend-status'
 export const SIGIL_EXPLAIN_PROPOSAL_CHANNEL = 'sigil:explain-proposal'
 export const SIGIL_RUNTIME_SNAPSHOT_CHANNEL = 'sigil:get-runtime-snapshot'
 export const SIGIL_PAPER_CYCLE_CONTROL_CHANNEL = 'sigil:control-paper-cycle'
+export const SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'
 
 type BackendStatus = {
   bridge_version: string
@@ -113,7 +114,7 @@ export function runBridgeRequest<T>(
         error: 'backend_timeout',
         message: 'The local Sigil backend did not respond in time.'
       })
-    }, 5000)
+    }, request.command === 'provider_snapshot' ? 30_000 : 5_000)
 
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
@@ -172,6 +173,7 @@ export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_EXPLAIN_PROPOSAL_CHANNEL)
   ipcMain.removeHandler(SIGIL_RUNTIME_SNAPSHOT_CHANNEL)
   ipcMain.removeHandler(SIGIL_PAPER_CYCLE_CONTROL_CHANNEL)
+  ipcMain.removeHandler(SIGIL_PROVIDER_SNAPSHOT_CHANNEL)
 
   ipcMain.handle(SIGIL_BACKEND_STATUS_CHANNEL, () => readBackendStatus())
 
@@ -191,6 +193,9 @@ export function registerSigilIpc(): void {
     SIGIL_PAPER_CYCLE_CONTROL_CHANNEL,
     (_event, action: 'start' | 'pause' | 'stop') =>
       runBridgeRequest({ command: 'control_paper_cycle', payload: { action } })
+  )
+  ipcMain.handle(SIGIL_PROVIDER_SNAPSHOT_CHANNEL, () =>
+    runBridgeRequest({ command: 'provider_snapshot' })
   )
 }
 

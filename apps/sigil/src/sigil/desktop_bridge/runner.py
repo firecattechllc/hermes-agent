@@ -12,6 +12,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Any, Final
 
+from .providers import provider_snapshot
 from .runtime import control_paper_cycle, runtime_snapshot
 
 BRIDGE_VERSION: Final[str] = "1"
@@ -20,6 +21,7 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "explain_proposal",
     "runtime_snapshot",
     "control_paper_cycle",
+    "provider_snapshot",
 )
 
 
@@ -203,6 +205,9 @@ def handle_request(request: object) -> dict[str, Any]:
             return {"ok": True, "result": control_paper_cycle(payload.get("action"))}
         except ValueError:
             return error_response("invalid_payload", "action must be start, pause, or stop.")
+
+    if command == "provider_snapshot":
+        return {"ok": True, "result": provider_snapshot()}
 
     return error_response(
         "unsupported_command",

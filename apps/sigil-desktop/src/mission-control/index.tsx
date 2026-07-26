@@ -1,5 +1,5 @@
 import { PAGE_INSET_X } from '@hermes-desktop/app/layout-constants'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,7 @@ import type {
   PipelineStage,
   Proposal,
   SigilOperatorAdapter,
+  SigilProviderSnapshot,
   SigilSnapshot,
   SigilTone,
   SimulatedOperatorAction
@@ -460,10 +461,173 @@ function AuditTable({ events }: { events: AuditEvent[] }) {
   )
 }
 
+function ProviderPanel({
+  error,
+  loading,
+  onRefresh,
+  snapshot
+}: {
+  error: string | null
+  loading: boolean
+  onRefresh: () => void
+  snapshot: SigilProviderSnapshot | null
+}) {
+  const [query, setQuery] = useState('')
+  const [descending, setDescending] = useState(false)
+
+  const symbols = [...(snapshot?.alpaca.symbols ?? [])]
+    .filter(item => item.symbol.toLowerCase().includes(query.trim().toLowerCase()))
+    .sort((left, right) => {
+      const result = left.symbol.localeCompare(right.symbol)
+
+      return descending ? -result : result
+    })
+
+  const tone = (status: string): SigilTone =>
+    status === 'connected' ? 'success' : status === 'degraded' ? 'warning' : 'muted'
+
+  return (
+    <section
+      aria-labelledby="provider-health-title"
+      className="border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)"
+      data-testid="provider-health"
+    >
+      <div className={cn('flex flex-wrap items-center justify-between gap-3 py-3', PAGE_INSET_X)}>
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="provider-health-title">
+            Read-only provider health
+          </h2>
+          <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+            Market and account data only · credentials remain in the local backend
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {snapshot ? (
+            <>
+              <StatusLabel tone={tone(snapshot.alpaca.status)}>Alpaca {snapshot.alpaca.status}</StatusLabel>
+              <StatusLabel tone={tone(snapshot.public.status)}>Public {snapshot.public.status}</StatusLabel>
+            </>
+          ) : null}
+          <Button disabled={loading} onClick={onRefresh} size="xs" variant="outline">
+            <Codicon name="refresh" />
+            {loading ? 'Refreshing…' : 'Refresh providers'}
+          </Button>
+        </div>
+      </div>
+      {error ? (
+        <div className={cn('border-t border-(--ui-stroke-tertiary) py-3 text-xs text-destructive', PAGE_INSET_X)} role="alert">
+          Provider refresh degraded safely: {error}
+        </div>
+      ) : null}
+      {!snapshot && loading ? (
+        <div className={cn('border-t border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}>
+          <Loader label="Loading read-only provider status" />
+        </div>
+      ) : null}
+      {snapshot ? (
+        <div className={cn('grid gap-px border-t border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) lg:grid-cols-2', PAGE_INSET_X)}>
+          <div className="bg-(--ui-bg-primary) py-4 lg:pr-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-semibold">Market watch</h3>
+                <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">{snapshot.alpaca.message}</p>
+              </div>
+              <button
+                className="font-mono text-[0.6875rem] text-primary hover:underline"
+                onClick={() => setDescending(value => !value)}
+                type="button"
+              >
+                Symbol {descending ? '↓' : '↑'}
+              </button>
+            </div>
+            <SearchField
+              aria-label="Filter market symbols"
+              containerClassName="mb-3"
+              onChange={setQuery}
+              placeholder="Filter symbols"
+              value={query}
+            />
+            {symbols.length ? (
+              <div className="divide-y divide-(--ui-stroke-tertiary)">
+                {symbols.map(item => (
+                  <details className="group py-2.5" key={item.symbol}>
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+                      <span className="font-mono text-xs font-semibold">{item.symbol}</span>
+                      <span className="font-mono text-sm">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(item.price))}</span>
+                    </summary>
+                    <p className="mt-2 text-[0.6875rem] text-(--ui-text-tertiary)">
+                      {item.source} · observed {item.observed_at}
+                    </p>
+                  </details>
+                ))}
+              </div>
+            ) : (
+              <EmptyState description="Refresh providers or clear the symbol filter." title="No market rows" />
+            )}
+          </div>
+          <div className="bg-(--ui-bg-primary) py-4 lg:pl-5">
+            <h3 className="text-xs font-semibold">Public account view</h3>
+            <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">{snapshot.public.message}</p>
+            {snapshot.public.accounts.length ? (
+              <div className="mt-3 space-y-3">
+                {snapshot.public.accounts.map(account => (
+                  <details className="border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-3" key={account.masked_account_id}>
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+                      <span className="font-mono text-xs font-semibold">{account.masked_account_id}</span>
+                      <span className="text-[0.6875rem] text-(--ui-text-tertiary)">Inspect account</span>
+                    </summary>
+                    <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <dt className="text-[0.625rem] uppercase text-(--ui-text-tertiary)">Cash buying power</dt>
+                        <dd className="mt-1 font-mono text-xs">{account.cash}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[0.625rem] uppercase text-(--ui-text-tertiary)">Portfolio value</dt>
+                        <dd className="mt-1 font-mono text-xs">{account.portfolio_value}</dd>
+                      </div>
+                    </dl>
+                    <div className="mt-3 border-t border-(--ui-stroke-tertiary) pt-3 font-mono text-[0.6875rem] text-(--ui-text-secondary)">
+                      {account.positions.length
+                        ? account.positions.map(position => `${position.symbol} ${position.quantity}`).join(' · ')
+                        : 'No reported equity positions'}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3">
+                <EmptyState description="No readable account data is available. Broker execution remains disabled." title="No account rows" />
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+      {snapshot ? (
+        <div className={cn('border-t border-(--ui-stroke-tertiary) py-2 font-mono text-[0.625rem] text-(--ui-text-quaternary)', PAGE_INSET_X)}>
+          Checked {snapshot.checked_at} · secrets exposed: no · broker submission: unavailable
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 const localHermesEngine = new LocalHermesEngine()
 
+type ProviderResponse =
+  | { ok: true; result: SigilProviderSnapshot }
+  | { ok: false; error: string; message: string }
+
+interface MissionControlDesktopApi {
+  getRuntimeSnapshot?: () => Promise<unknown>
+  getProviderSnapshot?: () => Promise<ProviderResponse>
+}
+
+function desktopApi(): MissionControlDesktopApi | undefined {
+  return (window as Window & { sigilDesktop?: MissionControlDesktopApi }).sigilDesktop
+}
+
 function defaultOperatorAdapter(): SigilOperatorAdapter {
-  return window.sigilDesktop?.getRuntimeSnapshot
+  return desktopApi()?.getRuntimeSnapshot
     ? desktopSigilOperatorAdapter
     : mockSigilOperatorAdapter
 }
@@ -488,6 +652,32 @@ export function SigilOperatorView({
   const [hermesAnalysis, setHermesAnalysis] = useState<HermesAnalysisResult | null>(null)
   const [hermesLoading, setHermesLoading] = useState(false)
   const [hermesError, setHermesError] = useState<string | null>(null)
+  const [providerSnapshot, setProviderSnapshot] = useState<SigilProviderSnapshot | null>(null)
+  const [providerLoading, setProviderLoading] = useState(false)
+  const [providerError, setProviderError] = useState<string | null>(null)
+  const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
+  const liveRuntime = typeof adapter.controlPaperCycle === 'function'
+
+  const refreshProviders = useCallback((): void => {
+    const providerApi = desktopApi()?.getProviderSnapshot
+
+    if (!providerApi) {
+      return
+    }
+
+    setProviderLoading(true)
+    setProviderError(null)
+    void providerApi()
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(response.message)
+        }
+
+        setProviderSnapshot(response.result)
+      })
+      .catch(reason => setProviderError(reason instanceof Error ? reason.message : String(reason)))
+      .finally(() => setProviderLoading(false))
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -516,6 +706,17 @@ export function SigilOperatorView({
       window.clearInterval(refreshTimer)
     }
   }, [adapter, reloadGeneration])
+
+  useEffect(() => {
+    if (!desktopApi()?.getProviderSnapshot) {
+      return
+    }
+
+    refreshProviders()
+    const providerTimer = window.setInterval(refreshProviders, 30_000)
+
+    return () => window.clearInterval(providerTimer)
+  }, [refreshProviders])
 
   useEffect(() => {
     let cancelled = false
@@ -664,10 +865,45 @@ export function SigilOperatorView({
               HEALTH · {snapshot.systemHealth === 'Governance healthy' ? '99.8%' : snapshot.systemHealth}
             </span>
             <StatusLabel tone="success">{snapshot.certificationStatus}</StatusLabel>
+            <Button onClick={() => setReloadGeneration(value => value + 1)} size="xs" variant="outline">
+              <Codicon name="refresh" />
+              Refresh runtime
+            </Button>
           </div>
         </div>
       </header>
       <DataNotice snapshot={snapshot} />
+      {liveRuntime ? (
+        <div className={cn('flex flex-wrap items-center justify-between gap-3 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) py-2', PAGE_INSET_X)}>
+          <div className="flex items-center gap-3 text-xs">
+            <StatusLabel tone={snapshot.automationState === 'running' ? 'success' : 'muted'}>
+              Paper automation {snapshot.automationState ?? 'stopped'}
+            </StatusLabel>
+            <span className="font-mono text-(--ui-text-tertiary)">
+              {snapshot.automationCycleCount ?? 0} cycles · refreshed {snapshot.lastUpdated}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            {(['start', 'pause', 'stop'] as const).map(action => (
+              <Button
+                disabled={
+                  action === 'start'
+                    ? snapshot.automationState === 'running'
+                    : action === 'pause'
+                      ? snapshot.automationState !== 'running'
+                      : snapshot.automationState === 'stopped'
+                }
+                key={action}
+                onClick={() => setPendingCycleAction(action)}
+                size="xs"
+                variant={action === 'stop' ? 'destructive' : 'outline'}
+              >
+                {action[0]?.toUpperCase()}{action.slice(1)}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <nav
         aria-label="Sigil sections"
         className={cn(
@@ -697,6 +933,12 @@ export function SigilOperatorView({
           <div className="flex min-h-full flex-col xl:flex-row">
             <div className="min-w-0 flex-1">
               <MetricStrip snapshot={snapshot} />
+              <ProviderPanel
+                error={providerError}
+                loading={providerLoading}
+                onRefresh={refreshProviders}
+                snapshot={providerSnapshot}
+              />
               <div className={cn('py-4', PAGE_INSET_X)}>
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-xs font-semibold uppercase tracking-[0.1em]">Governance pipeline</h2>
@@ -764,13 +1006,13 @@ export function SigilOperatorView({
                   Decisions are local simulation only and require confirmation.
                 </p>
               </div>
-              <Button
+              {!liveRuntime ? <Button
                 onClick={() => setOperatorActionsEnabled(enabled => !enabled)}
                 size="sm"
                 variant={operatorActionsEnabled ? 'outline' : 'secondary'}
               >
                 {operatorActionsEnabled ? 'Lock operator actions' : 'Enable simulated operator actions'}
-              </Button>
+              </Button> : null}
             </div>
             {snapshot.proposals.length === 0 ? (
               <EmptyState description="No proposals are waiting in this snapshot." title="Proposal queue is empty" />
@@ -795,13 +1037,13 @@ export function SigilOperatorView({
                   Read-only by default · simulated state changes require confirmation
                 </p>
               </div>
-              <Button
+              {!liveRuntime ? <Button
                 onClick={() => setOperatorActionsEnabled(enabled => !enabled)}
                 size="sm"
                 variant={operatorActionsEnabled ? 'outline' : 'secondary'}
               >
                 {operatorActionsEnabled ? 'Lock operator actions' : 'Enable simulated operator actions'}
-              </Button>
+              </Button> : null}
             </div>
             <LaunchControl actionLocked={actionLocked} onAction={setPendingAction} snapshot={snapshot} />
           </div>
@@ -851,7 +1093,8 @@ export function SigilOperatorView({
               ))}
             </dl>
             <p className="mt-4 text-xs text-(--ui-text-tertiary)">
-              Broker credentials, live submission, and capital-limit controls are not available in this product.
+              Provider credentials stay in the local backend. Provider access is read-only; live submission and
+              capital-limit controls are not available in this product.
             </p>
 
             <section
@@ -941,7 +1184,7 @@ export function SigilOperatorView({
         )}
       >
         <span>No broker submission available · no live submit control · account identity masked</span>
-        <span>Adapter: local mock · Hermes intelligence boundary · Step 36</span>
+        <span>Adapter: governed local paper runtime · provider reads isolated in backend · Step 39</span>
       </footer>
       <ConfirmDialog
         confirmLabel={confirmation?.label}
@@ -955,6 +1198,25 @@ export function SigilOperatorView({
         }}
         open={Boolean(pendingAction)}
         title={confirmation?.title}
+      />
+      <ConfirmDialog
+        confirmLabel={pendingCycleAction ? `${pendingCycleAction[0]?.toUpperCase()}${pendingCycleAction.slice(1)} paper automation` : undefined}
+        description={
+          pendingCycleAction
+            ? `This will ${pendingCycleAction} only the local paper cycle and append audit evidence. It cannot submit to a broker.`
+            : undefined
+        }
+        destructive={pendingCycleAction === 'stop'}
+        onClose={() => setPendingCycleAction(null)}
+        onConfirm={async () => {
+          if (pendingCycleAction && adapter.controlPaperCycle) {
+            setSnapshot(await adapter.controlPaperCycle(pendingCycleAction))
+          }
+
+          setPendingCycleAction(null)
+        }}
+        open={Boolean(pendingCycleAction)}
+        title={pendingCycleAction ? `Confirm paper automation ${pendingCycleAction}` : undefined}
       />
     </section>
   )

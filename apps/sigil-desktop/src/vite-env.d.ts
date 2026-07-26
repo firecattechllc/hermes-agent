@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+import type { SigilProviderSnapshot } from './mission-control/types'
+
+declare global {
 type SigilBackendStatus = {
   bridge_version: string
   status: string
@@ -33,13 +36,13 @@ type SigilBackendResponse<T> =
       ok: true
       result: T
     }
-
-type SigilRuntimeSnapshot = Record<string, unknown>
   | {
       ok: false
       error: string
       message: string
     }
+
+type SigilRuntimeSnapshot = Record<string, unknown>
 
 type SigilProposalExplanationPayload = {
   proposal_id: string
@@ -59,10 +62,13 @@ interface SigilDesktopApi {
   persistenceNamespace: string
   brokerSubmissionAvailable: false
   getBackendStatus: () => Promise<SigilBackendResponse<SigilBackendStatus>>
-  getRuntimeSnapshot: () => Promise<SigilBackendResponse<SigilRuntimeSnapshot>>
-  controlPaperCycle: (
+  getRuntimeSnapshot?: () => Promise<SigilBackendResponse<SigilRuntimeSnapshot>>
+  controlPaperCycle?: (
     action: 'start' | 'pause' | 'stop'
   ) => Promise<SigilBackendResponse<SigilRuntimeSnapshot>>
+  getProviderSnapshot?: () => Promise<
+    SigilBackendResponse<SigilProviderSnapshot>
+  >
   explainProposal: (
     payload: SigilProposalExplanationPayload
   ) => Promise<SigilBackendResponse<SigilBackendProposalExplanation>>
@@ -70,4 +76,5 @@ interface SigilDesktopApi {
 
 interface Window {
   sigilDesktop?: SigilDesktopApi
+}
 }

@@ -12,6 +12,7 @@ type SigilRuntimeSnapshot = {
   }
   automation: {
     state: string
+    cycle_count?: number
   }
   proposals: Array<{
     id: string
@@ -79,6 +80,11 @@ function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
     cash: currency(runtime.balances.cash),
     portfolioValue: currency(runtime.balances.portfolio_value),
     activeStrategies: runtime.automation.state === 'running' ? 1 : 0,
+    automationState:
+      runtime.automation.state === 'running' || runtime.automation.state === 'paused'
+        ? runtime.automation.state
+        : 'stopped',
+    automationCycleCount: runtime.automation.cycle_count ?? 0,
     pendingApprovals: runtime.proposals.filter(proposal => proposal.status === 'pending').length,
     killSwitch: 'armed',
     certificationStatus: 'Paper runtime',

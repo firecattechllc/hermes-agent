@@ -1,3 +1,6 @@
+import json
+
+from sigil.desktop_bridge.providers import load_credentials, provider_snapshot
 from sigil.desktop_bridge.runner import backend_status, handle_request
 
 
@@ -35,6 +38,7 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "explain_proposal",
         "runtime_snapshot",
         "control_paper_cycle",
+        "provider_snapshot",
     ]
 
 
@@ -102,3 +106,76 @@ def test_non_object_request_fails_closed() -> None:
 
     assert response["ok"] is False
     assert response["error"] == "invalid_request"
+
+
+class ProviderResponse:
+    def __init__(self, payload: object) -> None:
+        self.payload = payload
+        self.headers = {"Content-Type": "application/json"}
+
+    def getcode(self) -> int:
+        return 200
+
+    def read(self, _limit: int) -> bytes:
+        return json.dumps(self.payload).encode()
+
+
+def test_provider_snapshot_is_read_only_masked_and_secret_free(tmp_path) -> None:
+    credential_path = tmp_path / "providers.txt"
+    credential_path.write_text(
+        "\n".join(
+            (
+                "SIGIL_ALPACA_API_KEY_ID=alpaca-key",
+                "SIGIL_ALPACA_API_SECRET_KEY=alpaca-secret",
+                "SIGIL_PUBLIC_API_SECRET=public-secret",
+                "SIGIL_BROKER_SUBMISSION_ENABLED=false",
+            )
+        )
+    )
+    credential_path.chmod(0o600)
+    requests = []
+
+    def opener(request, _timeout):  # type: ignore[no-untyped-def]
+        requests.append(request)
+        if request.full_url.endswith("/personal/access-tokens"):
+            return ProviderResponse({"accessToken": "runtime-token"})
+        if request.full_url.endswith("/trading/account"):
+            return ProviderResponse({"accounts": [{"accountId": "paper-account-1234"}]})
+        if "/portfolio/v2" in request.full_url:
+            return ProviderResponse(
+                {
+                    "buyingPower": {"cashOnlyBuyingPower": "1250.00"},
+                    "equity": "1500.00",
+                    "positions": [
+                        {"instrument": {"symbol": "AAPL"}, "quantity": "2"}
+                    ],
+                }
+            )
+        return ProviderResponse({"bar": {"c": 201.25, "t": "2026-07-26T14:30:00Z"}})
+
+    result = provider_snapshot(opener=opener, path=credential_path)
+    serialized = json.dumps(result)
+
+    assert result["alpaca"]["status"] == "connected"
+    assert result["public"]["status"] == "connected"
+    assert result["public"]["accounts"][0]["masked_account_id"] == "•••• 1234"
+    assert result["broker_submission_available"] is False
+    assert result["credentials_exposed"] is False
+    assert "alpaca-secret" not in serialized
+    assert "public-secret" not in serialized
+    assert all(request.method in {"GET", "POST"} for request in requests)
+    assert not any("/order" in request.full_url for request in requests)
+    assert not any("transfer" in request.full_url for request in requests)
+
+
+def test_provider_credential_loader_rejects_unsafe_permissions(tmp_path) -> None:
+    credential_path = tmp_path / "providers.txt"
+    credential_path.write_text("SIGIL_PUBLIC_API_SECRET=secret")
+    credential_path.chmod(0o644)
+
+    try:
+        load_credentials(credential_path)
+    except RuntimeError as error:
+        assert "permissions are unsafe" in str(error)
+    else:
+        raise AssertionError("unsafe credential permissions must fail closed")

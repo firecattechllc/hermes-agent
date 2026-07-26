@@ -49,6 +49,32 @@ export interface AuditEvent {
   details: Readonly<Record<string, unknown>>
 }
 
+export interface SigilProviderSnapshot {
+  checked_at: string
+  broker_submission_available: false
+  credentials_exposed: false
+  alpaca: {
+    status: 'connected' | 'degraded' | 'not_configured'
+    message: string
+    symbols: Array<{
+      symbol: string
+      price: string
+      observed_at: string
+      source: string
+    }>
+  }
+  public: {
+    status: 'connected' | 'degraded' | 'not_configured'
+    message: string
+    accounts: Array<{
+      masked_account_id: string
+      cash: string
+      portfolio_value: string
+      positions: Array<{ symbol: string; quantity: string }>
+    }>
+  }
+}
+
 export interface SigilSnapshot {
   dataState: SigilDataState
   lastUpdated: string
@@ -60,6 +86,8 @@ export interface SigilSnapshot {
   cash: string
   portfolioValue: string
   activeStrategies: number
+  automationState?: 'paused' | 'running' | 'stopped'
+  automationCycleCount?: number
   pendingApprovals: number
   killSwitch: 'armed' | 'engaged'
   certificationStatus: string
@@ -87,4 +115,5 @@ export type SimulatedOperatorAction =
 export interface SigilOperatorAdapter {
   readSnapshot(): Promise<SigilSnapshot>
   applySimulatedAction(action: SimulatedOperatorAction): Promise<SigilSnapshot>
+  controlPaperCycle?: (action: 'start' | 'pause' | 'stop') => Promise<SigilSnapshot>
 }
