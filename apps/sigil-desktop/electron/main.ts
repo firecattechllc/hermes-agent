@@ -9,6 +9,8 @@ export const SIGIL_BUNDLE_ID = 'com.firecattechnology.sigil'
 export const SIGIL_USER_DATA_DIRECTORY = 'Sigil'
 export const SIGIL_BACKEND_STATUS_CHANNEL = 'sigil:get-backend-status'
 export const SIGIL_EXPLAIN_PROPOSAL_CHANNEL = 'sigil:explain-proposal'
+export const SIGIL_RUNTIME_SNAPSHOT_CHANNEL = 'sigil:get-runtime-snapshot'
+export const SIGIL_PAPER_CYCLE_CONTROL_CHANNEL = 'sigil:control-paper-cycle'
 
 type BackendStatus = {
   bridge_version: string
@@ -42,7 +44,17 @@ function repositoryRoot(): string {
 }
 
 function pythonExecutable(): string {
-  return process.env.SIGIL_PYTHON || 'python'
+  return process.env.SIGIL_PYTHON || (app.isPackaged ? '/usr/bin/python3' : 'python')
+}
+
+function backendSourceRoot(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'sigil-backend')
+    : path.join(repositoryRoot(), 'apps/sigil/src')
+}
+
+function backendWorkingDirectory(): string {
+  return app.isPackaged ? process.resourcesPath : repositoryRoot()
 }
 
 type BridgeRequest = Readonly<{
@@ -65,17 +77,17 @@ export function runBridgeRequest<T>(
   request: BridgeRequest
 ): Promise<BridgeResponse<T>> {
   return new Promise(resolve => {
-    const root = repositoryRoot()
-    const sourceRoot = path.join(root, 'apps/sigil/src')
+    const sourceRoot = backendSourceRoot()
 
     const child = spawn(
       pythonExecutable(),
       ['-m', 'sigil.desktop_bridge.runner'],
       {
-        cwd: root,
+        cwd: backendWorkingDirectory(),
         env: {
           ...process.env,
-          PYTHONPATH: sourceRoot
+          PYTHONPATH: sourceRoot,
+          SIGIL_DESKTOP_STATE_DIR: path.join(app.getPath('userData'), 'paper-runtime')
         },
         stdio: ['pipe', 'pipe', 'pipe']
       }
@@ -158,6 +170,8 @@ export function readBackendStatus(): Promise<BackendResponse> {
 export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_BACKEND_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_EXPLAIN_PROPOSAL_CHANNEL)
+  ipcMain.removeHandler(SIGIL_RUNTIME_SNAPSHOT_CHANNEL)
+  ipcMain.removeHandler(SIGIL_PAPER_CYCLE_CONTROL_CHANNEL)
 
   ipcMain.handle(SIGIL_BACKEND_STATUS_CHANNEL, () => readBackendStatus())
 
@@ -168,6 +182,15 @@ export function registerSigilIpc(): void {
         command: 'explain_proposal',
         payload
       })
+  )
+
+  ipcMain.handle(SIGIL_RUNTIME_SNAPSHOT_CHANNEL, () =>
+    runBridgeRequest({ command: 'runtime_snapshot' })
+  )
+  ipcMain.handle(
+    SIGIL_PAPER_CYCLE_CONTROL_CHANNEL,
+    (_event, action: 'start' | 'pause' | 'stop') =>
+      runBridgeRequest({ command: 'control_paper_cycle', payload: { action } })
   )
 }
 

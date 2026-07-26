@@ -18,7 +18,8 @@ import {
   type SigilHermesEngine
 } from '../hermes-engine'
 
-import { sigilOperatorAdapter } from './mock-adapter'
+import { desktopSigilOperatorAdapter } from './desktop-adapter'
+import { sigilOperatorAdapter as mockSigilOperatorAdapter } from './mock-adapter'
 import type {
   AuditEvent,
   PipelineStage,
@@ -461,13 +462,19 @@ function AuditTable({ events }: { events: AuditEvent[] }) {
 
 const localHermesEngine = new LocalHermesEngine()
 
+function defaultOperatorAdapter(): SigilOperatorAdapter {
+  return window.sigilDesktop?.getRuntimeSnapshot
+    ? desktopSigilOperatorAdapter
+    : mockSigilOperatorAdapter
+}
+
 interface SigilOperatorViewProps {
   adapter?: SigilOperatorAdapter
   engine?: SigilHermesEngine
 }
 
 export function SigilOperatorView({
-  adapter = sigilOperatorAdapter,
+  adapter = defaultOperatorAdapter(),
   engine = localHermesEngine
 }: SigilOperatorViewProps) {
   const [section, setSection] = useState<Section>('overview')
@@ -484,22 +491,29 @@ export function SigilOperatorView({
 
   useEffect(() => {
     let cancelled = false
-    setSnapshot(null)
-    void adapter
-      .readSnapshot()
-      .then(next => {
-        if (!cancelled) {
-          setSnapshot(next)
-        }
-      })
-      .catch(reason => {
-        if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : String(reason))
-        }
-      })
+
+    const refresh = (): void => {
+      void adapter
+        .readSnapshot()
+        .then(next => {
+          if (!cancelled) {
+            setSnapshot(next)
+            setError(null)
+          }
+        })
+        .catch(reason => {
+          if (!cancelled) {
+            setError(reason instanceof Error ? reason.message : String(reason))
+          }
+        })
+    }
+
+    refresh()
+    const refreshTimer = window.setInterval(refresh, 5_000)
 
     return () => {
       cancelled = true
+      window.clearInterval(refreshTimer)
     }
   }, [adapter, reloadGeneration])
 

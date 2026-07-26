@@ -33,6 +33,8 @@ type SigilBackendResponse<T> =
       ok: true
       result: T
     }
+
+type SigilRuntimeSnapshot = Record<string, unknown>
   | {
       ok: false
       error: string
@@ -57,6 +59,10 @@ interface SigilDesktopApi {
   persistenceNamespace: string
   brokerSubmissionAvailable: false
   getBackendStatus: () => Promise<SigilBackendResponse<SigilBackendStatus>>
+  getRuntimeSnapshot: () => Promise<SigilBackendResponse<SigilRuntimeSnapshot>>
+  controlPaperCycle: (
+    action: 'start' | 'pause' | 'stop'
+  ) => Promise<SigilBackendResponse<SigilRuntimeSnapshot>>
   explainProposal: (
     payload: SigilProposalExplanationPayload
   ) => Promise<SigilBackendResponse<SigilBackendProposalExplanation>>

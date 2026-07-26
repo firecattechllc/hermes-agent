@@ -30,7 +30,12 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
     assert status["simulation"] is True
     assert status["execution_authorized"] is False
     assert status["broker_submission_available"] is False
-    assert status["supported_commands"] == ["health", "explain_proposal"]
+    assert status["supported_commands"] == [
+        "health",
+        "explain_proposal",
+        "runtime_snapshot",
+        "control_paper_cycle",
+    ]
 
 
 def test_health_request_returns_status() -> None:
@@ -88,7 +93,7 @@ def test_unknown_command_fails_closed() -> None:
     assert response == {
         "ok": False,
         "error": "unsupported_command",
-        "message": "Only allow-listed read-only commands are available.",
+        "message": "Only allow-listed local paper commands are available.",
     }
 
 

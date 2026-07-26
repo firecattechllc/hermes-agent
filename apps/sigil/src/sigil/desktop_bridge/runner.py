@@ -9,20 +9,24 @@ from __future__ import annotations
 import json
 import math
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, Final
+
+from .runtime import control_paper_cycle, runtime_snapshot
 
 BRIDGE_VERSION: Final[str] = "1"
 SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "health",
     "explain_proposal",
+    "runtime_snapshot",
+    "control_paper_cycle",
 )
 
 
 def generated_at() -> str:
     """Return a UTC ISO-8601 timestamp."""
 
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def backend_status() -> dict[str, Any]:
@@ -188,9 +192,21 @@ def handle_request(request: object) -> dict[str, Any]:
     if command == "explain_proposal":
         return explain_proposal(request.get("payload"))
 
+    if command == "runtime_snapshot":
+        return {"ok": True, "result": runtime_snapshot()}
+
+    if command == "control_paper_cycle":
+        payload = request.get("payload")
+        if not isinstance(payload, dict):
+            return error_response("invalid_payload", "Paper control requires a payload object.")
+        try:
+            return {"ok": True, "result": control_paper_cycle(payload.get("action"))}
+        except ValueError:
+            return error_response("invalid_payload", "action must be start, pause, or stop.")
+
     return error_response(
         "unsupported_command",
-        "Only allow-listed read-only commands are available.",
+        "Only allow-listed local paper commands are available.",
     )
 
 

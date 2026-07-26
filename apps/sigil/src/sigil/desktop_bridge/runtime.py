@@ -13,6 +13,15 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterator
 
+from .paper_execution import (
+    cancel as _cancel_order,
+    fill as _fill_order,
+    initialize_execution_state,
+    mission_control_status,
+    recalculate as _recalculate,
+    submit as _submit_order,
+)
+
 SCHEMA_VERSION = 1
 CYCLE_SECONDS = 5
 CONTROL_ACTIONS = frozenset({"start", "pause", "stop"})
@@ -49,7 +58,7 @@ def _state_directory() -> Path:
 
 def _initial_state(now: datetime) -> dict[str, Any]:
     timestamp = _timestamp(now)
-    return {
+    state = {
         "schema_version": SCHEMA_VERSION,
         "revision": 1,
         "generated_at": timestamp,
@@ -90,6 +99,12 @@ def _initial_state(now: datetime) -> dict[str, Any]:
             }
         ],
     }
+    initialize_execution_state(state)
+    _recalculate(
+        state,
+        {"MSFT": "452.80", "NVDA": "173.00"},
+    )
+    return state
 
 
 @contextmanager
@@ -108,9 +123,10 @@ def _locked_state() -> Iterator[tuple[Path, dict[str, Any]]]:
             if (
                 not isinstance(payload, dict)
                 or envelope.get("sha256") != _digest(payload)
-                or payload.get("schema_version") != SCHEMA_VERSION
+                or payload.get("schema_version") not in {SCHEMA_VERSION, 2}
             ):
                 raise RuntimeError("paper runtime state integrity validation failed")
+            initialize_execution_state(payload)
         else:
             payload = _initial_state(_now())
         yield state_path, payload
@@ -235,6 +251,61 @@ def runtime_snapshot(*, now: datetime | None = None) -> dict[str, Any]:
         state["connection"]["last_refresh_at"] = _timestamp(observed_at)
         _persist(state_path, state)
         return json.loads(json.dumps(state))
+
+
+def submit_paper_order(
+    request: dict[str, Any], *, now: datetime | None = None
+) -> dict[str, Any]:
+    """Create a local paper order; this function has no broker transport."""
+    observed_at = now or _now()
+    with _locked_state() as (state_path, state):
+        order = _submit_order(state, request, timestamp=_timestamp(observed_at))
+        state["revision"] = int(state["revision"]) + 1
+        state["generated_at"] = _timestamp(observed_at)
+        _persist(state_path, state)
+        return order
+
+
+def simulate_paper_fill(
+    order_id: str,
+    market_snapshot: dict[str, Any],
+    *,
+    quantity: object | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Apply an injected market snapshot to a local paper order."""
+    observed_at = now or _now()
+    with _locked_state() as (state_path, state):
+        order = _fill_order(
+            state,
+            order_id,
+            market_snapshot,
+            timestamp=_timestamp(observed_at),
+            quantity=quantity,
+        )
+        state["revision"] = int(state["revision"]) + 1
+        state["generated_at"] = _timestamp(observed_at)
+        _persist(state_path, state)
+        return order
+
+
+def cancel_paper_order(order_id: str, *, now: datetime | None = None) -> dict[str, Any]:
+    """Cancel an unfilled local paper order and release its reservation."""
+    observed_at = now or _now()
+    with _locked_state() as (state_path, state):
+        order = _cancel_order(state, order_id, timestamp=_timestamp(observed_at))
+        state["revision"] = int(state["revision"]) + 1
+        state["generated_at"] = _timestamp(observed_at)
+        _persist(state_path, state)
+        return order
+
+
+def runtime_mission_control_status() -> dict[str, Any]:
+    """Return the bounded paper-runtime status required by Mission Control."""
+    with _locked_state() as (state_path, state):
+        result = mission_control_status(state)
+        _persist(state_path, state)
+        return result
 
 
 def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[str, Any]:
