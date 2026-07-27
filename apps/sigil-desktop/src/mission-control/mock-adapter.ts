@@ -8,7 +8,7 @@ import type {
 
 const BASE_TIME = '2026-07-25T14:32:18Z'
 
-export const SIGIL_FIRST_LAUNCH_LIMIT = '$25.00'
+export const SIGIL_FIRST_LAUNCH_LIMIT = '5% buying power / 10% position'
 
 export const INITIAL_SIGIL_SNAPSHOT: SigilSnapshot = {
   dataState: 'stale',
@@ -20,6 +20,34 @@ export const INITIAL_SIGIL_SNAPSHOT: SigilSnapshot = {
   systemHealth: 'Governance healthy',
   cash: '$10,000.00',
   portfolioValue: '$10,842.16',
+  buyingPower: '$10,000.00',
+  totalAccountValue: '$10,842.16',
+  realizedPnl: '$18.42',
+  unrealizedPnl: '$42.16',
+  positions: [
+    {
+      symbol: 'MSFT',
+      quantity: '2',
+      averageCost: '$396.00',
+      marketValue: '$834.16',
+      unrealizedPnl: '$42.16',
+      realizedPnl: '$18.42',
+      allocation: '7.69%',
+      auditReferences: ['AUD-20260725-108', 'REC-20260725-018']
+    }
+  ],
+  paperAuthorization: {
+    status: 'active',
+    authorizationId: 'PAPER-AUTH-DEMO',
+    authorizationMonth: '2026-07',
+    automaticMonthlyPolicy: true,
+    authorizedAt: '2026-07-25T14:00:00Z',
+    expiresAt: '2026-08-24T14:00:00Z',
+    revokedAt: null,
+    scope: ['automatic-paper-approval', 'simulated-paper-buy', 'simulated-paper-sell']
+  },
+  automationState: 'paused',
+  automationCycleCount: 3,
   activeStrategies: 4,
   pendingApprovals: 2,
   killSwitch: 'armed',
@@ -30,7 +58,7 @@ export const INITIAL_SIGIL_SNAPSHOT: SigilSnapshot = {
   stages: [
     { id: 'strategy', label: 'Strategy', detail: 'Qualified', state: 'complete' },
     { id: 'risk', label: 'Risk', detail: 'Passed', state: 'complete' },
-    { id: 'capital', label: 'Capital controls', detail: '$25 cap', state: 'complete' },
+    { id: 'capital', label: 'Paper sizing', detail: 'Dynamic bounded policy', state: 'complete' },
     { id: 'eligibility', label: 'Eligibility', detail: 'Eligible', state: 'complete' },
     { id: 'certification', label: 'Certification', detail: 'Paper only', state: 'complete' },
     { id: 'launch', label: 'Launch control', detail: 'Suspended', state: 'pending' },
@@ -77,31 +105,49 @@ export const INITIAL_SIGIL_SNAPSHOT: SigilSnapshot = {
     {
       id: 'RCT-20260725-018',
       orderId: 'ORD-20260725-018',
+      proposalId: 'PRP-20260725-0042',
       symbol: 'MSFT',
+      side: 'BUY',
+      quantity: '0.12',
+      price: '417.50',
+      notional: '50.10',
       brokerStatus: 'Simulated acknowledgement',
       state: 'simulated',
       duplicatePrevention: 'Envelope consumed once',
       reconciliationRequired: false,
+      reconciliationReference: 'REC-20260725-018',
       timestamp: '2026-07-25T14:18:03Z'
     },
     {
       id: 'RCT-20260725-017',
       orderId: 'ORD-20260725-017',
+      proposalId: 'PRP-20260725-0040',
       symbol: 'AAPL',
+      side: 'BUY',
+      quantity: '0.08',
+      price: '214.00',
+      notional: '17.12',
       brokerStatus: 'Rejected before transport',
       state: 'rejected',
       duplicatePrevention: 'Client order ID retained',
       reconciliationRequired: false,
+      reconciliationReference: 'REC-20260725-017',
       timestamp: '2026-07-25T13:41:22Z'
     },
     {
       id: 'RCT-20260725-016',
       orderId: 'ORD-20260725-016',
+      proposalId: 'PRP-20260725-0039',
       symbol: 'NVDA',
+      side: 'SELL',
+      quantity: '0.10',
+      price: '174.80',
+      notional: '17.48',
       brokerStatus: 'Outcome uncertain — no retry',
       state: 'outcome-uncertain',
       duplicatePrevention: 'Retry blocked pending reconciliation',
       reconciliationRequired: true,
+      reconciliationReference: 'REC-20260725-016',
       timestamp: '2026-07-25T12:56:09Z'
     }
   ],
@@ -218,6 +264,58 @@ export class MockSigilOperatorAdapter implements SigilOperatorAdapter {
 
   async applySimulatedAction(action: SimulatedOperatorAction): Promise<SigilSnapshot> {
     this.snapshot = applyAction(this.snapshot, action)
+
+    return structuredClone(this.snapshot)
+  }
+
+  async controlPaperCycle(action: 'start' | 'pause' | 'stop'): Promise<SigilSnapshot> {
+    this.snapshot = {
+      ...this.snapshot,
+      automationState: action === 'start' ? 'running' : action === 'pause' ? 'paused' : 'stopped'
+    }
+
+    return structuredClone(this.snapshot)
+  }
+
+  async controlPaperAuthorization(action: 'grant' | 'revoke'): Promise<SigilSnapshot> {
+    this.snapshot = {
+      ...this.snapshot,
+      paperAuthorization:
+        action === 'grant'
+          ? INITIAL_SIGIL_SNAPSHOT.paperAuthorization
+          : {
+              status: 'revoked',
+              authorizationId: 'PAPER-AUTH-DEMO',
+              authorizationMonth: '2026-07',
+              automaticMonthlyPolicy: true,
+              authorizedAt: '2026-07-25T14:00:00Z',
+              expiresAt: '2026-08-24T14:00:00Z',
+              revokedAt: BASE_TIME,
+              scope: ['automatic-paper-approval', 'simulated-paper-buy', 'simulated-paper-sell']
+            },
+      automationState: action === 'revoke' ? 'paused' : this.snapshot.automationState
+    }
+
+    return structuredClone(this.snapshot)
+  }
+
+  async resetPaperRuntime(): Promise<SigilSnapshot> {
+    this.snapshot = {
+      ...this.snapshot,
+      cash: '$10,000.00',
+      buyingPower: '$10,000.00',
+      portfolioValue: '$0.00',
+      totalAccountValue: '$10,000.00',
+      realizedPnl: '$0.00',
+      unrealizedPnl: '$0.00',
+      positions: [],
+      proposals: [],
+      receipts: [],
+      pendingApprovals: 0,
+      automationState: 'stopped',
+      automationCycleCount: 0,
+      paperAuthorization: INITIAL_SIGIL_SNAPSHOT.paperAuthorization
+    }
 
     return structuredClone(this.snapshot)
   }

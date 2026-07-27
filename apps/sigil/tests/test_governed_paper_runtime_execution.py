@@ -1,9 +1,10 @@
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 
 from sigil.desktop_bridge import runtime
-
 
 NOW = datetime(2026, 7, 26, 12, tzinfo=timezone.utc)
 
@@ -74,3 +75,151 @@ def test_mission_control_status_is_paper_only() -> None:
     assert status["broker_execution_disabled"] is True
     assert status["runtime_health"] == "healthy"
     assert len(status["open_orders"]) == 1
+
+
+def test_monthly_authorization_gates_automatic_paper_buys_and_sells() -> None:
+    initial = runtime.runtime_snapshot(now=NOW)
+    authorization = initial["paper_authorization"]
+    assert authorization["status"] == "active"
+    assert authorization["authorization_month"] == "2026-07"
+    assert authorization["automatic_monthly_policy"] is True
+    assert authorization["scope"] == [
+        "automatic-paper-approval",
+        "simulated-paper-buy",
+        "simulated-paper-sell",
+    ]
+
+    runtime.control_paper_cycle("start", now=NOW)
+    first = runtime.runtime_snapshot(now=NOW)
+    second = runtime.runtime_snapshot(now=NOW + timedelta(seconds=5))
+
+    assert first["proposals"][0]["status"] == "approved"
+    assert first["proposals"][0]["side"] == "BUY"
+    assert Decimal(first["proposals"][0]["estimated_notional"]) > Decimal(25)
+    assert second["proposals"][0]["side"] == "SELL"
+    assert second["executions"][0]["side"] == "SELL"
+    assert second["executions"][1]["side"] == "BUY"
+    assert all(
+        execution["broker_submission_attempted"] is False
+        for execution in second["executions"]
+    )
+    assert any(
+        event["status"] == "paper_auto_approved"
+        and event["details"]["authorization_id"]
+        == authorization["authorization_id"]
+        for event in second["audit"]
+    )
+    assert any(
+        event["status"] == "paper_executed"
+        and event["details"]["side"] == "SELL"
+        for event in second["audit"]
+    )
+
+
+def test_monthly_revocation_is_fail_closed_until_next_calendar_month() -> None:
+    runtime.control_paper_cycle("start", now=NOW)
+    revoked = runtime.control_paper_authorization("revoke", now=NOW)
+    assert revoked["paper_authorization"]["status"] == "revoked"
+    assert revoked["automation"]["state"] == "paused"
+    assert any(
+        event["status"] == "authorization_revoked" for event in revoked["audit"]
+    )
+    with pytest.raises(ValueError, match="revoked for this calendar month"):
+        runtime.control_paper_authorization(
+            "grant", now=NOW + timedelta(days=1)
+        )
+    with pytest.raises(ValueError, match="monthly paper authorization"):
+        runtime.control_paper_cycle("start", now=NOW + timedelta(days=1))
+
+    next_month = runtime.runtime_snapshot(
+        now=datetime(2026, 8, 1, tzinfo=timezone.utc)
+    )
+    assert next_month["paper_authorization"]["status"] == "active"
+    assert next_month["paper_authorization"]["authorization_month"] == "2026-08"
+    assert next_month["automation"]["state"] == "paused"
+    assert any(
+        event["status"] == "monthly_authorization_started"
+        and event["details"]["authorization_month"] == "2026-08"
+        for event in next_month["audit"]
+    )
+
+
+def test_revoked_running_state_pauses_fail_closed() -> None:
+    with runtime._locked_state() as (state_path, state):
+        state["automation"]["state"] = "running"
+        state["automation"]["next_cycle_at"] = NOW.isoformat()
+        state["paper_authorization"].update(
+            {"status": "revoked", "authorization_month": "2026-07"}
+        )
+        runtime._persist(state_path, state)
+
+    snapshot = runtime.runtime_snapshot(now=NOW)
+
+    assert snapshot["automation"]["state"] == "paused"
+    assert snapshot["automation"]["cycle_count"] == 0
+    assert snapshot["proposals"] == []
+    assert snapshot["broker_submission_available"] is False
+
+
+def test_paper_sell_is_rejected_before_fill_when_quantity_exceeds_holdings() -> None:
+    rejected = runtime.submit_paper_order(
+        {
+            "order_id": "ORD-SELL-TOO-MUCH",
+            "symbol": "MSFT",
+            "side": "SELL",
+            "order_type": "MARKET",
+            "quantity": "999",
+            "reference_price": "452.80",
+            "environment": "paper",
+        },
+        now=NOW,
+    )
+
+    assert rejected["status"] == "rejected"
+    assert rejected["reason"] == "insufficient_position_quantity"
+    snapshot = runtime.runtime_snapshot(now=NOW)
+    assert any(
+        event["status"] == "order_rejected"
+        and event["details"]["reason"] == "insufficient_position_quantity"
+        for event in snapshot["audit"]
+    )
+
+
+def test_reset_requires_exact_confirmation_and_preserves_auditable_evidence(
+    tmp_path,
+) -> None:
+    runtime.control_paper_authorization("grant", now=NOW)
+    runtime.control_paper_cycle("start", now=NOW)
+    populated = runtime.runtime_snapshot(now=NOW)
+    assert populated["positions"]
+    assert populated["executions"]
+
+    with pytest.raises(ValueError, match="exact paper reset confirmation"):
+        runtime.reset_paper_runtime("reset", now=NOW + timedelta(seconds=1))
+
+    reset = runtime.reset_paper_runtime(
+        "RESET LOCAL PAPER PORTFOLIO",
+        now=NOW + timedelta(seconds=2),
+    )
+
+    assert reset["positions"] == []
+    assert reset["proposals"] == []
+    assert reset["executions"] == []
+    assert reset["reconciliation"] == []
+    assert reset["balances"]["cash"] == "10000.00"
+    assert reset["balances"]["total_account_value"] == "10000.00"
+    assert reset["automation"]["state"] == "stopped"
+    assert reset["paper_authorization"]["status"] == "active"
+    assert reset["paper_authorization"]["authorization_month"] == "2026-07"
+    assert reset["broker_submission_available"] is False
+    assert reset["audit"][0]["status"] == "paper_runtime_reset"
+    assert reset["audit"][0]["details"]["settings_preserved"] is True
+    assert reset["audit"][0]["details"]["credentials_preserved"] is True
+
+    evidence_path = tmp_path / "paper-state" / "runtime-reset-audit.jsonl"
+    evidence = json.loads(evidence_path.read_text().strip())
+    assert evidence["record"]["scope"] == "local-paper-runtime-only"
+    assert evidence["record"]["provider_mutation"] is False
+    assert evidence["record"]["broker_submission_attempted"] is False
+    assert len(evidence["record"]["previous_state_sha256"]) == 64
+    assert len(evidence["sha256"]) == 64

@@ -38,6 +38,8 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "explain_proposal",
         "runtime_snapshot",
         "control_paper_cycle",
+        "control_paper_authorization",
+        "reset_paper_runtime",
         "provider_snapshot",
     ]
 
@@ -151,12 +153,51 @@ def test_provider_snapshot_is_read_only_masked_and_secret_free(tmp_path) -> None
                     ],
                 }
             )
-        return ProviderResponse({"bar": {"c": 201.25, "t": "2026-07-26T14:30:00Z"}})
+        if "/stocks/snapshots" in request.full_url:
+            return ProviderResponse(
+                {
+                    "snapshots": {
+                        symbol: {
+                            "latestTrade": {
+                                "p": 201.25,
+                                "t": "2026-07-26T14:30:00Z",
+                            },
+                            "dailyBar": {"c": 202.0},
+                            "prevDailyBar": {"c": 200.0},
+                        }
+                        for symbol in (
+                            "AAPL",
+                            "MSFT",
+                            "NVDA",
+                            "AMZN",
+                            "GOOGL",
+                            "META",
+                            "JPM",
+                            "XOM",
+                            "UNH",
+                            "COST",
+                            "CAT",
+                            "NEE",
+                        )
+                    }
+                }
+            )
+        raise AssertionError(f"unexpected provider request: {request.full_url}")
 
     result = provider_snapshot(opener=opener, path=credential_path)
     serialized = json.dumps(result)
 
     assert result["alpaca"]["status"] == "connected"
+    universe = result["alpaca"]["universe"]
+    assert universe["scope"] == (
+        "12 explicitly defined U.S.-listed demonstration equities"
+    )
+    assert universe["total"] == 12
+    assert universe["available"] == 12
+    assert universe["unavailable"] == 0
+    assert universe["whole_market_coverage"] is False
+    assert universe["catalog_access"] == "unavailable_current_credentials"
+    assert len(result["alpaca"]["symbols"]) == 12
     assert result["public"]["status"] == "connected"
     assert result["public"]["accounts"][0]["masked_account_id"] == "•••• 1234"
     assert result["broker_submission_available"] is False

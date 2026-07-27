@@ -9,17 +9,20 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from .universe import US_LISTED_SCREENING_UNIVERSE
+
 MAX_CREDENTIAL_BYTES = 32_768
 MAX_RESPONSE_BYTES = 2_000_000
 TIMEOUT_SECONDS = 10.0
-SYMBOLS = ("AAPL", "MSFT", "NVDA")
+SYMBOLS = tuple(item["symbol"] for item in US_LISTED_SCREENING_UNIVERSE)
 ALLOWED_KEYS = frozenset(
     {
         "SIGIL_ALPACA_API_KEY_ID",
@@ -114,36 +117,137 @@ def _alpaca(credentials: dict[str, str], opener: Callable[[Request, float], obje
     if not key or not secret:
         return {"status": "not_configured", "message": "Local credentials are not configured.", "symbols": []}
     symbols: list[dict[str, str]] = []
+    universe_by_symbol = {
+        item["symbol"]: item for item in US_LISTED_SCREENING_UNIVERSE
+    }
     try:
+        payload = _json_request(
+            "https://data.alpaca.markets/v2/stocks/snapshots"
+            f"?symbols={','.join(SYMBOLS)}&feed=iex",
+            method="GET",
+            headers={
+                "Accept": "application/json",
+                "APCA-API-KEY-ID": key,
+                "APCA-API-SECRET-KEY": secret,
+            },
+            opener=opener,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Alpaca response shape is invalid")
+        snapshots = payload.get("snapshots", payload)
+        if not isinstance(snapshots, dict):
+            raise RuntimeError("Alpaca response shape is invalid")
         for symbol in SYMBOLS:
-            payload = _json_request(
-                f"https://data.alpaca.markets/v2/stocks/{symbol}/bars/latest?feed=iex",
-                method="GET",
-                headers={
-                    "Accept": "application/json",
-                    "APCA-API-KEY-ID": key,
-                    "APCA-API-SECRET-KEY": secret,
-                },
-                opener=opener,
+            snapshot = snapshots.get(symbol)
+            if not isinstance(snapshot, dict):
+                continue
+            trade = snapshot.get("latestTrade")
+            daily = snapshot.get("dailyBar")
+            previous = snapshot.get("prevDailyBar")
+            if not isinstance(trade, dict):
+                continue
+            price = trade.get("p")
+            observed_at = trade.get("t")
+            if isinstance(price, bool) or not isinstance(price, (int, float)):
+                continue
+            daily_close = daily.get("c") if isinstance(daily, dict) else None
+            previous_close = (
+                previous.get("c") if isinstance(previous, dict) else None
             )
-            if not isinstance(payload, dict) or not isinstance(payload.get("bar"), dict):
-                raise RuntimeError("Alpaca response shape is invalid")
-            bar = payload["bar"]
-            close = bar.get("c")
-            observed_at = bar.get("t")
-            if isinstance(close, bool) or not isinstance(close, (int, float)):
-                raise RuntimeError("Alpaca price is invalid")
+            change = None
+            if (
+                isinstance(daily_close, (int, float))
+                and not isinstance(daily_close, bool)
+                and isinstance(previous_close, (int, float))
+                and not isinstance(previous_close, bool)
+                and previous_close != 0
+            ):
+                change = ((float(daily_close) / float(previous_close)) - 1) * 100
             symbols.append(
                 {
                     "symbol": symbol,
-                    "price": f"{float(close):.2f}",
+                    "name": str(universe_by_symbol[symbol]["name"]),
+                    "sector": str(universe_by_symbol[symbol]["sector"]),
+                    "price": f"{float(price):.2f}",
                     "observed_at": str(observed_at or "unavailable"),
-                    "source": "Alpaca IEX latest bar",
+                    "daily_change_percent": (
+                        f"{change:.2f}" if change is not None else "unavailable"
+                    ),
+                    "screen_status": (
+                        "available" if change is not None else "quote-only"
+                    ),
+                    "source": "Alpaca IEX snapshot",
                 }
             )
-        return {"status": "connected", "message": "Read-only market data is current.", "symbols": symbols}
+        symbols.sort(
+            key=lambda item: (
+                item["daily_change_percent"] == "unavailable",
+                -float(item["daily_change_percent"])
+                if item["daily_change_percent"] != "unavailable"
+                else 0,
+                item["symbol"],
+            )
+        )
+        available = len(symbols)
+        status = "connected" if available == len(SYMBOLS) else "degraded"
+        return {
+            "status": status,
+            "message": (
+                "Bounded U.S.-listed screen refreshed from read-only IEX snapshots."
+                if available
+                else "No current screening rows were available."
+            ),
+            "symbols": symbols,
+            "universe": {
+                "scope": "12 explicitly defined U.S.-listed demonstration equities",
+                "total": len(SYMBOLS),
+                "available": available,
+                "unavailable": len(SYMBOLS) - available,
+                "catalog_source": "Sigil bounded demonstration universe",
+                "catalog_freshness": "Static local definition; provider catalog unverified",
+                "iex_status": "real-time",
+                "broader_us_status": "15-minute delayed historical data available; catalog unverified",
+                "criteria": "Latest IEX quote availability; ranked by daily close change when available",
+                "whole_market_coverage": False,
+                "catalog_access": "unavailable_current_credentials",
+                "coverage_limitation": (
+                    "Current Alpaca credentials authorize IEX market data but "
+                    "not the Alpaca trading asset catalog; full U.S. listing "
+                    "enumeration is unavailable."
+                ),
+                "refresh_policy": (
+                    "One batched read-only snapshot request every 30 seconds; "
+                    "errors retain explicit unavailable coverage."
+                ),
+            },
+        }
     except RuntimeError as error:
-        return {"status": "degraded", "message": str(error), "symbols": symbols}
+        return {
+            "status": "degraded",
+            "message": str(error),
+            "symbols": symbols,
+            "universe": {
+                "scope": "12 explicitly defined U.S.-listed demonstration equities",
+                "total": len(SYMBOLS),
+                "available": len(symbols),
+                "unavailable": len(SYMBOLS) - len(symbols),
+                "catalog_source": "Sigil bounded demonstration universe",
+                "catalog_freshness": "Static local definition; provider catalog unverified",
+                "iex_status": "real-time when provider is available",
+                "broader_us_status": "15-minute delayed historical data available; catalog unverified",
+                "criteria": "Provider data unavailable; no values invented",
+                "whole_market_coverage": False,
+                "catalog_access": "unavailable_current_credentials",
+                "coverage_limitation": (
+                    "Current Alpaca credentials do not expose an enumerable "
+                    "full U.S. asset catalog."
+                ),
+                "refresh_policy": (
+                    "One batched read-only snapshot request every 30 seconds; "
+                    "no automatic mutation or broker fallback."
+                ),
+            },
+        }
 
 
 def _account_id(account: object) -> str | None:

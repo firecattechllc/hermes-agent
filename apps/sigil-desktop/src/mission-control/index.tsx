@@ -31,11 +31,12 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const SECTIONS = ['overview', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
+const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
 
 const SECTION_LABELS: Record<Section, string> = {
   overview: 'Overview',
+  portfolio: 'Portfolio',
   proposals: 'Proposals',
   launch: 'Launch',
   executions: 'Executions',
@@ -324,7 +325,7 @@ function LaunchControl({
           ['Certification', snapshot.certificationStatus],
           ['Launch state', snapshot.launchState],
           ['Maximum launch notional', snapshot.maximumLaunchNotional],
-          ['$25 first-launch limit', snapshot.firstLaunchLimit]
+          ['Paper sizing policy', snapshot.firstLaunchLimit]
         ].map(([label, value]) => (
           <dl className="bg-(--ui-bg-primary) p-3" key={label}>
             <dt className="text-[0.625rem] uppercase tracking-[0.1em] text-(--ui-text-tertiary)">{label}</dt>
@@ -358,7 +359,7 @@ function LaunchControl({
         </Button>
       </div>
       <p className="mt-3 text-[0.6875rem] text-(--ui-text-tertiary)">
-        Capital limits are view-only. This interface cannot increase the $25 first-launch maximum.
+        Paper sizing is dynamic and portfolio-bounded. No live capital limit or broker execution control exists.
       </p>
     </div>
   )
@@ -374,7 +375,7 @@ function ExecutionTable({ snapshot }: { snapshot: SigilSnapshot }) {
       <table className="w-full min-w-[48rem] text-left text-xs">
         <thead className="text-[0.625rem] uppercase tracking-[0.1em] text-(--ui-text-tertiary)">
           <tr>
-            {['Receipt', 'Order', 'Symbol', 'Broker status', 'Duplicate prevention', 'Reconciliation'].map(label => (
+            {['Time', 'Side', 'Symbol', 'Quantity', 'Simulated price', 'Notional', 'Status', 'Reconciliation'].map(label => (
               <th className="border-b border-(--ui-stroke-tertiary) px-3 py-2 font-medium" key={label}>
                 {label}
               </th>
@@ -384,26 +385,203 @@ function ExecutionTable({ snapshot }: { snapshot: SigilSnapshot }) {
         <tbody>
           {snapshot.receipts.map(receipt => (
             <tr className="border-b border-(--ui-stroke-tertiary) last:border-b-0" key={receipt.id}>
-              <td className="px-3 py-3 font-mono text-[0.6875rem]">{receipt.id}</td>
-              <td className="px-3 py-3 font-mono text-[0.6875rem] text-(--ui-text-tertiary)">{receipt.orderId}</td>
+              <td className="px-3 py-3 font-mono text-[0.6875rem]">
+                <span className="block">{receipt.timestamp}</span>
+                <span className="mt-1 block text-[0.625rem] text-(--ui-text-quaternary)">{receipt.id}</span>
+              </td>
+              <td className="px-3 py-3">
+                <StatusLabel tone={receipt.side === 'BUY' ? 'info' : 'warning'}>{receipt.side}</StatusLabel>
+              </td>
               <td className="px-3 py-3 font-semibold">{receipt.symbol}</td>
+              <td className="px-3 py-3 font-mono">{receipt.quantity}</td>
+              <td className="px-3 py-3 font-mono">{receipt.price}</td>
+              <td className="px-3 py-3 font-mono">{receipt.notional}</td>
               <td className="px-3 py-3">
                 <StatusLabel tone={receipt.state === 'simulated' ? 'muted' : 'danger'}>
                   {receipt.brokerStatus}
                 </StatusLabel>
               </td>
-              <td className="px-3 py-3 text-(--ui-text-secondary)">{receipt.duplicatePrevention}</td>
               <td className="px-3 py-3">
                 {receipt.reconciliationRequired ? (
                   <StatusLabel tone="danger">Required</StatusLabel>
                 ) : (
                   <StatusLabel tone="success">Clear</StatusLabel>
                 )}
+                {receipt.reconciliationReference ? (
+                  <span className="mt-1 block font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+                    {receipt.reconciliationReference}
+                  </span>
+                ) : null}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function PaperPortfolio({
+  onOpenAudit,
+  snapshot
+}: {
+  onOpenAudit: () => void
+  snapshot: SigilSnapshot
+}) {
+  const [activityQuery, setActivityQuery] = useState('')
+  const [activitySide, setActivitySide] = useState<'ALL' | 'BUY' | 'SELL'>('ALL')
+
+  const activities = snapshot.receipts.filter(receipt => {
+    const sideMatches = activitySide === 'ALL' || receipt.side === activitySide
+
+    const queryMatches = [receipt.symbol, receipt.orderId, receipt.proposalId]
+      .join(' ')
+      .toLowerCase()
+      .includes(activityQuery.trim().toLowerCase())
+
+    return sideMatches && queryMatches
+  })
+
+  return (
+    <div className={cn('py-5', PAGE_INSET_X)} data-testid="paper-portfolio">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold">Paper portfolio and activity</h2>
+            <StatusLabel tone="info">PAPER</StatusLabel>
+            <StatusLabel tone="muted">SIMULATED</StatusLabel>
+          </div>
+          <p className="mt-1 text-xs text-(--ui-text-tertiary)">
+            Local accounting only · providers remain read-only · every fill links to immutable evidence
+          </p>
+        </div>
+        <Button onClick={onOpenAudit} size="xs" variant="outline">
+          Inspect all audit evidence
+        </Button>
+      </div>
+
+      <dl className="mt-4 grid gap-px border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) sm:grid-cols-2 xl:grid-cols-6">
+        {[
+          ['Cash', snapshot.cash],
+          ['Buying power', snapshot.buyingPower ?? snapshot.cash],
+          ['Holdings value', snapshot.portfolioValue],
+          ['Total account value', snapshot.totalAccountValue ?? snapshot.portfolioValue],
+          ['Unrealized P&L', snapshot.unrealizedPnl ?? '$0.00'],
+          ['Realized P&L', snapshot.realizedPnl ?? '$0.00']
+        ].map(([label, value]) => (
+          <div className="bg-(--ui-bg-secondary) px-3 py-3" key={label}>
+            <dt className="text-[0.625rem] uppercase tracking-[0.1em] text-(--ui-text-tertiary)">{label}</dt>
+            <dd className="mt-1 font-mono text-sm font-semibold">{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <section aria-labelledby="paper-holdings-title" className="mt-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" id="paper-holdings-title">
+              Current simulated holdings
+            </h3>
+            <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+              Quantity, cost, allocation, and P&L refresh with the local five-second snapshot.
+            </p>
+          </div>
+          <span className="font-mono text-[0.625rem] text-(--ui-text-tertiary)">
+            {snapshot.positions?.length ?? 0} paper positions
+          </span>
+        </div>
+        {snapshot.positions?.length ? (
+          <div className="overflow-x-auto border border-(--ui-stroke-tertiary)">
+            <table className="w-full min-w-[62rem] text-left text-xs">
+              <thead className="bg-(--ui-bg-secondary) text-[0.625rem] uppercase tracking-[0.1em] text-(--ui-text-tertiary)">
+                <tr>
+                  {['Symbol', 'Quantity', 'Average cost', 'Market value', 'Allocation', 'Unrealized P&L', 'Realized P&L', 'Evidence'].map(label => (
+                    <th className="border-b border-(--ui-stroke-tertiary) px-3 py-2 font-medium" key={label}>{label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {snapshot.positions.map(position => (
+                  <tr className="border-b border-(--ui-stroke-tertiary) last:border-b-0" key={position.symbol}>
+                    <td className="px-3 py-3 font-mono font-semibold">{position.symbol}</td>
+                    <td className="px-3 py-3 font-mono">{position.quantity}</td>
+                    <td className="px-3 py-3 font-mono">{position.averageCost}</td>
+                    <td className="px-3 py-3 font-mono">{position.marketValue}</td>
+                    <td className="px-3 py-3 font-mono">{position.allocation}</td>
+                    <td className="px-3 py-3 font-mono">{position.unrealizedPnl}</td>
+                    <td className="px-3 py-3 font-mono">{position.realizedPnl}</td>
+                    <td className="px-3 py-3">
+                      <button className="font-mono text-[0.6875rem] text-primary hover:underline" onClick={onOpenAudit} type="button">
+                        {position.auditReferences[0] ?? 'Inspect audit'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState description="The local paper ledger has no open simulated positions." title="No paper holdings" />
+        )}
+      </section>
+
+      <section aria-labelledby="paper-activity-title" className="mt-6">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" id="paper-activity-title">
+              Simulated buy and sell activity
+            </h3>
+            <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+              Most recent fills first · no broker submission path
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchField
+              aria-label="Filter paper activity"
+              onChange={setActivityQuery}
+              placeholder="Filter symbol or order"
+              value={activityQuery}
+            />
+            {(['ALL', 'BUY', 'SELL'] as const).map(side => (
+              <Button
+                key={side}
+                onClick={() => setActivitySide(side)}
+                size="xs"
+                variant={activitySide === side ? 'secondary' : 'outline'}
+              >
+                {side}
+              </Button>
+            ))}
+          </div>
+        </div>
+        {activities.length ? (
+          <div className="divide-y divide-(--ui-stroke-tertiary) border-y border-(--ui-stroke-tertiary)">
+            {activities.map(receipt => (
+              <article className="grid gap-3 py-3 md:grid-cols-[1.2fr_.5fr_.5fr_.7fr_.7fr_1fr]" key={receipt.id}>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-semibold">{receipt.symbol}</span>
+                    <StatusLabel tone={receipt.side === 'BUY' ? 'info' : 'warning'}>{receipt.side}</StatusLabel>
+                    <StatusLabel tone="muted">SIMULATED</StatusLabel>
+                  </div>
+                  <p className="mt-1 font-mono text-[0.625rem] text-(--ui-text-tertiary)">
+                    {receipt.timestamp}
+                  </p>
+                </div>
+                <div><span className="text-(--ui-text-tertiary)">Qty</span><strong className="mt-1 block font-mono">{receipt.quantity}</strong></div>
+                <div><span className="text-(--ui-text-tertiary)">Price</span><strong className="mt-1 block font-mono">{receipt.price}</strong></div>
+                <div><span className="text-(--ui-text-tertiary)">Notional</span><strong className="mt-1 block font-mono">{receipt.notional}</strong></div>
+                <div><span className="text-(--ui-text-tertiary)">Status</span><strong className="mt-1 block font-mono">{receipt.brokerStatus}</strong></div>
+                <button className="text-left font-mono text-[0.6875rem] text-primary hover:underline" onClick={onOpenAudit} type="button">
+                  {receipt.reconciliationReference}
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState description="Start authorized paper automation or clear the activity filters." title="No matching paper fills" />
+        )}
+      </section>
     </div>
   )
 }
@@ -529,8 +707,31 @@ function ProviderPanel({
           <div className="bg-(--ui-bg-primary) py-4 lg:pr-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="text-xs font-semibold">Market watch</h3>
+                <h3 className="text-xs font-semibold">U.S.-listed paper screening universe</h3>
                 <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">{snapshot.alpaca.message}</p>
+                {snapshot.alpaca.universe ? (
+                  <>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <StatusLabel tone="success">
+                        Alpaca IEX · {snapshot.alpaca.universe.iex_status ?? 'real-time'}
+                      </StatusLabel>
+                      <StatusLabel tone="warning">
+                        Broader U.S. data · {snapshot.alpaca.universe.broader_us_status ?? '15-minute delayed'}
+                      </StatusLabel>
+                    </div>
+                    <p className="mt-1 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+                      Coverage {snapshot.alpaca.universe.available}/{snapshot.alpaca.universe.total} symbols · source: {snapshot.alpaca.universe.catalog_source ?? snapshot.alpaca.universe.scope} · freshness: {snapshot.alpaca.universe.catalog_freshness ?? 'unverified'}
+                    </p>
+                    <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+                      IEX quotes are real-time. Broader U.S. historical data is delayed by 15 minutes. Every active U.S. stock is not claimed as watched because provider asset-catalog access is not verified.
+                    </p>
+                    {snapshot.alpaca.universe.coverage_limitation ? (
+                      <p className="mt-1 max-w-3xl text-[0.6875rem] text-amber-700 dark:text-amber-300">
+                        Coverage boundary: {snapshot.alpaca.universe.coverage_limitation}
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
               </div>
               <button
                 className="font-mono text-[0.6875rem] text-primary hover:underline"
@@ -552,11 +753,21 @@ function ProviderPanel({
                 {symbols.map(item => (
                   <details className="group py-2.5" key={item.symbol}>
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
-                      <span className="font-mono text-xs font-semibold">{item.symbol}</span>
-                      <span className="font-mono text-sm">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(item.price))}</span>
+                      <span>
+                        <span className="font-mono text-xs font-semibold">{item.symbol}</span>
+                        {item.name ? <span className="ml-2 text-[0.6875rem] text-(--ui-text-tertiary)">{item.name}</span> : null}
+                      </span>
+                      <span className="flex items-center gap-3">
+                        {item.daily_change_percent ? (
+                          <span className="font-mono text-[0.6875rem] text-(--ui-text-tertiary)">
+                            {item.daily_change_percent === 'unavailable' ? 'change unavailable' : `${Number(item.daily_change_percent) >= 0 ? '+' : ''}${item.daily_change_percent}%`}
+                          </span>
+                        ) : null}
+                        <span className="font-mono text-sm">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(item.price))}</span>
+                      </span>
                     </summary>
                     <p className="mt-2 text-[0.6875rem] text-(--ui-text-tertiary)">
-                      {item.source} · observed {item.observed_at}
+                      {item.sector ? `${item.sector} · ` : ''}{item.source} · {item.screen_status ?? 'available'} · observed {item.observed_at}
                     </p>
                   </details>
                 ))}
@@ -620,6 +831,15 @@ type ProviderResponse =
 interface MissionControlDesktopApi {
   getRuntimeSnapshot?: () => Promise<unknown>
   getProviderSnapshot?: () => Promise<ProviderResponse>
+  buildInfo?: {
+    version: string
+    build: string
+    commit: string
+    buildTime: string
+    channel: 'dev' | 'release'
+    applicationMode: 'Live development' | 'Packaged release'
+  }
+  checkForUpdates?: () => Promise<{ status: string; message: string }>
 }
 
 function desktopApi(): MissionControlDesktopApi | undefined {
@@ -656,7 +876,13 @@ export function SigilOperatorView({
   const [providerLoading, setProviderLoading] = useState(false)
   const [providerError, setProviderError] = useState<string | null>(null)
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
+  const [pendingAuthorizationAction, setPendingAuthorizationAction] = useState<'grant' | 'revoke' | null>(null)
+  const [pendingPaperReset, setPendingPaperReset] = useState(false)
+  const [controlError, setControlError] = useState<string | null>(null)
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null)
   const liveRuntime = typeof adapter.controlPaperCycle === 'function'
+  const liveAuthorization = typeof adapter.controlPaperAuthorization === 'function'
 
   const refreshProviders = useCallback((): void => {
     const providerApi = desktopApi()?.getProviderSnapshot
@@ -865,6 +1091,16 @@ export function SigilOperatorView({
               HEALTH · {snapshot.systemHealth === 'Governance healthy' ? '99.8%' : snapshot.systemHealth}
             </span>
             <StatusLabel tone="success">{snapshot.certificationStatus}</StatusLabel>
+            {desktopApi()?.buildInfo ? (
+              <button
+                className="font-mono text-[0.625rem] text-(--ui-text-tertiary) hover:text-primary"
+                data-sigil-build-badge
+                onClick={() => setAboutOpen(true)}
+                type="button"
+              >
+                BUILD {desktopApi()?.buildInfo?.build}
+              </button>
+            ) : null}
             <Button onClick={() => setReloadGeneration(value => value + 1)} size="xs" variant="outline">
               <Codicon name="refresh" />
               Refresh runtime
@@ -873,6 +1109,42 @@ export function SigilOperatorView({
         </div>
       </header>
       <DataNotice snapshot={snapshot} />
+      {liveAuthorization ? (
+        <div
+          className={cn(
+            'flex flex-wrap items-center justify-between gap-3 border-b py-2',
+            snapshot.paperAuthorization?.status === 'active'
+              ? 'border-emerald-500/30 bg-emerald-500/8'
+              : 'border-amber-500/30 bg-amber-500/8',
+            PAGE_INSET_X
+          )}
+          data-testid="paper-authorization"
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <StatusLabel tone={snapshot.paperAuthorization?.status === 'active' ? 'success' : 'warning'}>
+              Paper month {snapshot.paperAuthorization?.authorizationMonth ?? 'unavailable'} · {snapshot.paperAuthorization?.status ?? 'required'}
+            </StatusLabel>
+            <span className="text-xs text-(--ui-text-secondary)">
+              {snapshot.paperAuthorization?.status === 'active'
+                ? `This calendar month started automatically authorized for local simulated buys and sells; expires ${snapshot.paperAuthorization.expiresAt}`
+                : 'Revoked for this calendar month. Automatic paper approval and execution remain denied until next month.'}
+            </span>
+            <span className="font-mono text-[0.625rem] text-(--ui-text-tertiary)">
+              {snapshot.paperAuthorization?.authorizationId ?? 'No active authorization'}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              disabled={snapshot.paperAuthorization?.status !== 'active'}
+              onClick={() => setPendingAuthorizationAction('revoke')}
+              size="xs"
+              variant="outline"
+            >
+              Revoke
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {liveRuntime ? (
         <div className={cn('flex flex-wrap items-center justify-between gap-3 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) py-2', PAGE_INSET_X)}>
           <div className="flex items-center gap-3 text-xs">
@@ -886,9 +1158,15 @@ export function SigilOperatorView({
           <div className="flex gap-2">
             {(['start', 'pause', 'stop'] as const).map(action => (
               <Button
+                className={cn(
+                  action === 'start' &&
+                    snapshot.automationState === 'running' &&
+                    'border-emerald-400 bg-emerald-500 text-white opacity-100 shadow-[0_0_0_1px_rgba(52,211,153,.25)]'
+                )}
                 disabled={
                   action === 'start'
-                    ? snapshot.automationState === 'running'
+                    ? snapshot.automationState === 'running' ||
+                      snapshot.paperAuthorization?.status !== 'active'
                     : action === 'pause'
                       ? snapshot.automationState !== 'running'
                       : snapshot.automationState === 'stopped'
@@ -896,12 +1174,23 @@ export function SigilOperatorView({
                 key={action}
                 onClick={() => setPendingCycleAction(action)}
                 size="xs"
-                variant={action === 'stop' ? 'destructive' : 'outline'}
+                variant={
+                  action === 'stop'
+                    ? 'destructive'
+                    : action === 'start' && snapshot.automationState === 'running'
+                      ? 'default'
+                      : 'outline'
+                }
               >
-                {action[0]?.toUpperCase()}{action.slice(1)}
+                {action === 'start' && snapshot.automationState === 'running' ? '● Running' : `${action[0]?.toUpperCase()}${action.slice(1)}`}
               </Button>
             ))}
           </div>
+        </div>
+      ) : null}
+      {controlError ? (
+        <div className={cn('border-b border-destructive/30 bg-destructive/8 py-2 text-xs text-destructive', PAGE_INSET_X)} role="alert">
+          Paper control denied safely: {controlError}
         </div>
       ) : null}
       <nav
@@ -1028,6 +1317,9 @@ export function SigilOperatorView({
             )}
           </div>
         ) : null}
+        {section === 'portfolio' ? (
+          <PaperPortfolio onOpenAudit={() => setSection('audit')} snapshot={snapshot} />
+        ) : null}
         {section === 'launch' ? (
           <div className={cn('py-5', PAGE_INSET_X)}>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1083,7 +1375,7 @@ export function SigilOperatorView({
                     ? 'Governed Python bridge'
                     : 'Local safety fallback'
                 ],
-                ['First-launch cap', snapshot.firstLaunchLimit],
+                ['Paper sizing policy', snapshot.firstLaunchLimit],
                 ['Account display', 'Masked identifiers only']
               ].map(([label, value]) => (
                 <div className="flex justify-between gap-6 py-3" key={label}>
@@ -1096,6 +1388,22 @@ export function SigilOperatorView({
               Provider credentials stay in the local backend. Provider access is read-only; live submission and
               capital-limit controls are not available in this product.
             </p>
+            {adapter.resetPaperRuntime ? (
+              <section className="mt-6 max-w-3xl border border-destructive/30 bg-destructive/5 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.08em]">Local paper ledger reset</h3>
+                    <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+                      Clears only simulated holdings, proposals, and fills after writing hash-chained reset evidence.
+                      Settings, credentials, and provider access are preserved.
+                    </p>
+                  </div>
+                  <Button onClick={() => setPendingPaperReset(true)} size="sm" variant="destructive">
+                    Reset local paper portfolio
+                  </Button>
+                </div>
+              </section>
+            ) : null}
 
             <section
               aria-labelledby="hermes-intelligence-title"
@@ -1210,7 +1518,12 @@ export function SigilOperatorView({
         onClose={() => setPendingCycleAction(null)}
         onConfirm={async () => {
           if (pendingCycleAction && adapter.controlPaperCycle) {
-            setSnapshot(await adapter.controlPaperCycle(pendingCycleAction))
+            try {
+              setControlError(null)
+              setSnapshot(await adapter.controlPaperCycle(pendingCycleAction))
+            } catch (reason) {
+              setControlError(reason instanceof Error ? reason.message : String(reason))
+            }
           }
 
           setPendingCycleAction(null)
@@ -1218,6 +1531,99 @@ export function SigilOperatorView({
         open={Boolean(pendingCycleAction)}
         title={pendingCycleAction ? `Confirm paper automation ${pendingCycleAction}` : undefined}
       />
+      <ConfirmDialog
+        confirmLabel={pendingAuthorizationAction === 'grant' ? 'Authorize paper automation' : 'Revoke authorization'}
+        description={
+          pendingAuthorizationAction === 'grant'
+            ? 'Authorize automatic approval and simulated buys and sells for 30 days in this local paper ledger? Dynamic paper sizing, audit evidence, and oversell prevention remain enforced. No broker or provider mutation is possible.'
+            : pendingAuthorizationAction === 'revoke'
+              ? 'Revoke the local monthly paper authorization now? Running automation will pause and further automatic approvals and simulated fills will be denied.'
+              : undefined
+        }
+        destructive={pendingAuthorizationAction === 'revoke'}
+        onClose={() => setPendingAuthorizationAction(null)}
+        onConfirm={async () => {
+          if (pendingAuthorizationAction && adapter.controlPaperAuthorization) {
+            try {
+              setControlError(null)
+              setSnapshot(await adapter.controlPaperAuthorization(pendingAuthorizationAction))
+            } catch (reason) {
+              setControlError(reason instanceof Error ? reason.message : String(reason))
+            }
+          }
+
+          setPendingAuthorizationAction(null)
+        }}
+        open={Boolean(pendingAuthorizationAction)}
+        title={pendingAuthorizationAction === 'grant' ? 'Confirm monthly paper authorization' : 'Confirm authorization revocation'}
+      />
+      <ConfirmDialog
+        confirmLabel="Reset empty paper ledger"
+        description="This records a hash-chained reset receipt, then clears only the local simulated cash ledger history, holdings, proposals, and fills. Application settings, local provider credentials, source files, and all broker restrictions remain unchanged."
+        destructive
+        onClose={() => setPendingPaperReset(false)}
+        onConfirm={async () => {
+          if (adapter.resetPaperRuntime) {
+            try {
+              setControlError(null)
+              setSnapshot(await adapter.resetPaperRuntime())
+              setSection('portfolio')
+            } catch (reason) {
+              setControlError(reason instanceof Error ? reason.message : String(reason))
+            }
+          }
+
+          setPendingPaperReset(false)
+        }}
+        open={pendingPaperReset}
+        title="Confirm local paper portfolio reset"
+      />
+      {aboutOpen && desktopApi()?.buildInfo ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+          data-sigil-about-overlay
+          style={{ display: 'flex' }}
+        >
+          <section className="w-full max-w-lg border border-(--ui-stroke-secondary) bg-(--ui-bg-primary) shadow-2xl">
+            <div className="flex items-center justify-between border-b border-(--ui-stroke-tertiary) px-5 py-4">
+              <div>
+                <h2 className="text-sm font-semibold">About Sigil</h2>
+                <p className="mt-1 text-xs text-(--ui-text-tertiary)">Verified local release identity</p>
+              </div>
+              <Button aria-label="Close About Sigil" onClick={() => setAboutOpen(false)} size="xs" variant="outline">
+                Close
+              </Button>
+            </div>
+            <dl className="grid grid-cols-2 gap-px bg-(--ui-stroke-tertiary)">
+              {[
+                ['VERSION', desktopApi()?.buildInfo?.version],
+                ['CHANNEL', desktopApi()?.buildInfo?.channel.toUpperCase()],
+                ['BUILD ID', desktopApi()?.buildInfo?.build],
+                ['COMMIT', desktopApi()?.buildInfo?.commit],
+                ['BUILD TIME', desktopApi()?.buildInfo?.buildTime],
+                ['APPLICATION MODE', desktopApi()?.buildInfo?.applicationMode]
+              ].map(([label, value]) => (
+                <div className="bg-(--ui-bg-secondary) px-4 py-3" key={label}>
+                  <dt className="text-[0.625rem] tracking-[0.1em] text-(--ui-text-tertiary)">{label}</dt>
+                  <dd className="mt-1 break-all font-mono text-xs">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="px-5 py-4">
+              <Button
+                onClick={() => {
+                  void desktopApi()?.checkForUpdates?.().then(result => setUpdateMessage(result.message))
+                }}
+                size="sm"
+                variant="outline"
+              >
+                Check for Updates
+              </Button>
+              {updateMessage ? <p className="mt-3 text-xs text-(--ui-text-tertiary)">{updateMessage}</p> : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   )
 }

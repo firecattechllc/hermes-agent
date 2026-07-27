@@ -8,9 +8,8 @@ market snapshot supplied by its caller.
 from __future__ import annotations
 
 from copy import deepcopy
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
-
 
 MONEY = Decimal("0.01")
 VALID_SIDES = frozenset({"BUY", "SELL"})
@@ -57,7 +56,7 @@ def initialize_execution_state(state: dict[str, Any]) -> None:
     for position in state.setdefault("positions", []):
         quantity = number(position.get("quantity", "0"), "position quantity")
         market_value = number(position.get("market_value", "0"), "position market value")
-        average_cost = market_value / quantity if quantity else Decimal("0")
+        average_cost = market_value / quantity if quantity else Decimal(0)
         position.setdefault("average_cost", str(average_cost))
         position.setdefault("market_value", money(market_value))
         position.setdefault("unrealized_pnl", "0.00")
@@ -92,7 +91,42 @@ def submit(state: dict[str, Any], request: dict[str, Any], *, timestamp: str) ->
     if order_type == "STOP" and stop_price is None:
         raise ValueError("stop orders require stop_price")
     reserve_price = number(limit_price if limit_price is not None else request.get("reference_price"), "reference_price", positive=True)
-    reserve = quantity * reserve_price if side == "BUY" else Decimal("0")
+    reserve = quantity * reserve_price if side == "BUY" else Decimal(0)
+    if side == "SELL":
+        position = next(
+            (item for item in state["positions"] if item["symbol"] == symbol),
+            None,
+        )
+        held = Decimal(position["quantity"]) if position is not None else Decimal(0)
+        open_sell_quantity = sum(
+            Decimal(existing["remaining_quantity"])
+            for existing in state["orders"].values()
+            if existing.get("symbol") == symbol
+            and existing.get("side") == "SELL"
+            and existing.get("status") in {"open", "partially_filled"}
+        )
+        if quantity > held - open_sell_quantity:
+            order = {
+                "id": order_id,
+                "symbol": symbol,
+                "side": side,
+                "order_type": order_type,
+                "quantity": str(quantity),
+                "filled_quantity": "0",
+                "status": "rejected",
+                "reason": "insufficient_position_quantity",
+                "created_at": timestamp,
+            }
+            state["orders"][order_id] = order
+            state["rejected_orders"].insert(0, order_id)
+            audit(
+                state,
+                timestamp=timestamp,
+                event="order_rejected",
+                order_id=order_id,
+                details={"reason": order["reason"]},
+            )
+            return deepcopy(order)
     if reserve > Decimal(state["balances"]["buying_power"]):
         order = {"id": order_id, "symbol": symbol, "side": side, "order_type": order_type, "quantity": str(quantity), "filled_quantity": "0", "status": "rejected", "reason": "insufficient_buying_power", "created_at": timestamp}
         state["orders"][order_id] = order
@@ -180,8 +214,8 @@ def cancel(state: dict[str, Any], order_id: str, *, timestamp: str) -> dict[str,
 
 
 def recalculate(state: dict[str, Any], snapshot: dict[str, Any]) -> None:
-    market_value = Decimal("0")
-    unrealized = Decimal("0")
+    market_value = Decimal(0)
+    unrealized = Decimal(0)
     for position in state["positions"]:
         quantity = Decimal(position["quantity"])
         price = number(snapshot.get(position["symbol"], position.get("average_cost")), "market snapshot price", positive=True)

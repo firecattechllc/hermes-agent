@@ -1,0 +1,307 @@
+{
+  "schema_version": 1,
+  "application": "Sigil",
+  "status_values": ["PASS", "PARTIAL", "FAIL", "BLOCKED", "NOT_TESTED"],
+  "features": [
+    {
+      "id": "shell.navigation",
+      "name": "Standalone Sigil navigation",
+      "description": "The standalone Sigil shell exposes only the implemented product destinations.",
+      "criticality": "critical",
+      "source_files": ["src/mission-control/index.tsx", "src/main.tsx"],
+      "expected_user_behavior": "Overview, Portfolio, Proposals, Launch, Executions, Reconciliation, Audit, and Settings open without navigation errors.",
+      "automated_test_references": ["src/mission-control/standalone.test.tsx", "scripts/release-guardian.test.mjs"],
+      "development_build_test_method": "Open every visible destination through the Electron development build and assert its expected heading.",
+      "packaged_build_test_method": "Open every visible destination in /Applications/Sigil.app through loopback CDP and assert its expected heading.",
+      "required_backend_or_dependency": "React renderer; no broker or backend connection required.",
+      "safe_fallback_behavior": "Navigation remains available with stale data and a disconnected backend.",
+      "prohibited_side_effects": ["trade", "order submission", "proposal approval", "fund transfer", "wallet mutation"],
+      "current_certification_status": "NOT_TESTED",
+      "ui": {
+        "navigation_label": "Portfolio",
+        "expected_heading": "Paper portfolio and activity",
+        "controls": ["Overview", "Portfolio", "Proposals", "Launch", "Executions", "Reconciliation", "Audit", "Settings"]
+      }
+    },
+    {
+      "id": "overview.governance-state",
+      "name": "Governance overview",
+      "description": "The overview displays governance stages, masked account state, paper metrics, and pending proposal context.",
+      "criticality": "critical",
+      "source_files": ["src/mission-control/index.tsx", "src/mission-control/mock-adapter.ts"],
+      "expected_user_behavior": "The user sees paper and simulation state, masked identity, fixed launch cap, governance stages, and unavailable broker submission.",
+      "automated_test_references": ["src/mission-control/standalone.test.tsx"],
+      "development_build_test_method": "Assert the overview safety labels and governance pipeline in the development Electron DOM.",
+      "packaged_build_test_method": "Assert the same labels and pipeline in the installed Electron DOM.",
+      "required_backend_or_dependency": "Local mock snapshot.",
+      "safe_fallback_behavior": "Stale or disconnected state is visibly identified while the rest of the overview remains usable.",
+      "prohibited_side_effects": ["unmask account identifiers", "connect broker", "increase capital limit"],
+      "current_certification_status": "NOT_TESTED",
+      "ui": {
+        "navigation_label": "Overview",
+        "expected_heading": "Governance pipeline",
+        "controls": ["MSFT", "NVDA"]
+      }
+    },
+    {
+      "id": "state.stale-and-disconnected",
+      "name": "Stale and disconnected state disclosure",
+      "description": "Stale data and broker disconnection are explicitly surfaced without enabling execution.",
+      "criticality": "critical",
+      "source_files": ["src/mission-control/index.tsx", "src/mission-control/mock-adapter.ts"],
+      "expected_user_behavior": "A stale snapshot warning, disconnected status, and broker-unavailable explanation remain visible.",
+      "automated_test_references": ["src/mission-control/standalone.test.tsx"],
+      "development_build_test_method": "Inspect status text in the development renderer.",
+      "packaged_build_test_method": "Inspect status text in the installed renderer.",
+      "required_backend_or_dependency": "No live backend required.",
+      "safe_fallback_behavior": "The UI stays usable in read-only paper simulation mode.",
+      "prohibited_side_effects": ["silent live-data substitution", "unauthorized fallback execution"],
+      "current_certification_status": "NOT_TESTED"
+    },
+    {
+      "id": "proposals.review-and-selection",
+      "name": "Proposal review and selection",
+      "description": "Users can inspect proposal metadata, evidence, risk results, and contextual details.",
+      "criticality": "important",
+      "source_files": ["src/mission-control/index.tsx", "src/mission-control/mock-adapter.ts"],
+      "expected_user_behavior": "Selecting a proposal updates the contextual inspector without changing proposal status.",
+      "automated_test_references": ["src/mission-control/standalone.test.tsx"],
+      "development_build_test_method": "Select the second pending proposal and verify its contextual metadata.",
+      "packaged_build_test_method": "Repeat selection and metadata verification in the installed app.",
+      "required_backend_or_dependency": "Local mock snapshot.",
+      "safe_fallback_behavior": "Proposal review remains read-only when the backend is disconnected.",
+      "prohibited_side_effects": ["approve proposal", "reject proposal", "submit proposal"],
+      "current_certification_status": "NOT_TESTED",
+      "ui": {
+        "navigation_label": "Proposals",
+        "expected_heading": "Proposals and approvals",
+        "controls": ["Enable simulated operator actions", "Reject", "Approve"]
+      }
+    },
+    {
+      "id": "proposals.simulated-action-guard",
+      "name": "Simulated operator action guard",
+      "description": "Proposal decisions are disabled by default and require an explicit local-simulation enablement plus confirmation.",
+      "criticality": "critical",
+      "source_files": ["src/mission-control/index.tsx", "src/mission-control/types.ts", "src/mission-control/mock-adapter.ts"],
+      "expected_user_behavior": "Approve and Reject remain disabled until simulation actions are enabled; opening a confirmation never submits a broker order.",
+      "automated_test_references": ["src/mission-control/standalone.test.tsx", "electron/main.test.ts", "scripts/release-guardian.test.mjs"],
+      "development_build_test_method": "Verify ordinary controls are disabled, then use the token-gated disposable fixture to cancel, approve, and reject synthetic proposals through renderer-to-main IPC and inspect zero side-effect counters.",
+      "packaged_build_test_method": "Repeat the isolated IPC fixture transitions in the exact installed application and prove the fixture is absent without the per-run token.",
+      "required_backend_or_dependency": "Disposable in-memory certification fixture only; no production adapter or financial backend.",
+      "safe_fallback_behavior": "Controls stay disabled and proposal status remains unchanged.",
+      "prohibited_side_effects": ["production proposal mutation", "broker submission", "wallet mutation", "transfer", "order", "trade", "spending", "external network", "persistent financial mutation", "real credential use"],
+      "current_certification_status": "NOT_TESTED",
+      "ipc_channels": ["sigil:release-certification"],
+      "ui": {
+        "navigation_label": "Proposals",
+        "expected_heading": "Proposals and approvals",
+        "controls": ["Enable simulated operator actions", "Reject", "Approve"]
+      }
+    },
+    {
+      "id": "launch.execution-controls",
+      "name": "Governed launch controls",
+      "description": "Launch, suspension, and kill-switch controls are local simulation controls that are locked by default.",
+      "criticality": "critical",
+      "source_files": ["src/mission-control/index.tsx", "src/mission-control/types.ts"],
+      "expected_user_behavior": "Launch controls are disabled until explicitly enabled and the fixed $25 cap cannot be increased.",
+      "automated_test_references": ["src/mission-control/standalone.test.tsx", "src/hermes-engine.test.ts"],
+      "development_build_test_method": "Verify all launch mutation buttons are disabled and the cap is read-only.",
+      "packaged_build_test_method": "Repeat disabled-control verification in the installed app.",
+      "required_backend_or_dependency": "Local mock snapshot; disconnected broker.",
+      "safe_fallback_behavior": "Launch remains suspended and broker submission unavailable.",
+      "prohibited_side_effects": ["arm launch", "submit order", "increase cap", "place trade"],
+      "current_certification_status": "NOT_TESTED",
+      "ui": {
+        "navigation_label": "Launch",
+        "expected_heading": "Governed launch control",
+        "controls": ["Enable simulated operator actions", "Arm simulated launch", "Suspend", "Engage kill switch"]
+      }
+    },
+    {
+      "id": "executions.receipts",
+      "name": "Immutable execution receipt view",
+      "description": "The execution view renders simulated, rejected, and outcome-uncertain receipt evidence.",
+      "criticality": "important",
+      "source_files": ["src/mission-control/index.tsx", "src/mission-control/mock-adapter.ts", "src/mission-control/types.ts"],
+      "expected_user_behavior": "Receipt, order, symbol, broker status, duplicate prevention, and reconciliation state are visible.",
+      "automated_test_references": ["src/mission-control/standalone.test.tsx"],
+      "development_build_test_method": "Open Executions and verify all three fixture receipt states.",
+      "packaged_build_test_method": "Open Executions in the installed app and verify the same evidence.",
+      "required_backend_or_dependency": "Local immutable fixture snapshot.",
+      "safe_fallback_behavior": "An explicit empty state appears if no receipts exist.",
+      "prohibited_side_effects": ["retry outcome-uncertain order", "contact broker"],
+      "current_certification_status": "NOT_TESTED",
+      "ui": {
+        "navigation_label": "Executions",
+        "expected_heading": "Simulated executions",
+        "controls": []
+      }
+    },
+    {
+      "id": "reconciliation.outcome-uncertain",
+      "name": "Execution reconciliation",
+      "description": "Outcome-uncertain receipts clearly require reconciliation and prohibit automatic retry.",
+      "criticality": "critical",
+      "source_files": ["src/mission-control/index.tsx", "src/mission-control/mock-adapter.ts"],
+      "expected_user_behavior": "The reconciliation view marks uncertain outcomes Required and shows retry prevention.",
+      "automated_test_references": ["src/mission-control/standalone.test.tsx"],
+      "development_build_test_method": "Open Reconciliation and assert Required plus retry-blocked evidence.",
+      "packaged_build_test_method": "Repeat in the installed app.",
+      "required_backend_or_dependency": "Local immutable fixture snapshot.",
+      "safe_fallback_behavior": "Uncertain outcomes remain blocked.",
+      "prohibited_side_effects": ["automatic retry", "duplicate broker submission"],
+      "current_certification_status": "NOT_TESTED",
+      "ui": {
+        "navigation_label": "Reconciliation",
+        "expected_heading": "Execution reconciliation",
+        "controls": []
+      }
+    },
+    {
+      "id": "audit.search-and-evidence",
+      "name": "Audit evidence filtering and expansion",
+      "description": "Users can filter chronological audit evidence and expand sanitized event details.",
+      "criticality": "important",
+      "source_files": ["src/mission-control/index.tsx", "src/mission-control/mock-adapter.ts"],
+      "expected_user_behavior": "Filtering narrows events and expansion reveals sanitized JSON evidence.",
+      "automated_test_references": ["src/mission-control/standalone.test.tsx"],
+      "development_build_test_method": "Filter by a fixture order ID, expand the result, and verify broker_submission_attempted is false.",
+      "packaged_build_test_method": "Repeat in the installed app and capture structured evidence.",
+      "required_backend_or_dependency": "Local audit fixture snapshot.",
+      "safe_fallback_behavior": "Empty and no-match states are explicit.",
+      "prohibited_side_effects": ["display secrets", "display credentials", "mutate evidence"],
+      "current_certification_status": "NOT_TESTED",
+      "ui": {
+        "navigation_label": "Audit",
+        "expected_heading": "Chronological audit evidence",
+        "controls": ["Filter audit evidence"]
+      }
+    },
+    {
+      "id": "settings.safety-boundaries",
+      "name": "Settings safety boundaries",
+      "description": "Settings show paper-only mode, masked identifiers, fixed cap, and unavailable broker submission.",
+      "criticality": "critical",
+      "source_files": ["src/mission-control/index.tsx"],
+      "expected_user_behavior": "Safety boundaries are readable and no credentials, live mode, or cap controls are exposed.",
+      "automated_test_references": ["src/mission-control/standalone.test.tsx", "src/product-contract.test.ts"],
+      "development_build_test_method": "Open Settings and inspect the declared boundaries.",
+      "packaged_build_test_method": "Repeat in the installed app.",
+      "required_backend_or_dependency": "No backend required.",
+      "safe_fallback_behavior": "Local safety fallback remains analysis-only.",
+      "prohibited_side_effects": ["credential entry", "live-mode enablement", "capital-limit mutation"],
+      "current_certification_status": "NOT_TESTED",
+      "ui": {
+        "navigation_label": "Settings",
+        "expected_heading": "Sigil settings",
+        "controls": ["Explain selected proposal"]
+      }
+    },
+    {
+      "id": "intelligence.local-explanation",
+      "name": "Local proposal explanation",
+      "description": "Hermes Intelligence explains selected proposal evidence without authorizing execution.",
+      "criticality": "important",
+      "source_files": ["src/hermes-engine.ts", "src/mission-control/index.tsx"],
+      "expected_user_behavior": "Explanation identifies its route and explicitly states execution and broker submission are unavailable.",
+      "automated_test_references": ["src/hermes-engine.test.ts", "src/mission-control/standalone.test.tsx", "../sigil/tests/test_desktop_bridge.py"],
+      "development_build_test_method": "Request an explanation and verify the governed result.",
+      "packaged_build_test_method": "Request an explanation and accept either verified local bridge output or the explicit safe local fallback.",
+      "required_backend_or_dependency": "Optional read-only Python bridge.",
+      "safe_fallback_behavior": "A deterministic local-disconnected explanation is returned.",
+      "prohibited_side_effects": ["execution authorization", "broker submission", "tool invocation"],
+      "current_certification_status": "NOT_TESTED",
+      "ui": {
+        "navigation_label": "Settings",
+        "expected_heading": "Sigil settings",
+        "controls": ["Explain selected proposal"]
+      }
+    },
+    {
+      "id": "backend.read-only-bridge",
+      "name": "Read-only local backend bridge",
+      "description": "Electron IPC permits backend health, durable runtime snapshots, proposal-only paper automation controls, and proposal explanation commands.",
+      "criticality": "critical",
+      "source_files": ["electron/main.ts", "src/hermes-engine.ts", "src/mission-control/desktop-adapter.ts", "../sigil/src/sigil/desktop_bridge/runner.py", "../sigil/src/sigil/desktop_bridge/runtime.py"],
+      "expected_user_behavior": "Backend state refreshes continuously; start, pause, and stop affect only proposal generation; failures remain visible and fail closed.",
+      "automated_test_references": ["src/hermes-engine.test.ts", "../sigil/tests/test_desktop_bridge.py", "electron/main.test.ts"],
+      "development_build_test_method": "Validate health/explanation responses and unsupported-command rejection.",
+      "packaged_build_test_method": "Verify usable degraded state if the repository-local Python bridge is unavailable from the packaged bundle.",
+      "required_backend_or_dependency": "Python and apps/sigil source plus a private local user-data directory.",
+      "safe_fallback_behavior": "Status becomes degraded and automation cannot execute or contact a broker.",
+      "prohibited_side_effects": ["arbitrary command", "shell execution", "unchecksummed or non-atomic persistence", "broker access"],
+      "current_certification_status": "NOT_TESTED",
+      "ipc_channels": ["sigil:get-backend-status", "sigil:explain-proposal", "sigil:get-runtime-snapshot", "sigil:control-paper-cycle"]
+    },
+    {
+      "id": "electron.ipc-and-preload",
+      "name": "Electron IPC and preload contract",
+      "description": "A sandboxed, context-isolated preload exposes only the bounded Sigil desktop API.",
+      "criticality": "critical",
+      "source_files": ["electron/main.ts", "electron/preload.ts", "src/vite-env.d.ts"],
+      "expected_user_behavior": "Renderer can read build identity, backend/runtime status, control proposal-only paper automation, request explanation, and observe update status without Node integration.",
+      "automated_test_references": ["electron/main.test.ts", "src/hermes-engine.test.ts", "scripts/release-guardian.test.mjs"],
+      "development_build_test_method": "Inspect window.sigilDesktop and validate all registered IPC handlers through safe calls or source contracts.",
+      "packaged_build_test_method": "Inspect the preload API in the installed renderer and confirm sandboxed release mode.",
+      "required_backend_or_dependency": "Electron preload and IPC.",
+      "safe_fallback_behavior": "Failed bridge/update calls return bounded error state.",
+      "prohibited_side_effects": ["Node integration", "arbitrary IPC", "credential exposure"],
+      "current_certification_status": "NOT_TESTED",
+      "ipc_channels": ["sigil:get-backend-status", "sigil:explain-proposal", "sigil:get-runtime-snapshot", "sigil:control-paper-cycle", "sigil:control-paper-authorization", "sigil:reset-paper-runtime", "sigil:get-provider-snapshot", "sigil:check-for-updates"]
+    },
+    {
+      "id": "identity.about-center",
+      "name": "Build identity and About & Update Center",
+      "description": "Build ID, commit, build time, version, channel, and application mode propagate into the rendered application.",
+      "criticality": "critical",
+      "source_files": ["scripts/bundle-electron.mjs", "electron/main.ts", "electron/preload.ts"],
+      "expected_user_behavior": "The identity badge opens an About Center whose values match the packaged artifact.",
+      "automated_test_references": ["electron/main.test.ts", "src/product-contract.test.ts"],
+      "development_build_test_method": "Verify dev channel identity values in the Electron development renderer.",
+      "packaged_build_test_method": "Verify release channel, packaged mode, version, commit, build ID, and build time in /Applications/Sigil.app.",
+      "required_backend_or_dependency": "Build-time esbuild definitions and Electron additionalArguments.",
+      "safe_fallback_behavior": "Missing values display unknown rather than claiming a certified identity.",
+      "prohibited_side_effects": ["identity fabrication", "release-channel spoofing"],
+      "current_certification_status": "NOT_TESTED",
+      "ui": {
+        "controls": ["Open Sigil About & Update Center", "Close About Sigil"]
+      }
+    },
+    {
+      "id": "updates.failure-handling",
+      "name": "Updater status and failure handling",
+      "description": "The updater checks the unchanged production release feed, requires user confirmation before downloading, and parses isolated current, newer, malformed, and missing local metadata safely.",
+      "criticality": "important",
+      "source_files": ["electron/main.ts", "electron/preload.ts", "package.json"],
+      "expected_user_behavior": "Development mode reports updates disabled; packaged mode reports missing release infrastructure cleanly and remains usable.",
+      "automated_test_references": ["electron/main.test.ts", "scripts/release-guardian.test.mjs", "release-certification/updater-fixtures/current/latest-mac.yml", "release-certification/updater-fixtures/newer/latest-mac.yml", "release-certification/updater-fixtures/malformed/latest-mac.yml"],
+      "development_build_test_method": "Invoke Check for Updates and verify the disabled development message.",
+      "packaged_build_test_method": "Leave the production feed untouched, then drive electron-updater's metadata parser and semantic-version decision path against local latest-mac.yml fixtures for same-version, newer-version, malformed, and missing metadata without download or install.",
+      "required_backend_or_dependency": "Local-file deterministic updater fixtures; a published update is not required for isolated updater-logic PASS.",
+      "safe_fallback_behavior": "Display 'The update check could not be completed' and keep the app usable.",
+      "prohibited_side_effects": ["automatic download without confirmation", "trade authorization", "broker submission"],
+      "current_certification_status": "NOT_TESTED",
+      "ipc_channels": ["sigil:check-for-updates"],
+      "ui": {
+        "controls": ["Check for Updates"]
+      }
+    },
+    {
+      "id": "packaging.macos-arm64",
+      "name": "macOS arm64 package and installation",
+      "description": "The production renderer is packaged as an unsigned local arm64 DMG and installed with a recoverable backup.",
+      "criticality": "critical",
+      "source_files": ["package.json", "scripts/certify-release.mjs"],
+      "expected_user_behavior": "The installed app launches from /Applications/Sigil.app with the certified artifact identity.",
+      "automated_test_references": ["src/product-contract.test.ts", "scripts/release-guardian.test.mjs"],
+      "development_build_test_method": "Build the production renderer and Electron bundles.",
+      "packaged_build_test_method": "Verify Electron ZIP, package DMG, verify DMG, back up prior app, install, launch, and confirm executable provenance.",
+      "required_backend_or_dependency": "macOS arm64, hdiutil, ditto, electron-builder, verified Electron distribution.",
+      "safe_fallback_behavior": "Stop with BLOCKED or FAIL evidence and preserve the existing installation.",
+      "prohibited_side_effects": ["publish", "sign", "notarize", "delete user data"],
+      "current_certification_status": "NOT_TESTED"
+    }
+  ]
+}
