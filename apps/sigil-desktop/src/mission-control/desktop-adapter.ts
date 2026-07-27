@@ -109,7 +109,12 @@ function currency(value: string): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value))
 }
 
-function runtimeHealthLabel(runtime: SigilRuntimeSnapshot): string {
+export function runtimeHealthLabel(
+  runtime: {
+    connection: { status: string }
+    runtime_health?: RuntimeHealth
+  }
+): string {
   if (runtime.connection.status !== 'connected') {
     return 'Runtime disconnected'
   }
