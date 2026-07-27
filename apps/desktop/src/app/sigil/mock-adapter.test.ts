@@ -7,7 +7,16 @@ describe('MockSigilOperatorAdapter safety boundary', () => {
     const adapter = new MockSigilOperatorAdapter()
     const methods = new Set(Object.getOwnPropertyNames(Object.getPrototypeOf(adapter)))
 
-    expect(methods).toEqual(new Set(['constructor', 'readSnapshot', 'applySimulatedAction']))
+    expect(methods).toEqual(
+      new Set([
+        'constructor',
+        'readSnapshot',
+        'applySimulatedAction',
+        'controlPaperCycle',
+        'controlPaperAuthorization',
+        'resetPaperRuntime'
+      ])
+    )
     expect(methods.has('submit')).toBe(false)
     expect(methods.has('submitOrder')).toBe(false)
     expect(methods.has('increaseCapitalLimit')).toBe(false)
