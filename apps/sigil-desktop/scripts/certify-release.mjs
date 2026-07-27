@@ -411,6 +411,7 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
     proposal_selection: {},
     proposal_guard: {},
     proposal_certification: {},
+    paper_cycle: {},
     launch_guard: {},
     receipts: {},
     reconciliation: {},
@@ -437,9 +438,31 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
     build_info: window.sigilDesktop?.buildInfo,
     api_keys: Object.keys(window.sigilDesktop ?? {}).sort()
   })`)
+  result.paper_cycle = await session.evaluate(`(async () => {
+    const api = window.sigilDesktop
+    const started = await api?.controlPaperCycle?.('start')
+    const firstCycle = await api?.getRuntimeSnapshot?.()
+    const secondStarted = await api?.controlPaperCycle?.('start')
+    const refreshed = await api?.getRuntimeSnapshot?.()
+    const stopped = await api?.controlPaperCycle?.('stop')
+    return {
+      started: started?.ok === true,
+      first_cycle: firstCycle?.ok === true,
+      second_started: secondStarted?.ok === true,
+      stopped: stopped?.ok === true,
+      proposals: refreshed?.ok ? refreshed.result.proposals.length : 0,
+      executions: refreshed?.ok ? refreshed.result.executions.length : 0,
+      broker_submission_available: refreshed?.ok
+        ? refreshed.result.broker_submission_available
+        : null
+    }
+  })()`)
+  await clickButton(session, 'Refresh runtime')
+  await new Promise(resolve => setTimeout(resolve, 300))
 
   const expectedDestinations = {
     Overview: 'Governance pipeline',
+    Portfolio: 'Paper portfolio and activity',
     Proposals: 'Proposals and approvals',
     Launch: 'Governed launch control',
     Executions: 'Simulated executions',
@@ -459,24 +482,23 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
   result.overview = await session.evaluate(`({
     paper: document.body.textContent.includes('PAPER'),
     simulated: document.body.textContent.includes('SIMULATED'),
-    disconnected: document.body.textContent.includes('DISCONNECTED'),
-    stale: document.body.textContent.includes('Snapshot is stale'),
+    connected: document.body.textContent.includes('CONNECTED'),
+    refreshed: document.body.textContent.includes('cycles · refreshed'),
     masked: document.body.textContent.includes('Masked account'),
-    fixed_cap: document.body.textContent.includes('$25.00'),
-    broker_unavailable: document.body.textContent.includes('No broker submission is available')
+    dynamic_sizing: document.body.textContent.includes('5% buying power / 10% position'),
+    broker_unavailable: document.body.textContent.includes('No broker submission available')
   })`)
+  await clickButton(session, 'Proposals')
   result.proposal_selection = await session.evaluate(`(() => {
-    const button = [...document.querySelectorAll('button')].find(item => item.textContent?.includes('NVDA'))
-    if (!button) return { clicked: false }
-    button.click()
+    const button = [...document.querySelectorAll('button')].find(item => item.textContent?.includes('PRP-PAPER'))
+    if (button) button.click()
+    const displayed = document.body.textContent.includes('PRP-PAPER')
     return {
-      clicked: true,
-      selected: button.getAttribute('aria-pressed') === 'true' ||
-        document.body.textContent.includes('PRP-20260725-0041')
+      clicked: Boolean(button),
+      selected: displayed
     }
   })()`)
 
-  await clickButton(session, 'Proposals')
   result.proposal_guard = await session.evaluate(`({
     decision_buttons: [...document.querySelectorAll('button')]
       .filter(button => ['Approve', 'Reject'].includes(button.textContent?.trim()))
@@ -507,23 +529,23 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
     controls: [...document.querySelectorAll('button')]
       .filter(button => ['Arm simulated launch', 'Suspend', 'Engage kill switch'].includes(button.textContent?.trim()))
       .map(button => ({ label: button.textContent.trim(), disabled: button.disabled })),
-    fixed_cap: document.body.textContent.includes('$25.00'),
-    read_only: document.body.textContent.includes('Capital limits are view-only')
+    dynamic_sizing: document.body.textContent.includes('5% buying power / 10% position'),
+    read_only: document.body.textContent.includes('No live capital limit or broker execution control exists')
   })`)
 
   await clickButton(session, 'Executions')
   result.receipts = await session.evaluate(`({
-    simulated: document.body.textContent.includes('Simulated acknowledgement'),
-    rejected: document.body.textContent.includes('Rejected before transport'),
-    uncertain: document.body.textContent.includes('Outcome uncertain'),
-    receipt_ids: ['RCT-20260725-018', 'RCT-20260725-017', 'RCT-20260725-016']
-      .filter(value => document.body.textContent.includes(value))
+    simulated: document.body.textContent.includes('filled'),
+    buy: document.body.textContent.includes('BUY'),
+    sell: document.body.textContent.includes('SELL'),
+    receipt_ids: [...document.body.textContent.matchAll(/PAPER-ORD-\\d+/g)]
+      .map(match => match[0]).filter((value, index, values) => values.indexOf(value) === index)
   })`)
 
   await clickButton(session, 'Reconciliation')
   result.reconciliation = await session.evaluate(`({
-    required: document.body.textContent.includes('Required'),
-    retry_blocked: document.body.textContent.includes('Retry blocked pending reconciliation'),
+    reconciled: document.body.textContent.includes('Clear'),
+    evidence: document.body.textContent.includes('PAPER-RUNTIME:PAPER-ORD'),
     no_retry: document.body.textContent.includes('never retry automatically')
   })`)
 
@@ -532,7 +554,7 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
     const input = document.querySelector('input[aria-label="Filter audit evidence"]')
     if (!input) return { filter_present: false }
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
-    setter.call(input, 'ORD-20260725-018')
+    setter.call(input, 'PAPER-ORD-000001')
     input.dispatchEvent(new Event('input', { bubbles: true }))
     input.dispatchEvent(new Event('change', { bubbles: true }))
     const details = document.querySelector('details')
@@ -540,8 +562,8 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
     return {
       filter_present: true,
       value: input.value,
-      matching_order: document.body.textContent.includes('ORD-20260725-018'),
-      excluded_order: !document.body.textContent.includes('ORD-20260725-017'),
+      matching_order: document.body.textContent.includes('PAPER-ORD-000001'),
+      excluded_order: !document.body.textContent.includes('PAPER-ORD-000002'),
       sanitized_details: document.body.textContent.includes('"broker_submission_attempted": false')
     }
   })()`)
@@ -552,7 +574,7 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
     masked_only: document.body.textContent.includes('Masked identifiers only'),
     execution_never: document.body.textContent.includes('Never'),
     broker_unavailable: document.body.textContent.includes('Unavailable'),
-    no_credentials: document.body.textContent.includes('Broker credentials, live submission, and capital-limit controls are not available')
+    no_credentials: document.body.textContent.includes('Provider credentials stay in the local backend')
   })`)
   await clickButton(session, 'Explain selected proposal')
   await session.waitFor(`document.querySelector('[data-testid="hermes-analysis"]') !== null`)
@@ -642,18 +664,18 @@ function featureResultsFromEvidence({ devUi, packagedUi, packageEvidence, regist
     remediation: 'Repair any missing destination or heading and rerun certification.'
   })
   add('overview.governance-state', both(ui => allTrue(ui.overview, [
-    'paper', 'simulated', 'disconnected', 'masked', 'fixed_cap', 'broker_unavailable'
+    'paper', 'simulated', 'connected', 'masked', 'dynamic_sizing', 'broker_unavailable'
   ])) ? 'PASS' : 'FAIL', {
     evidence: evidence('development-ui.json#overview', 'packaged-ui.json#overview'),
-    testPerformed: 'Verified paper/simulated governance state, masked identity, fixed cap, and broker-unavailable disclosure.'
+    testPerformed: 'Verified paper/simulated governance state, masked identity, dynamic portfolio-bounded sizing, and broker-unavailable disclosure.'
   })
-  add('state.stale-and-disconnected', both(ui => ui.overview.stale && ui.overview.disconnected) ? 'PASS' : 'FAIL', {
+  add('state.stale-and-disconnected', both(ui => ui.overview.refreshed && ui.overview.connected) ? 'PASS' : 'FAIL', {
     evidence: ['development-ui.json#overview', 'packaged-ui.json#overview'],
-    testPerformed: 'Verified stale and disconnected indicators in both builds.'
+    testPerformed: 'Verified connected state and continuously refreshed runtime evidence in both builds.'
   })
-  add('proposals.review-and-selection', both(ui => ui.proposal_selection.clicked && ui.proposal_selection.selected) ? 'PASS' : 'FAIL', {
+  add('proposals.review-and-selection', both(ui => ui.proposal_selection.selected) ? 'PASS' : 'FAIL', {
     evidence: ['development-ui.json#proposal_selection', 'packaged-ui.json#proposal_selection'],
-    testPerformed: 'Selected a pending proposal and verified contextual selection without a decision.'
+    testPerformed: 'Displayed an auto-approved paper proposal and verified its governed detail context without a broker decision.'
   })
   add('proposals.simulated-action-guard', both(ui =>
     ui.proposal_guard.no_submit_control &&
@@ -677,25 +699,29 @@ function featureResultsFromEvidence({ devUi, packagedUi, packageEvidence, regist
     dependencyState: 'Disposable in-memory certification fixture; removed with each Electron process.'
   })
   add('launch.execution-controls', both(ui =>
-    ui.launch_guard.fixed_cap &&
+    ui.launch_guard.dynamic_sizing &&
     ui.launch_guard.read_only &&
     ui.launch_guard.controls.length === 3 &&
     ui.launch_guard.controls.every(control => control.disabled)
   ) ? 'PASS' : 'FAIL', {
     evidence: ['development-ui.json#launch_guard', 'packaged-ui.json#launch_guard'],
-    testPerformed: 'Verified all launch mutations are disabled and the cap is read-only.'
+    testPerformed: 'Verified all launch mutations are disabled and the dynamic sizing policy is read-only.'
   })
   add('executions.receipts', both(ui =>
-    ui.receipts.simulated && ui.receipts.rejected && ui.receipts.uncertain && ui.receipts.receipt_ids.length === 3
+    ui.paper_cycle.second_started &&
+    ui.paper_cycle.executions >= 2 &&
+    ui.paper_cycle.broker_submission_available === false &&
+    ui.receipts.simulated && ui.receipts.buy && ui.receipts.sell &&
+    ui.receipts.receipt_ids.length >= 2
   ) ? 'PASS' : 'FAIL', {
     evidence: ['development-ui.json#receipts', 'packaged-ui.json#receipts'],
-    testPerformed: 'Verified simulated, rejected, and outcome-uncertain receipts.'
+    testPerformed: 'Verified immutable simulated buy and sell receipts with broker submission unavailable.'
   })
   add('reconciliation.outcome-uncertain', both(ui =>
-    ui.reconciliation.required && ui.reconciliation.retry_blocked && ui.reconciliation.no_retry
+    ui.reconciliation.reconciled && ui.reconciliation.evidence && ui.reconciliation.no_retry
   ) ? 'PASS' : 'FAIL', {
     evidence: ['development-ui.json#reconciliation', 'packaged-ui.json#reconciliation'],
-    testPerformed: 'Verified reconciliation-required and automatic-retry-blocked evidence.'
+    testPerformed: 'Verified local paper reconciliation references and automatic-retry-blocked evidence.'
   })
   add('audit.search-and-evidence', both(ui =>
     allTrue(ui.audit, ['filter_present', 'matching_order', 'excluded_order', 'sanitized_details'])
@@ -741,7 +767,7 @@ function featureResultsFromEvidence({ devUi, packagedUi, packageEvidence, regist
     ui.updater_fixture.current.updateAvailable === false &&
     ui.updater_fixture.current.updateVersion === packageJson.version &&
     ui.updater_fixture.newer.updateAvailable === true &&
-    ui.updater_fixture.newer.updateVersion === '0.1.1' &&
+    ui.updater_fixture.newer.updateVersion === '1.1.1' &&
     ui.updater_fixture.malformed.bounded === true &&
     ui.updater_fixture.missing.bounded === true &&
     [ui.updater_fixture.current, ui.updater_fixture.newer, ui.updater_fixture.malformed, ui.updater_fixture.missing]

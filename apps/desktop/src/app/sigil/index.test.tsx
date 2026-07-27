@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { MockSigilOperatorAdapter } from './mock-adapter'
@@ -18,26 +18,23 @@ describe('SigilOperatorView', () => {
     expect(screen.getByText(/No broker submission available/)).toBeTruthy()
   })
 
-  it('keeps proposal approval locked until enabled and explicitly confirmed', async () => {
+  it('keeps manual proposal actions locked when governed paper runtime controls are active', async () => {
     const adapter = new MockSigilOperatorAdapter('ready')
     const apply = vi.spyOn(adapter, 'applySimulatedAction')
     render(<SigilOperatorView adapter={adapter} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Proposals' }))
-    expect(screen.getAllByRole('button', { name: 'Approve' })[0].hasAttribute('disabled')).toBe(true)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enable simulated operator actions' }))
-    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[0])
-    expect(screen.getByText('Confirm simulated approval')).toBeTruthy()
+    const approveButtons = screen.getAllByRole('button', { name: 'Approve' })
+    const rejectButtons = screen.getAllByRole('button', { name: 'Reject' })
+
+    expect(approveButtons.every(button => button.hasAttribute('disabled'))).toBe(true)
+    expect(rejectButtons.every(button => button.hasAttribute('disabled'))).toBe(true)
+    expect(
+      screen.queryByRole('button', { name: 'Enable simulated operator actions' })
+    ).toBeNull()
+    expect(screen.queryByText('Confirm simulated approval')).toBeNull()
     expect(apply).not.toHaveBeenCalled()
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Confirm approval' }))
-    })
-
-    await waitFor(() =>
-      expect(apply).toHaveBeenCalledWith({ type: 'approve-proposal', proposalId: 'PRP-20260725-0042' })
-    )
   })
 
   it.each(['empty', 'disconnected', 'stale'] as const)('renders the %s snapshot state', async dataState => {

@@ -1,13 +1,44 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+declare const __SIGIL_BUILD_ID__: string
+declare const __SIGIL_BUILD_COMMIT__: string
+declare const __SIGIL_BUILD_TIME__: string
+declare const __SIGIL_VERSION__: string
+
 const SIGIL_BACKEND_STATUS_CHANNEL = 'sigil:get-backend-status'
 const SIGIL_EXPLAIN_PROPOSAL_CHANNEL = 'sigil:explain-proposal'
+const SIGIL_RUNTIME_SNAPSHOT_CHANNEL = 'sigil:get-runtime-snapshot'
+const SIGIL_PAPER_CYCLE_CONTROL_CHANNEL = 'sigil:control-paper-cycle'
+const SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL = 'sigil:control-paper-authorization'
+const SIGIL_PAPER_RUNTIME_RESET_CHANNEL = 'sigil:reset-paper-runtime'
+const SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'
+const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
+const SIGIL_RELEASE_CERTIFICATION_CHANNEL = 'sigil:release-certification'
 
 contextBridge.exposeInMainWorld('sigilDesktop', {
   productName: 'Sigil',
   persistenceNamespace: 'com.firecattechnology.sigil',
   brokerSubmissionAvailable: false,
+  buildInfo: {
+    version: __SIGIL_VERSION__,
+    build: __SIGIL_BUILD_ID__,
+    commit: __SIGIL_BUILD_COMMIT__,
+    buildTime: __SIGIL_BUILD_TIME__,
+    channel: process.env.SIGIL_DEV_SERVER ? 'dev' : 'release',
+    applicationMode: process.env.SIGIL_DEV_SERVER ? 'Live development' : 'Packaged release'
+  },
+  checkForUpdates: () => ipcRenderer.invoke(SIGIL_UPDATE_CHECK_CHANNEL),
+  onUpdateStatus: () => () => undefined,
+  releaseCertification: (payload: Readonly<Record<string, unknown>>) =>
+    ipcRenderer.invoke(SIGIL_RELEASE_CERTIFICATION_CHANNEL, payload),
   getBackendStatus: () => ipcRenderer.invoke(SIGIL_BACKEND_STATUS_CHANNEL),
+  getRuntimeSnapshot: () => ipcRenderer.invoke(SIGIL_RUNTIME_SNAPSHOT_CHANNEL),
+  controlPaperCycle: (action: 'start' | 'pause' | 'stop') =>
+    ipcRenderer.invoke(SIGIL_PAPER_CYCLE_CONTROL_CHANNEL, action),
+  controlPaperAuthorization: (action: 'grant' | 'revoke') =>
+    ipcRenderer.invoke(SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL, action),
+  resetPaperRuntime: () => ipcRenderer.invoke(SIGIL_PAPER_RUNTIME_RESET_CHANNEL),
+  getProviderSnapshot: () => ipcRenderer.invoke(SIGIL_PROVIDER_SNAPSHOT_CHANNEL),
   explainProposal: (payload: Readonly<Record<string, unknown>>) =>
     ipcRenderer.invoke(SIGIL_EXPLAIN_PROPOSAL_CHANNEL, payload)
 })

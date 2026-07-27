@@ -29,6 +29,7 @@ describe('Sigil Release Guardian', () => {
     expect(coverage.errors).toEqual([])
     expect(coverage.inventory.navigation_labels).toEqual([
       'Overview',
+      'Portfolio',
       'Proposals',
       'Launch',
       'Executions',
@@ -41,6 +42,9 @@ describe('Sigil Release Guardian', () => {
       'sigil:explain-proposal',
       'sigil:get-runtime-snapshot',
       'sigil:control-paper-cycle',
+      'sigil:control-paper-authorization',
+      'sigil:reset-paper-runtime',
+      'sigil:get-provider-snapshot',
       'sigil:check-for-updates',
       'sigil:release-certification'
     ])
@@ -89,11 +93,11 @@ describe('Sigil Release Guardian', () => {
     const current = parse('current')
     const newer = parse('newer')
 
-    expect(current.version).toBe('0.1.0')
-    expect(semver.gt(current.version, '0.1.0')).toBe(false)
-    expect(newer.version).toBe('0.1.1')
-    expect(semver.gt(newer.version, '0.1.0')).toBe(true)
-    expect(() => semver.gt(parse('malformed').version, '0.1.0')).toThrow()
+    expect(current.version).toBe('1.1.0')
+    expect(semver.gt(current.version, '1.1.0')).toBe(false)
+    expect(newer.version).toBe('1.1.1')
+    expect(semver.gt(newer.version, '1.1.0')).toBe(true)
+    expect(() => semver.gt(parse('malformed').version, '1.1.0')).toThrow()
   })
 
   it('keeps certification IPC token-gated, synthetic, in-memory, and side-effect-free', () => {

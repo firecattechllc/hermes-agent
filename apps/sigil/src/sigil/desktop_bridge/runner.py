@@ -1,7 +1,8 @@
 """Governed JSON command runner for Sigil Desktop.
 
-This bridge is intentionally read-only. It exposes no execution, broker,
-shell, filesystem-write, credential, or arbitrary command capability.
+The bridge exposes allow-listed local paper simulation controls and read-only
+provider access. It has no broker execution, provider mutation, transfer,
+wallet, shell, credential-return, or arbitrary command capability.
 """
 
 from __future__ import annotations
@@ -9,20 +10,33 @@ from __future__ import annotations
 import json
 import math
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, Final
+
+from .providers import provider_snapshot
+from .runtime import (
+    control_paper_authorization,
+    control_paper_cycle,
+    reset_paper_runtime,
+    runtime_snapshot,
+)
 
 BRIDGE_VERSION: Final[str] = "1"
 SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "health",
     "explain_proposal",
+    "runtime_snapshot",
+    "control_paper_cycle",
+    "control_paper_authorization",
+    "reset_paper_runtime",
+    "provider_snapshot",
 )
 
 
 def generated_at() -> str:
     """Return a UTC ISO-8601 timestamp."""
 
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def backend_status() -> dict[str, Any]:
@@ -188,9 +202,57 @@ def handle_request(request: object) -> dict[str, Any]:
     if command == "explain_proposal":
         return explain_proposal(request.get("payload"))
 
+    if command == "runtime_snapshot":
+        return {"ok": True, "result": runtime_snapshot()}
+
+    if command == "control_paper_cycle":
+        payload = request.get("payload")
+        if not isinstance(payload, dict):
+            return error_response("invalid_payload", "Paper control requires a payload object.")
+        try:
+            return {"ok": True, "result": control_paper_cycle(payload.get("action"))}
+        except ValueError as error:
+            return error_response("paper_control_denied", str(error))
+
+    if command == "control_paper_authorization":
+        payload = request.get("payload")
+        if not isinstance(payload, dict):
+            return error_response(
+                "invalid_payload",
+                "Paper authorization requires a payload object.",
+            )
+        try:
+            return {
+                "ok": True,
+                "result": control_paper_authorization(payload.get("action")),
+            }
+        except ValueError as error:
+            return error_response(
+                "invalid_payload",
+                str(error),
+            )
+
+    if command == "reset_paper_runtime":
+        payload = request.get("payload")
+        if not isinstance(payload, dict):
+            return error_response(
+                "invalid_payload",
+                "Paper reset requires a payload object.",
+            )
+        try:
+            return {
+                "ok": True,
+                "result": reset_paper_runtime(payload.get("confirmation")),
+            }
+        except ValueError as error:
+            return error_response("paper_reset_denied", str(error))
+
+    if command == "provider_snapshot":
+        return {"ok": True, "result": provider_snapshot()}
+
     return error_response(
         "unsupported_command",
-        "Only allow-listed read-only commands are available.",
+        "Only allow-listed local paper commands are available.",
     )
 
 

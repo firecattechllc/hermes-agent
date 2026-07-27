@@ -30,12 +30,40 @@ export interface Proposal {
 export interface ExecutionReceipt {
   id: string
   orderId: string
+  proposalId: string
   symbol: string
+  side: 'BUY' | 'SELL'
+  quantity: string
+  price: string
+  notional: string
   brokerStatus: string
   state: 'outcome-uncertain' | 'rejected' | 'simulated'
   duplicatePrevention: string
   reconciliationRequired: boolean
   timestamp: string
+  reconciliationReference: string
+}
+
+export interface PaperPosition {
+  symbol: string
+  quantity: string
+  averageCost: string
+  marketValue: string
+  unrealizedPnl: string
+  realizedPnl: string
+  allocation: string
+  auditReferences: string[]
+}
+
+export interface PaperAuthorization {
+  status: 'active' | 'expired' | 'required' | 'revoked'
+  authorizationId: string | null
+  authorizationMonth?: string
+  automaticMonthlyPolicy?: boolean
+  authorizedAt: string | null
+  expiresAt: string | null
+  revokedAt: string | null
+  scope: string[]
 }
 
 export interface AuditEvent {
@@ -49,6 +77,51 @@ export interface AuditEvent {
   details: Readonly<Record<string, unknown>>
 }
 
+export interface SigilProviderSnapshot {
+  checked_at: string
+  broker_submission_available: false
+  credentials_exposed: false
+  alpaca: {
+    status: 'connected' | 'degraded' | 'not_configured'
+    message: string
+    universe?: {
+      scope: string
+      total: number
+      available: number
+      unavailable: number
+      catalog_source?: string
+      catalog_freshness?: string
+      iex_status?: string
+      broader_us_status?: string
+      criteria: string
+      whole_market_coverage: false
+      catalog_access?: string
+      coverage_limitation?: string
+      refresh_policy?: string
+    }
+    symbols: Array<{
+      symbol: string
+      name?: string
+      sector?: string
+      price: string
+      observed_at: string
+      daily_change_percent?: string
+      screen_status?: string
+      source: string
+    }>
+  }
+  public: {
+    status: 'connected' | 'degraded' | 'not_configured'
+    message: string
+    accounts: Array<{
+      masked_account_id: string
+      cash: string
+      portfolio_value: string
+      positions: Array<{ symbol: string; quantity: string }>
+    }>
+  }
+}
+
 export interface SigilSnapshot {
   dataState: SigilDataState
   lastUpdated: string
@@ -59,7 +132,15 @@ export interface SigilSnapshot {
   systemHealth: string
   cash: string
   portfolioValue: string
+  buyingPower?: string
+  totalAccountValue?: string
+  realizedPnl?: string
+  unrealizedPnl?: string
+  positions?: PaperPosition[]
+  paperAuthorization?: PaperAuthorization
   activeStrategies: number
+  automationState?: 'paused' | 'running' | 'stopped'
+  automationCycleCount?: number
   pendingApprovals: number
   killSwitch: 'armed' | 'engaged'
   certificationStatus: string
@@ -87,4 +168,7 @@ export type SimulatedOperatorAction =
 export interface SigilOperatorAdapter {
   readSnapshot(): Promise<SigilSnapshot>
   applySimulatedAction(action: SimulatedOperatorAction): Promise<SigilSnapshot>
+  controlPaperCycle?: (action: 'start' | 'pause' | 'stop') => Promise<SigilSnapshot>
+  controlPaperAuthorization?: (action: 'grant' | 'revoke') => Promise<SigilSnapshot>
+  resetPaperRuntime?: () => Promise<SigilSnapshot>
 }

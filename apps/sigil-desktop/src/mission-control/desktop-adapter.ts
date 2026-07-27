@@ -9,10 +9,36 @@ type SigilRuntimeSnapshot = {
   balances: {
     cash: string
     portfolio_value: string
+    buying_power?: string
+    total_account_value?: string
+    realized_pnl?: string
+    unrealized_pnl?: string
   }
+  positions: Array<{
+    symbol: string
+    quantity: string
+    average_cost?: string
+    market_value: string
+    unrealized_pnl?: string
+    realized_pnl?: string
+  }>
   automation: {
     state: string
+    cycle_count?: number
   }
+  paper_authorization: {
+    status: 'active' | 'expired' | 'required' | 'revoked'
+    authorization_id: string | null
+    authorization_month?: string
+    automatic_monthly_policy?: boolean
+    authorized_at: string | null
+    expires_at: string | null
+    revoked_at: string | null
+    scope: string[]
+  }
+  orders: Record<string, {
+    proposal_id?: string
+  }>
   proposals: Array<{
     id: string
     symbol: string
@@ -28,6 +54,9 @@ type SigilRuntimeSnapshot = {
     id: string
     order_id: string
     symbol: string
+    side: 'BUY' | 'SELL'
+    quantity: string
+    price: string
     status: string
     timestamp: string
   }>
@@ -35,6 +64,7 @@ type SigilRuntimeSnapshot = {
     order_id: string
     status: string
     required: boolean
+    evidence_reference?: string
   }>
   audit: Array<{
     id: string
@@ -57,6 +87,10 @@ type RuntimeDesktopApi = {
   controlPaperCycle?: (
     action: 'start' | 'pause' | 'stop'
   ) => Promise<RuntimeBridgeResponse>
+  controlPaperAuthorization?: (
+    action: 'grant' | 'revoke'
+  ) => Promise<RuntimeBridgeResponse>
+  resetPaperRuntime?: () => Promise<RuntimeBridgeResponse>
 }
 
 function runtimeDesktopApi(): RuntimeDesktopApi | undefined {
@@ -68,6 +102,22 @@ function currency(value: string): string {
 }
 
 function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
+  const totalAccountValue = Number(
+    runtime.balances.total_account_value ?? runtime.balances.portfolio_value
+  )
+
+  const auditReferencesBySymbol = new Map<string, string[]>()
+
+  for (const event of runtime.audit) {
+    const symbol = typeof event.details.symbol === 'string' ? event.details.symbol : null
+
+    if (symbol) {
+      const references = auditReferencesBySymbol.get(symbol) ?? []
+      references.push(event.evidence_reference)
+      auditReferencesBySymbol.set(symbol, references)
+    }
+  }
+
   return {
     dataState: runtime.connection.status === 'connected' ? 'ready' : 'stale',
     lastUpdated: runtime.connection.last_refresh_at,
@@ -78,20 +128,65 @@ function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
     systemHealth: runtime.connection.status === 'connected' ? 'Runtime connected' : 'Runtime degraded',
     cash: currency(runtime.balances.cash),
     portfolioValue: currency(runtime.balances.portfolio_value),
+    buyingPower: currency(runtime.balances.buying_power ?? runtime.balances.cash),
+    totalAccountValue: currency(
+      runtime.balances.total_account_value ?? runtime.balances.portfolio_value
+    ),
+    realizedPnl: currency(runtime.balances.realized_pnl ?? '0'),
+    unrealizedPnl: currency(runtime.balances.unrealized_pnl ?? '0'),
+    positions: runtime.positions.map(position => ({
+      symbol: position.symbol,
+      quantity: position.quantity,
+      averageCost: currency(position.average_cost ?? '0'),
+      marketValue: currency(position.market_value),
+      unrealizedPnl: currency(position.unrealized_pnl ?? '0'),
+      realizedPnl: currency(position.realized_pnl ?? '0'),
+      allocation:
+        totalAccountValue > 0
+          ? `${((Number(position.market_value) / totalAccountValue) * 100).toFixed(1)}%`
+          : '0.0%',
+      auditReferences: [...new Set(auditReferencesBySymbol.get(position.symbol) ?? [])].slice(0, 3)
+    })),
+    paperAuthorization: {
+      status: runtime.paper_authorization.status,
+      authorizationId: runtime.paper_authorization.authorization_id,
+      authorizationMonth: runtime.paper_authorization.authorization_month,
+      automaticMonthlyPolicy:
+        runtime.paper_authorization.automatic_monthly_policy,
+      authorizedAt: runtime.paper_authorization.authorized_at,
+      expiresAt: runtime.paper_authorization.expires_at,
+      revokedAt: runtime.paper_authorization.revoked_at,
+      scope: runtime.paper_authorization.scope
+    },
     activeStrategies: runtime.automation.state === 'running' ? 1 : 0,
+    automationState:
+      runtime.automation.state === 'running' || runtime.automation.state === 'paused'
+        ? runtime.automation.state
+        : 'stopped',
+    automationCycleCount: runtime.automation.cycle_count ?? 0,
     pendingApprovals: runtime.proposals.filter(proposal => proposal.status === 'pending').length,
     killSwitch: 'armed',
     certificationStatus: 'Paper runtime',
-    maximumLaunchNotional: '$25.00',
-    firstLaunchLimit: '$25.00',
+    maximumLaunchNotional: 'Dynamic paper allocation',
+    firstLaunchLimit: '5% buying power / 10% position',
     launchState: 'suspended',
     stages: [
       { id: 'backend', label: 'Backend bridge', detail: runtime.connection.status, state: 'complete' },
       { id: 'state', label: 'Runtime state', detail: `Revision ${runtime.revision}`, state: 'complete' },
-      { id: 'analysis', label: 'Hermes analysis', detail: 'Proposal only', state: 'ready' },
+      { id: 'analysis', label: 'Hermes analysis', detail: 'Paper proposals', state: 'ready' },
       { id: 'proposal', label: 'Proposal generation', detail: runtime.automation.state, state: 'pending' },
-      { id: 'approval', label: 'Approval', detail: 'Operator unavailable', state: 'blocked' },
-      { id: 'execution', label: 'Paper execution', detail: 'Disabled', state: 'blocked' },
+      {
+        id: 'approval',
+        label: 'Paper auto-approval',
+        detail: runtime.paper_authorization.status,
+        state: runtime.paper_authorization.status === 'active' ? 'complete' : 'blocked'
+      },
+      {
+        id: 'execution',
+        label: 'Simulated execution',
+        detail: runtime.paper_authorization.status === 'active' ? 'Authorized locally' : 'Authorization required',
+        state: runtime.paper_authorization.status === 'active' ? 'simulated' : 'blocked'
+      },
       { id: 'broker', label: 'Broker transport', detail: 'Unavailable', state: 'blocked' }
     ],
     proposals: runtime.proposals.map(proposal => ({
@@ -114,12 +209,22 @@ function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
       return {
         id: execution.id,
         orderId: execution.order_id,
+        proposalId:
+          runtime.proposals.find(proposal =>
+            proposal.id.endsWith(execution.order_id.replace('PAPER-ORD-', ''))
+          )?.id ?? '—',
         symbol: execution.symbol,
+        side: execution.side,
+        quantity: execution.quantity,
+        price: currency(execution.price),
+        notional: currency(String(Number(execution.quantity) * Number(execution.price))),
         brokerStatus: execution.status,
         state: 'simulated',
         duplicatePrevention: reconciliation?.status ?? 'local paper identity retained',
         reconciliationRequired: reconciliation?.required ?? false,
-        timestamp: execution.timestamp
+        timestamp: execution.timestamp,
+        reconciliationReference:
+          reconciliation?.evidence_reference ?? `PAPER-RUNTIME:${execution.order_id}`
       }
     }),
     auditEvents: runtime.audit.map(event => ({
@@ -151,6 +256,26 @@ export class DesktopSigilOperatorAdapter implements SigilOperatorAdapter {
 
     if (!response?.ok) {
       throw new Error(response?.message ?? 'Paper automation control failed safely.')
+    }
+
+    return mapRuntime(response.result)
+  }
+
+  async controlPaperAuthorization(action: 'grant' | 'revoke'): Promise<SigilSnapshot> {
+    const response = await runtimeDesktopApi()?.controlPaperAuthorization?.(action)
+
+    if (!response?.ok) {
+      throw new Error(response?.message ?? 'Paper authorization control failed safely.')
+    }
+
+    return mapRuntime(response.result)
+  }
+
+  async resetPaperRuntime(): Promise<SigilSnapshot> {
+    const response = await runtimeDesktopApi()?.resetPaperRuntime?.()
+
+    if (!response?.ok) {
+      throw new Error(response?.message ?? 'Paper runtime reset failed safely.')
     }
 
     return mapRuntime(response.result)

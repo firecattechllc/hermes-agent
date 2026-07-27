@@ -1,4 +1,4 @@
-"""Durable, proposal-only paper runtime for the local Sigil desktop bridge."""
+"""Durable, governed paper-trading runtime for the local Sigil desktop bridge."""
 
 from __future__ import annotations
 
@@ -7,15 +7,38 @@ import hashlib
 import json
 import os
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
-SCHEMA_VERSION = 1
+from .paper_execution import (
+    cancel as _cancel_order,
+)
+from .paper_execution import (
+    fill as _fill_order,
+)
+from .paper_execution import (
+    initialize_execution_state,
+    mission_control_status,
+)
+from .paper_execution import (
+    recalculate as _recalculate,
+)
+from .paper_execution import (
+    submit as _submit_order,
+)
+from .universe import PAPER_SIMULATION_PRICES, US_LISTED_SCREENING_UNIVERSE
+
+SCHEMA_VERSION = 3
 CYCLE_SECONDS = 5
 CONTROL_ACTIONS = frozenset({"start", "pause", "stop"})
+AUTHORIZATION_ACTIONS = frozenset({"grant", "revoke"})
+MARKET_PRICES = {
+    symbol: Decimal(price) for symbol, price in PAPER_SIMULATION_PRICES.items()
+}
 
 
 def _now() -> datetime:
@@ -24,6 +47,40 @@ def _now() -> datetime:
 
 def _timestamp(value: datetime) -> str:
     return value.isoformat().replace("+00:00", "Z")
+
+
+def _authorization_month(value: datetime) -> str:
+    return value.strftime("%Y-%m")
+
+
+def _next_month(value: datetime) -> datetime:
+    if value.month == 12:
+        return value.replace(
+            year=value.year + 1, month=1, day=1, hour=0, minute=0,
+            second=0, microsecond=0
+        )
+    return value.replace(
+        month=value.month + 1, day=1, hour=0, minute=0, second=0,
+        microsecond=0
+    )
+
+
+def _monthly_authorization(now: datetime) -> dict[str, Any]:
+    month = _authorization_month(now)
+    return {
+        "status": "active",
+        "authorization_id": f"PAPER-AUTH-{month}-AUTO",
+        "authorization_month": month,
+        "authorized_at": _timestamp(now),
+        "expires_at": _timestamp(_next_month(now)),
+        "revoked_at": None,
+        "scope": [
+            "automatic-paper-approval",
+            "simulated-paper-buy",
+            "simulated-paper-sell",
+        ],
+        "automatic_monthly_policy": True,
+    }
 
 
 def _canonical(value: object) -> bytes:
@@ -49,7 +106,8 @@ def _state_directory() -> Path:
 
 def _initial_state(now: datetime) -> dict[str, Any]:
     timestamp = _timestamp(now)
-    return {
+    authorization = _monthly_authorization(now)
+    state = {
         "schema_version": SCHEMA_VERSION,
         "revision": 1,
         "generated_at": timestamp,
@@ -72,8 +130,9 @@ def _initial_state(now: datetime) -> dict[str, Any]:
             "cycle_count": 0,
             "last_cycle_at": None,
             "next_cycle_at": None,
-            "proposal_only": True,
+            "mode": "monthly-authorized-paper-execution",
         },
+        "paper_authorization": authorization,
         "proposals": [],
         "executions": [],
         "reconciliation": [],
@@ -81,15 +140,171 @@ def _initial_state(now: datetime) -> dict[str, Any]:
             {
                 "id": "AUD-RUNTIME-0001",
                 "timestamp": timestamp,
-                "status": "ready",
+                "status": "monthly_authorization_started",
                 "proposal_id": "—",
                 "order_id": "—",
-                "evidence_reference": "RUNTIME-BOOT",
-                "summary": "Durable paper runtime initialized",
-                "details": {"broker_submission_attempted": False, "paper_only": True},
+                "evidence_reference": authorization["authorization_id"],
+                "summary": "Calendar-month paper authorization started automatically",
+                "details": {
+                    "authorization_month": authorization[
+                        "authorization_month"
+                    ],
+                    "automatic_monthly_policy": True,
+                    "broker_submission_attempted": False,
+                    "paper_only": True,
+                },
             }
         ],
     }
+    initialize_execution_state(state)
+    _recalculate(
+        state,
+        {"MSFT": "452.80", "NVDA": "173.00"},
+    )
+    return state
+
+
+def _empty_reset_state(
+    now: datetime, *, reset_id: str, previous_state_sha256: str
+) -> dict[str, Any]:
+    state = _initial_state(now)
+    state["positions"] = []
+    state["proposals"] = []
+    state["executions"] = []
+    state["reconciliation"] = []
+    state["orders"] = {}
+    state["filled_orders"] = []
+    state["cancelled_orders"] = []
+    state["rejected_orders"] = []
+    state["last_execution"] = None
+    state["balances"].update(
+        {
+            "cash": "10000.00",
+            "reserved_cash": "0.00",
+            "buying_power": "10000.00",
+            "portfolio_value": "0.00",
+            "equity": "10000.00",
+            "realized_pnl": "0.00",
+            "unrealized_pnl": "0.00",
+            "total_account_value": "10000.00",
+        }
+    )
+    state["audit"] = [
+        {
+            "id": "AUD-RUNTIME-RESET-0001",
+            "timestamp": _timestamp(now),
+            "status": "paper_runtime_reset",
+            "proposal_id": "—",
+            "order_id": "—",
+            "evidence_reference": reset_id,
+            "summary": "Local paper portfolio reset to an empty governed ledger",
+            "details": {
+                "paper_only": True,
+                "previous_state_sha256": previous_state_sha256,
+                "settings_preserved": True,
+                "credentials_preserved": True,
+                "broker_submission_attempted": False,
+            },
+        }
+    ]
+    return state
+
+
+def _append_reset_evidence(
+    directory: Path, state: dict[str, Any], now: datetime
+) -> tuple[str, str]:
+    evidence_path = directory / "runtime-reset-audit.jsonl"
+    if evidence_path.is_symlink():
+        raise RuntimeError("paper reset audit cannot be a symlink")
+    previous_record_sha256 = "0" * 64
+    if evidence_path.exists():
+        for line in evidence_path.read_text(encoding="utf-8").splitlines():
+            envelope = json.loads(line)
+            body = {
+                "record": envelope.get("record"),
+                "previous_record_sha256": envelope.get(
+                    "previous_record_sha256"
+                ),
+            }
+            if (
+                envelope.get("previous_record_sha256")
+                != previous_record_sha256
+                or envelope.get("sha256") != _digest(body)
+            ):
+                raise RuntimeError("paper reset audit integrity validation failed")
+            previous_record_sha256 = str(envelope["sha256"])
+    previous_state_sha256 = _digest(state)
+    reset_id = f"PAPER-RESET-{now.strftime('%Y%m%dT%H%M%SZ')}"
+    record = {
+        "reset_id": reset_id,
+        "timestamp": _timestamp(now),
+        "scope": "local-paper-runtime-only",
+        "previous_state_sha256": previous_state_sha256,
+        "settings_preserved": True,
+        "credentials_preserved": True,
+        "provider_mutation": False,
+        "broker_submission_attempted": False,
+    }
+    body = {
+        "record": record,
+        "previous_record_sha256": previous_record_sha256,
+    }
+    envelope = {**body, "sha256": _digest(body)}
+    with evidence_path.open("a", encoding="utf-8") as output:
+        os.chmod(evidence_path, 0o600)
+        output.write(_canonical(envelope).decode())
+        output.write("\n")
+        output.flush()
+        os.fsync(output.fileno())
+    return reset_id, previous_state_sha256
+
+
+def _upgrade_runtime_state(state: dict[str, Any]) -> None:
+    initialize_execution_state(state)
+    state["schema_version"] = SCHEMA_VERSION
+    automation = state.setdefault("automation", {})
+    automation.pop("proposal_only", None)
+    automation.setdefault("mode", "monthly-authorized-paper-execution")
+    state.setdefault(
+        "paper_authorization",
+        {
+            "status": "required",
+            "authorization_id": None,
+            "authorized_at": None,
+            "expires_at": None,
+            "revoked_at": None,
+            "scope": [],
+        },
+    )
+
+
+def _ensure_month_authorization(
+    state: dict[str, Any], now: datetime
+) -> None:
+    authorization = state["paper_authorization"]
+    month = _authorization_month(now)
+    if authorization.get("authorization_month") == month:
+        return
+    authorization.update(_monthly_authorization(now))
+    state["audit"].insert(
+        0,
+        {
+            "id": f"AUD-AUTH-MONTH-{month}",
+            "timestamp": _timestamp(now),
+            "status": "monthly_authorization_started",
+            "proposal_id": "—",
+            "order_id": "—",
+            "evidence_reference": authorization["authorization_id"],
+            "summary": "Calendar-month paper authorization started automatically",
+            "details": {
+                "authorization_month": month,
+                "automatic_monthly_policy": True,
+                "paper_only": True,
+                "scope": authorization["scope"],
+                "broker_submission_attempted": False,
+            },
+        },
+    )
 
 
 @contextmanager
@@ -108,9 +323,10 @@ def _locked_state() -> Iterator[tuple[Path, dict[str, Any]]]:
             if (
                 not isinstance(payload, dict)
                 or envelope.get("sha256") != _digest(payload)
-                or payload.get("schema_version") != SCHEMA_VERSION
+                or payload.get("schema_version") not in {1, 2, SCHEMA_VERSION}
             ):
                 raise RuntimeError("paper runtime state integrity validation failed")
+            _upgrade_runtime_state(payload)
         else:
             payload = _initial_state(_now())
         yield state_path, payload
@@ -137,9 +353,90 @@ def _persist(state_path: Path, payload: dict[str, Any]) -> None:
             os.unlink(temporary)
 
 
+def _authorization_active(state: dict[str, Any], now: datetime) -> bool:
+    _ensure_month_authorization(state, now)
+    authorization = state["paper_authorization"]
+    expires_at = authorization.get("expires_at")
+    if authorization.get("status") != "active" or not expires_at:
+        if state["automation"].get("state") == "running":
+            state["automation"].update(
+                {"state": "paused", "next_cycle_at": None}
+            )
+        return False
+    if datetime.fromisoformat(expires_at.replace("Z", "+00:00")) <= now:
+        authorization["status"] = "expired"
+        state["automation"].update({"state": "paused", "next_cycle_at": None})
+        state["audit"].insert(
+            0,
+            {
+                "id": f"AUD-AUTH-{int(state['revision']) + 1:06d}",
+                "timestamp": _timestamp(now),
+                "status": "authorization_expired",
+                "proposal_id": "—",
+                "order_id": "—",
+                "evidence_reference": str(
+                    authorization.get("authorization_id") or "PAPER-AUTHORIZATION"
+                ),
+                "summary": "Monthly paper authorization expired; automation paused",
+                "details": {
+                    "paper_only": True,
+                    "broker_submission_attempted": False,
+                    "authorization_active": False,
+                },
+            },
+        )
+        return False
+    return True
+
+
+def _cycle_order(
+    state: dict[str, Any], sequence: int
+) -> tuple[str, str, Decimal, Decimal, Decimal]:
+    side = "BUY" if sequence % 2 else "SELL"
+    symbols = tuple(item["symbol"] for item in US_LISTED_SCREENING_UNIVERSE)
+    symbol = symbols[(sequence - 1) % len(symbols)]
+    price = MARKET_PRICES[symbol]
+    if side == "BUY":
+        buying_power = Decimal(state["balances"]["buying_power"])
+        notional_budget = min(buying_power * Decimal("0.05"), buying_power)
+        quantity = (notional_budget / price).quantize(Decimal("0.0001"))
+        if quantity <= 0:
+            raise ValueError("paper buying power is exhausted")
+    else:
+        position = next(
+            (
+                item
+                for item in state["positions"]
+                if item["symbol"] == symbol and Decimal(item["quantity"]) > 0
+            ),
+            None,
+        )
+        if position is None:
+            position = next(
+                (
+                    item
+                    for item in state["positions"]
+                    if Decimal(item["quantity"]) > 0
+                ),
+                None,
+            )
+        if position is None:
+            raise ValueError("no simulated position is available to sell")
+        symbol = str(position["symbol"])
+        price = MARKET_PRICES[symbol]
+        held = Decimal(position["quantity"])
+        quantity = max(
+            min(held * Decimal("0.10"), held).quantize(Decimal("0.0001")),
+            min(held, Decimal("0.0001")),
+        )
+    return symbol, side, quantity, price, quantity * price
+
+
 def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
     automation = state["automation"]
     if automation["state"] != "running":
+        return
+    if not _authorization_active(state, now):
         return
     next_cycle = automation.get("next_cycle_at")
     if next_cycle and datetime.fromisoformat(next_cycle.replace("Z", "+00:00")) > now:
@@ -149,43 +446,79 @@ def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
     timestamp = _timestamp(now)
     proposal_id = f"PRP-PAPER-{sequence:06d}"
     evidence_id = f"HERMES-PAPER-{sequence:06d}"
-    symbols = ("MSFT", "NVDA", "AAPL")
-    symbol = symbols[(sequence - 1) % len(symbols)]
+    symbol, side, quantity, price, notional = _cycle_order(state, sequence)
+    authorization_id = state["paper_authorization"]["authorization_id"]
     state["proposals"].insert(
         0,
         {
             "id": proposal_id,
             "symbol": symbol,
-            "side": "BUY",
-            "quantity": 0.05,
-            "estimated_notional": "25.00",
-            "strategy": "Hermes governed paper analysis",
-            "status": "paper-simulated",
+            "side": side,
+            "quantity": float(quantity),
+            "estimated_notional": f"{notional:.2f}",
+            "strategy": "Monthly-authorized governed paper automation",
+            "status": "approved",
+            "approval": {
+                "mode": "automatic-paper-only",
+                "authorization_id": authorization_id,
+                "approved_at": timestamp,
+            },
             "evidence_references": [evidence_id],
-            "risk_results": ["Paper cap passed", "Broker execution disabled"],
+            "risk_results": [
+                "Monthly paper authorization active",
+                (
+                    "Dynamic allocation: at most 5% of available paper buying power"
+                    if side == "BUY"
+                    else "Dynamic allocation: at most 10% of simulated holdings"
+                ),
+                "Broker execution disabled",
+            ],
         },
     )
-    cash = Decimal(state["balances"]["cash"]) - Decimal("25.00")
-    state["balances"]["cash"] = f"{cash:.2f}"
-    position = next((item for item in state["positions"] if item["symbol"] == symbol), None)
-    if position:
-        position["quantity"] = f"{Decimal(position['quantity']) + Decimal('0.05'):.2f}"
-        position["market_value"] = f"{Decimal(position['market_value']) + Decimal('25.00'):.2f}"
-    else:
-        state["positions"].append({"symbol": symbol, "quantity": "0.05", "market_value": "25.00"})
     order_id = f"PAPER-ORD-{sequence:06d}"
-    state["executions"].insert(
+    state["audit"].insert(
         0,
         {
-            "id": f"PAPER-RCT-{sequence:06d}",
-            "order_id": order_id,
-            "proposal_id": proposal_id,
-            "symbol": symbol,
-            "status": "local-paper-fill",
-            "state": "simulated",
+            "id": f"AUD-APPROVAL-{sequence:06d}",
             "timestamp": timestamp,
-            "broker_submission_attempted": False,
+            "status": "paper_auto_approved",
+            "proposal_id": proposal_id,
+            "order_id": order_id,
+            "evidence_reference": str(authorization_id),
+            "summary": "Paper proposal approved automatically under active monthly authorization",
+            "details": {
+                "paper_only": True,
+                "simulated": True,
+                "side": side,
+                "symbol": symbol,
+                "quantity": str(quantity),
+                "estimated_notional": f"{notional:.2f}",
+                "authorization_id": authorization_id,
+                "broker_submission_attempted": False,
+            },
         },
+    )
+    order = _submit_order(
+        state,
+        {
+            "order_id": order_id,
+            "symbol": symbol,
+            "side": side,
+            "order_type": "MARKET",
+            "quantity": str(quantity),
+            "reference_price": str(price),
+            "environment": "paper",
+            "broker_submission": False,
+        },
+        timestamp=timestamp,
+    )
+    if order["status"] != "open":
+        raise RuntimeError(f"authorized paper order rejected: {order.get('reason')}")
+    _fill_order(
+        state,
+        order_id,
+        {symbol: str(price)},
+        timestamp=timestamp,
     )
     state["reconciliation"].insert(
         0,
@@ -195,6 +528,7 @@ def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
             "required": False,
             "automatic_retry_allowed": False,
             "timestamp": timestamp,
+            "evidence_reference": f"PAPER-RUNTIME:{order_id}",
         },
     )
     state["audit"].insert(
@@ -202,15 +536,22 @@ def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
         {
             "id": f"AUD-PAPER-{sequence:06d}",
             "timestamp": timestamp,
-            "status": "proposed",
+            "status": "paper_executed",
             "proposal_id": proposal_id,
-            "order_id": "—",
+            "order_id": order_id,
             "evidence_reference": evidence_id,
-            "summary": "Hermes analysis produced a governed paper proposal",
+            "summary": f"Governed paper {side.lower()} simulated and reconciled",
             "details": {
-                "analysis_only": True,
-                "approval_created": False,
+                "paper_only": True,
+                "approval_created": True,
+                "approval_mode": "automatic-paper-only",
                 "local_paper_fill": True,
+                "side": side,
+                "symbol": symbol,
+                "quantity": str(quantity),
+                "price": f"{price:.2f}",
+                "notional": f"{notional:.2f}",
+                "authorization_id": authorization_id,
                 "broker_submission_attempted": False,
             },
         },
@@ -229,12 +570,68 @@ def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
 def runtime_snapshot(*, now: datetime | None = None) -> dict[str, Any]:
     observed_at = now or _now()
     with _locked_state() as (state_path, state):
+        _ensure_month_authorization(state, observed_at)
         _run_due_cycle(state, observed_at)
         state["revision"] = int(state["revision"]) + 1
         state["generated_at"] = _timestamp(observed_at)
         state["connection"]["last_refresh_at"] = _timestamp(observed_at)
         _persist(state_path, state)
         return json.loads(json.dumps(state))
+
+
+def submit_paper_order(
+    request: dict[str, Any], *, now: datetime | None = None
+) -> dict[str, Any]:
+    """Create a local paper order; this function has no broker transport."""
+    observed_at = now or _now()
+    with _locked_state() as (state_path, state):
+        order = _submit_order(state, request, timestamp=_timestamp(observed_at))
+        state["revision"] = int(state["revision"]) + 1
+        state["generated_at"] = _timestamp(observed_at)
+        _persist(state_path, state)
+        return order
+
+
+def simulate_paper_fill(
+    order_id: str,
+    market_snapshot: dict[str, Any],
+    *,
+    quantity: object | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Apply an injected market snapshot to a local paper order."""
+    observed_at = now or _now()
+    with _locked_state() as (state_path, state):
+        order = _fill_order(
+            state,
+            order_id,
+            market_snapshot,
+            timestamp=_timestamp(observed_at),
+            quantity=quantity,
+        )
+        state["revision"] = int(state["revision"]) + 1
+        state["generated_at"] = _timestamp(observed_at)
+        _persist(state_path, state)
+        return order
+
+
+def cancel_paper_order(order_id: str, *, now: datetime | None = None) -> dict[str, Any]:
+    """Cancel an unfilled local paper order and release its reservation."""
+    observed_at = now or _now()
+    with _locked_state() as (state_path, state):
+        order = _cancel_order(state, order_id, timestamp=_timestamp(observed_at))
+        state["revision"] = int(state["revision"]) + 1
+        state["generated_at"] = _timestamp(observed_at)
+        _persist(state_path, state)
+        return order
+
+
+def runtime_mission_control_status() -> dict[str, Any]:
+    """Return the bounded paper-runtime status required by Mission Control."""
+    with _locked_state() as (state_path, state):
+        result = mission_control_status(state)
+        _persist(state_path, state)
+        return result
 
 
 def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[str, Any]:
@@ -244,6 +641,10 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
     with _locked_state() as (state_path, state):
         automation = state["automation"]
         if action == "start":
+            if not _authorization_active(state, observed_at):
+                raise ValueError(
+                    "an active monthly paper authorization is required"
+                )
             automation["state"] = "running"
             automation["next_cycle_at"] = _timestamp(observed_at)
         elif action == "pause":
@@ -263,8 +664,86 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
                 "order_id": "—",
                 "evidence_reference": "PAPER-AUTOMATION",
                 "summary": f"Paper automation {action} recorded",
-                "details": {"broker_submission_attempted": False, "proposal_only": True},
+                "details": {
+                    "broker_submission_attempted": False,
+                    "paper_only": True,
+                    "authorization_id": state["paper_authorization"].get(
+                        "authorization_id"
+                    ),
+                },
             },
         )
         _persist(state_path, state)
         return json.loads(json.dumps(state))
+
+
+def control_paper_authorization(
+    action: object, *, now: datetime | None = None
+) -> dict[str, Any]:
+    if action not in AUTHORIZATION_ACTIONS:
+        raise ValueError("paper authorization action must be grant or revoke")
+    observed_at = now or _now()
+    with _locked_state() as (state_path, state):
+        authorization = state["paper_authorization"]
+        timestamp = _timestamp(observed_at)
+        _ensure_month_authorization(state, observed_at)
+        if action == "grant":
+            if authorization.get("status") == "revoked":
+                raise ValueError(
+                    "paper authorization is revoked for this calendar month"
+                )
+        else:
+            authorization.update(
+                {"status": "revoked", "revoked_at": timestamp}
+            )
+            state["automation"].update({"state": "paused", "next_cycle_at": None})
+        state["revision"] = int(state["revision"]) + 1
+        state["generated_at"] = timestamp
+        state["audit"].insert(
+            0,
+            {
+                "id": f"AUD-AUTH-{state['revision']:06d}",
+                "timestamp": timestamp,
+                "status": (
+                    "authorization_granted"
+                    if action == "grant"
+                    else "authorization_revoked"
+                ),
+                "proposal_id": "—",
+                "order_id": "—",
+                "evidence_reference": str(
+                    authorization.get("authorization_id")
+                    or "PAPER-AUTHORIZATION"
+                ),
+                "summary": f"Monthly local paper authorization {action} recorded",
+                "details": {
+                    "paper_only": True,
+                    "scope": authorization["scope"],
+                    "expires_at": authorization.get("expires_at"),
+                    "broker_submission_attempted": False,
+                },
+            },
+        )
+        _persist(state_path, state)
+        return json.loads(json.dumps(state))
+
+
+def reset_paper_runtime(
+    confirmation: object, *, now: datetime | None = None
+) -> dict[str, Any]:
+    if confirmation != "RESET LOCAL PAPER PORTFOLIO":
+        raise ValueError(
+            "exact paper reset confirmation is required"
+        )
+    observed_at = now or _now()
+    with _locked_state() as (state_path, state):
+        reset_id, previous_state_sha256 = _append_reset_evidence(
+            state_path.parent, state, observed_at
+        )
+        reset_state = _empty_reset_state(
+            observed_at,
+            reset_id=reset_id,
+            previous_state_sha256=previous_state_sha256,
+        )
+        _persist(state_path, reset_state)
+        return json.loads(json.dumps(reset_state))

@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+import type { SigilProviderSnapshot } from './mission-control/types'
+
+declare global {
 type SigilBackendStatus = {
   bridge_version: string
   status: string
@@ -39,6 +42,8 @@ type SigilBackendResponse<T> =
       message: string
     }
 
+type SigilRuntimeSnapshot = Record<string, unknown>
+
 type SigilProposalExplanationPayload = {
   proposal_id: string
   symbol: string
@@ -56,7 +61,31 @@ interface SigilDesktopApi {
   productName: string
   persistenceNamespace: string
   brokerSubmissionAvailable: false
+  buildInfo?: {
+    version: string
+    build: string
+    commit: string
+    buildTime: string
+    channel: 'dev' | 'release'
+    applicationMode: 'Live development' | 'Packaged release'
+  }
+  checkForUpdates?: () => Promise<{ status: string; message: string }>
+  onUpdateStatus?: () => () => void
+  releaseCertification?: (
+    payload: Readonly<Record<string, unknown>>
+  ) => Promise<Record<string, unknown>>
   getBackendStatus: () => Promise<SigilBackendResponse<SigilBackendStatus>>
+  getRuntimeSnapshot?: () => Promise<SigilBackendResponse<SigilRuntimeSnapshot>>
+  controlPaperCycle?: (
+    action: 'start' | 'pause' | 'stop'
+  ) => Promise<SigilBackendResponse<SigilRuntimeSnapshot>>
+  controlPaperAuthorization?: (
+    action: 'grant' | 'revoke'
+  ) => Promise<SigilBackendResponse<SigilRuntimeSnapshot>>
+  resetPaperRuntime?: () => Promise<SigilBackendResponse<SigilRuntimeSnapshot>>
+  getProviderSnapshot?: () => Promise<
+    SigilBackendResponse<SigilProviderSnapshot>
+  >
   explainProposal: (
     payload: SigilProposalExplanationPayload
   ) => Promise<SigilBackendResponse<SigilBackendProposalExplanation>>
@@ -64,4 +93,5 @@ interface SigilDesktopApi {
 
 interface Window {
   sigilDesktop?: SigilDesktopApi
+}
 }
