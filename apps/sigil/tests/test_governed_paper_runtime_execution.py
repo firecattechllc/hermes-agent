@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from sigil.desktop_bridge import runtime
+from sigil.desktop_bridge.paper_execution import evaluate_runtime_health
 
 NOW = datetime(2026, 7, 26, 12, tzinfo=timezone.utc)
 
@@ -223,3 +224,58 @@ def test_reset_requires_exact_confirmation_and_preserves_auditable_evidence(
     assert evidence["record"]["broker_submission_attempted"] is False
     assert len(evidence["record"]["previous_state_sha256"]) == 64
     assert len(evidence["sha256"]) == 64
+
+
+def test_runtime_health_requires_reconciliation_when_flagged() -> None:
+    state = runtime.runtime_snapshot(now=NOW)
+    state["reconciliation"].insert(
+        0,
+        {
+            "order_id": "ORD-RECOVERY",
+            "status": "ambiguous",
+            "required": True,
+        },
+    )
+
+    assert evaluate_runtime_health(state) == "recovery_required"
+    assert state["runtime_health"] == "recovery_required"
+
+
+def test_runtime_health_detects_corrupt_negative_balance() -> None:
+    state = runtime.runtime_snapshot(now=NOW)
+    state["balances"]["reserved_cash"] = "-1.00"
+
+    assert evaluate_runtime_health(state) == "corrupt"
+    assert state["runtime_health"] == "corrupt"
+
+
+def test_runtime_health_detects_balance_drift() -> None:
+    state = runtime.runtime_snapshot(now=NOW)
+    state["balances"]["buying_power"] = "1.00"
+
+    assert evaluate_runtime_health(state) == "degraded"
+    assert state["runtime_health"] == "degraded"
+
+
+def test_runtime_health_requires_recovery_for_invalid_open_order() -> None:
+    state = runtime.runtime_snapshot(now=NOW)
+    state["orders"]["ORD-BROKEN"] = {
+        "id": "ORD-BROKEN",
+        "symbol": "AAPL",
+        "side": "BUY",
+        "order_type": "MARKET",
+        "quantity": "1",
+        "filled_quantity": "0",
+        "reserved_cash": "100.00",
+        "status": "open",
+    }
+
+    assert evaluate_runtime_health(state) == "recovery_required"
+    assert state["runtime_health"] == "recovery_required"
+
+
+def test_runtime_health_is_healthy_for_consistent_state() -> None:
+    state = runtime.runtime_snapshot(now=NOW)
+
+    assert evaluate_runtime_health(state) == "healthy"
+    assert state["runtime_health"] == "healthy"

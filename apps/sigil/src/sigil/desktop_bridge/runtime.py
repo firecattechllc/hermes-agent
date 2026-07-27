@@ -21,6 +21,7 @@ from .paper_execution import (
     fill as _fill_order,
 )
 from .paper_execution import (
+    evaluate_runtime_health,
     initialize_execution_state,
     mission_control_status,
 )
@@ -434,6 +435,11 @@ def _cycle_order(
 
 def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
     automation = state["automation"]
+    health = evaluate_runtime_health(state)
+    if health != "healthy":
+        automation["state"] = "paused"
+        automation["next_cycle_at"] = None
+        return
     if automation["state"] != "running":
         return
     if not _authorization_active(state, now):
@@ -571,7 +577,9 @@ def runtime_snapshot(*, now: datetime | None = None) -> dict[str, Any]:
     observed_at = now or _now()
     with _locked_state() as (state_path, state):
         _ensure_month_authorization(state, observed_at)
+        evaluate_runtime_health(state)
         _run_due_cycle(state, observed_at)
+        evaluate_runtime_health(state)
         state["revision"] = int(state["revision"]) + 1
         state["generated_at"] = _timestamp(observed_at)
         state["connection"]["last_refresh_at"] = _timestamp(observed_at)
@@ -641,6 +649,11 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
     with _locked_state() as (state_path, state):
         automation = state["automation"]
         if action == "start":
+            health = evaluate_runtime_health(state)
+            if health != "healthy":
+                raise ValueError(
+                    f"paper automation cannot start while runtime health is {health}"
+                )
             if not _authorization_active(state, observed_at):
                 raise ValueError(
                     "an active monthly paper authorization is required"
