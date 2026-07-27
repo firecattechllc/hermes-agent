@@ -111,11 +111,18 @@ def extract_pytest_count(output: str) -> int | None:
 
 
 def extract_vitest_count(output: str) -> int | None:
-    matches = re.findall(r"Tests\s+(\d+)\s+passed", output)
+    """Extract Vitest's test count while tolerating ANSI formatting."""
+    ansi_pattern = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+    clean_output = ansi_pattern.sub("", output)
+
+    matches = re.findall(
+        r"\bTests\s+(\d+)\s+passed\b",
+        clean_output,
+    )
     if not matches:
         return None
-    return int(matches[-1])
 
+    return int(matches[-1])
 
 def canonical_json(value: dict[str, Any]) -> bytes:
     return json.dumps(
