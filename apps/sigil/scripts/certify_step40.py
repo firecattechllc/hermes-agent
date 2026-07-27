@@ -21,6 +21,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 TARGETED_TESTS = (
     "apps/sigil/tests/test_step40_production_hardening.py",
     "apps/sigil/tests/test_governed_paper_runtime_execution.py",
+    "apps/sigil/tests/test_step40_certification_gate.py",
 )
 
 CERTIFIED_PATHS = (
