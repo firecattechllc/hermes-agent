@@ -1,7 +1,15 @@
 import type { SigilOperatorAdapter, SigilSnapshot, SimulatedOperatorAction } from './types'
 
+type RuntimeHealth =
+  | 'healthy'
+  | 'degraded'
+  | 'recovery_required'
+  | 'corrupt'
+  | 'locked'
+
 type SigilRuntimeSnapshot = {
   revision: number
+  runtime_health?: RuntimeHealth
   connection: {
     status: string
     last_refresh_at: string
@@ -101,6 +109,27 @@ function currency(value: string): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value))
 }
 
+function runtimeHealthLabel(runtime: SigilRuntimeSnapshot): string {
+  if (runtime.connection.status !== 'connected') {
+    return 'Runtime disconnected'
+  }
+
+  switch (runtime.runtime_health) {
+    case 'healthy':
+      return 'Runtime healthy'
+    case 'degraded':
+      return 'Runtime degraded'
+    case 'recovery_required':
+      return 'Recovery required'
+    case 'corrupt':
+      return 'Runtime corruption detected'
+    case 'locked':
+      return 'Runtime unavailable'
+    default:
+      return 'Runtime health unknown'
+  }
+}
+
 function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
   const totalAccountValue = Number(
     runtime.balances.total_account_value ?? runtime.balances.portfolio_value
@@ -125,7 +154,7 @@ function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
     simulation: true,
     brokerConnection: runtime.connection.status === 'connected' ? 'connected' : 'disconnected',
     maskedAccountId: 'PAPER LOCAL',
-    systemHealth: runtime.connection.status === 'connected' ? 'Runtime connected' : 'Runtime degraded',
+    systemHealth: runtimeHealthLabel(runtime),
     cash: currency(runtime.balances.cash),
     portfolioValue: currency(runtime.balances.portfolio_value),
     buyingPower: currency(runtime.balances.buying_power ?? runtime.balances.cash),
