@@ -70,6 +70,99 @@ def initialize_execution_state(state: dict[str, Any]) -> None:
     state["schema_version"] = max(int(state.get("schema_version", 1)), 2)
 
 
+def evaluate_runtime_health(state: dict[str, Any]) -> str:
+    """Derive a fail-closed health state from persisted paper-runtime facts."""
+    initialize_execution_state(state)
+
+    existing = state.get("runtime_health")
+    if existing in {"corrupt", "locked"}:
+        return str(existing)
+
+    connection = state.get("connection", {})
+    if connection.get("status") != "connected":
+        state["runtime_health"] = "degraded"
+        return "degraded"
+
+    if any(
+        item.get("required") is True
+        for item in state.get("reconciliation", [])
+        if isinstance(item, dict)
+    ):
+        state["runtime_health"] = "recovery_required"
+        return "recovery_required"
+
+    balances = state.get("balances")
+    if not isinstance(balances, dict):
+        state["runtime_health"] = "corrupt"
+        return "corrupt"
+
+    try:
+        cash = Decimal(str(balances["cash"]))
+        reserved_cash = Decimal(str(balances["reserved_cash"]))
+        buying_power = Decimal(str(balances["buying_power"]))
+    except (KeyError, ArithmeticError, ValueError):
+        state["runtime_health"] = "corrupt"
+        return "corrupt"
+
+    if not all(value.is_finite() for value in (cash, reserved_cash, buying_power)):
+        state["runtime_health"] = "corrupt"
+        return "corrupt"
+
+    if cash < 0 or reserved_cash < 0 or buying_power < 0:
+        state["runtime_health"] = "corrupt"
+        return "corrupt"
+
+    if reserved_cash > cash:
+        state["runtime_health"] = "degraded"
+        return "degraded"
+
+    expected_buying_power = (cash - reserved_cash).quantize(
+        MONEY,
+        rounding=ROUND_HALF_UP,
+    )
+    if buying_power.quantize(MONEY, rounding=ROUND_HALF_UP) != expected_buying_power:
+        state["runtime_health"] = "degraded"
+        return "degraded"
+
+    orders = state.get("orders")
+    if not isinstance(orders, dict):
+        state["runtime_health"] = "corrupt"
+        return "corrupt"
+
+    allowed_statuses = {
+        "open",
+        "partially_filled",
+        "filled",
+        "cancelled",
+        "rejected",
+    }
+
+    for order_id, order in orders.items():
+        if not isinstance(order_id, str) or not isinstance(order, dict):
+            state["runtime_health"] = "corrupt"
+            return "corrupt"
+
+        status = order.get("status")
+        if status not in allowed_statuses:
+            state["runtime_health"] = "degraded"
+            return "degraded"
+
+        if status in {"open", "partially_filled"}:
+            try:
+                remaining = Decimal(str(order["remaining_quantity"]))
+            except (KeyError, ArithmeticError, ValueError):
+                state["runtime_health"] = "recovery_required"
+                return "recovery_required"
+
+            if not remaining.is_finite() or remaining <= 0:
+                state["runtime_health"] = "recovery_required"
+                return "recovery_required"
+
+    state["runtime_health"] = "healthy"
+    return "healthy"
+
+
+
 def submit(state: dict[str, Any], request: dict[str, Any], *, timestamp: str) -> dict[str, Any]:
     """Validate and reserve an order.  It never contacts a broker."""
     initialize_execution_state(state)
@@ -232,4 +325,17 @@ def recalculate(state: dict[str, Any], snapshot: dict[str, Any]) -> None:
 
 def mission_control_status(state: dict[str, Any]) -> dict[str, Any]:
     initialize_execution_state(state)
-    return {"paper_mode": True, "broker_execution_disabled": True, "runtime_health": state["runtime_health"], "cash": state["balances"]["cash"], "positions": deepcopy(state["positions"]), "open_orders": [deepcopy(order) for order in state["orders"].values() if order["status"] in {"open", "partially_filled"}], "last_execution": deepcopy(state["last_execution"])}
+    health = evaluate_runtime_health(state)
+    return {
+        "paper_mode": True,
+        "broker_execution_disabled": True,
+        "runtime_health": health,
+        "cash": state["balances"]["cash"],
+        "positions": deepcopy(state["positions"]),
+        "open_orders": [
+            deepcopy(order)
+            for order in state["orders"].values()
+            if order["status"] in {"open", "partially_filled"}
+        ],
+        "last_execution": deepcopy(state["last_execution"]),
+    }
