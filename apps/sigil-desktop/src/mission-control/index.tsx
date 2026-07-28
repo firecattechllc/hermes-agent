@@ -31,6 +31,8 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
+const RELEASE_STAGE = 'ALPHA 1'
+
 const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
 
@@ -1073,6 +1075,9 @@ export function SigilOperatorView({
           <div>
             <div className="flex items-baseline gap-3">
               <h1 className="text-base font-bold uppercase tracking-[0.025em]">Sigil Operator</h1>
+              <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-primary">
+                {RELEASE_STAGE}
+              </span>
               <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-(--ui-text-tertiary)">
                 Mission control
               </span>
@@ -1098,7 +1103,7 @@ export function SigilOperatorView({
                 onClick={() => setAboutOpen(true)}
                 type="button"
               >
-                BUILD {desktopApi()?.buildInfo?.build}
+                {RELEASE_STAGE} · v{desktopApi()?.buildInfo?.version} · BUILD {desktopApi()?.buildInfo?.build}
               </button>
             ) : null}
             <Button onClick={() => setReloadGeneration(value => value + 1)} size="xs" variant="outline">
@@ -1492,7 +1497,12 @@ export function SigilOperatorView({
         )}
       >
         <span>No broker submission available · no live submit control · account identity masked</span>
-        <span>Adapter: governed local paper runtime · provider reads isolated in backend · Step 39</span>
+        <span>
+          Adapter: governed local paper runtime · provider reads isolated in backend · {RELEASE_STAGE}
+          {desktopApi()?.buildInfo
+            ? ` · v${desktopApi()?.buildInfo?.version} · BUILD ${desktopApi()?.buildInfo?.build}`
+            : ''}
+        </span>
       </footer>
       <ConfirmDialog
         confirmLabel={confirmation?.label}
@@ -1596,6 +1606,7 @@ export function SigilOperatorView({
             </div>
             <dl className="grid grid-cols-2 gap-px bg-(--ui-stroke-tertiary)">
               {[
+                ['RELEASE STAGE', RELEASE_STAGE],
                 ['VERSION', desktopApi()?.buildInfo?.version],
                 ['CHANNEL', desktopApi()?.buildInfo?.channel.toUpperCase()],
                 ['BUILD ID', desktopApi()?.buildInfo?.build],
