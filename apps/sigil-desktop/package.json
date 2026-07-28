@@ -62,20 +62,17 @@
     ],
     "extraResources": [
       {
+        "from": "../sigil/src/sigil",
+        "to": "sigil-backend/sigil",
+        "filter": [
+          "**/*.py",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
         "from": "packaged-backend/sigil/__init__.py",
         "to": "sigil-backend/sigil/__init__.py"
-      },
-      {
-        "from": "../sigil/src/sigil/desktop_bridge",
-        "to": "sigil-backend/sigil/desktop_bridge"
-      },
-      {
-        "from": "../sigil/src/sigil/market_data",
-        "to": "sigil-backend/sigil/market_data"
-      },
-      {
-        "from": "../sigil/src/sigil/market_universe",
-        "to": "sigil-backend/sigil/market_universe"
       }
     ],
     "asar": true,

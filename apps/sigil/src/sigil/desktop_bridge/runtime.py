@@ -312,6 +312,57 @@ def _ensure_month_authorization(
     )
 
 
+def _recover_invalid_runtime_state(
+    state_path: Path,
+    directory: Path,
+    *,
+    reason: str,
+) -> dict[str, Any]:
+    """Quarantine invalid local paper state and safely create a clean runtime."""
+
+    now = _now()
+    quarantine_name = (
+        f"runtime-state.invalid-{now.strftime('%Y%m%dT%H%M%S%fZ')}.json"
+    )
+    quarantine_path = directory / quarantine_name
+
+    if state_path.exists():
+        if state_path.is_symlink():
+            raise RuntimeError("paper runtime state cannot be a symlink")
+        os.replace(state_path, quarantine_path)
+        os.chmod(quarantine_path, 0o600)
+
+    state = _initial_state(now)
+    recovery_id = f"PAPER-RECOVERY-{now.strftime('%Y%m%dT%H%M%SZ')}"
+
+    state["audit"].insert(
+        0,
+        {
+            "id": "AUD-RUNTIME-RECOVERY-0001",
+            "timestamp": _timestamp(now),
+            "status": "paper_runtime_recovered",
+            "proposal_id": "—",
+            "order_id": "—",
+            "evidence_reference": recovery_id,
+            "summary": (
+                "Invalid local paper runtime state was quarantined and "
+                "replaced with a clean governed runtime"
+            ),
+            "details": {
+                "paper_only": True,
+                "broker_submission_attempted": False,
+                "recovery_reason": reason,
+                "quarantined_state_file": (
+                    quarantine_path.name if quarantine_path.exists() else None
+                ),
+            },
+        },
+    )
+
+    return state
+
+
+
 @contextmanager
 def _locked_state() -> Iterator[tuple[Path, dict[str, Any]]]:
     directory = _state_directory()
@@ -323,15 +374,27 @@ def _locked_state() -> Iterator[tuple[Path, dict[str, Any]]]:
         os.chmod(lock_path, 0o600)
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         if state_path.exists():
-            envelope = json.loads(state_path.read_text(encoding="utf-8"))
-            payload = envelope.get("payload")
-            if (
-                not isinstance(payload, dict)
-                or envelope.get("sha256") != _digest(payload)
-                or payload.get("schema_version") not in {1, 2, 3, SCHEMA_VERSION}
-            ):
-                raise RuntimeError("paper runtime state integrity validation failed")
-            _upgrade_runtime_state(payload)
+            try:
+                envelope = json.loads(state_path.read_text(encoding="utf-8"))
+                payload = envelope.get("payload")
+                valid = (
+                    isinstance(payload, dict)
+                    and envelope.get("sha256") == _digest(payload)
+                    and payload.get("schema_version")
+                    in {1, 2, 3, SCHEMA_VERSION}
+                )
+            except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+                payload = None
+                valid = False
+
+            if valid:
+                _upgrade_runtime_state(payload)
+            else:
+                payload = _recover_invalid_runtime_state(
+                    state_path,
+                    directory,
+                    reason="paper runtime state integrity validation failed",
+                )
         else:
             payload = _initial_state(_now())
         yield state_path, payload

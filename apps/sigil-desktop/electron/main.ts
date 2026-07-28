@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs"
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -136,12 +137,30 @@ function repositoryRoot(): string {
 }
 
 function pythonExecutable(): string {
-  return (
-    process.env.SIGIL_PYTHON ||
-    (app.isPackaged
-      ? '/usr/bin/python3'
-      : path.join(repositoryRoot(), 'apps/sigil/.venv/bin/python'))
+  if (process.env.SIGIL_PYTHON) {
+    return process.env.SIGIL_PYTHON
+  }
+
+  if (!app.isPackaged) {
+    return path.join(repositoryRoot(), 'apps/sigil/.venv/bin/python')
+  }
+
+  const packagedCandidates = [
+    '/opt/homebrew/opt/python@3.11/bin/python3.11',
+    '/usr/local/opt/python@3.11/bin/python3.11'
+  ]
+
+  const packagedPython = packagedCandidates.find(candidate =>
+    existsSync(candidate)
   )
+
+  if (!packagedPython) {
+    throw new Error(
+      'Sigil requires Python 3.11. No certified packaged runtime was found.'
+    )
+  }
+
+  return packagedPython
 }
 
 function backendSourceRoot(): string {
