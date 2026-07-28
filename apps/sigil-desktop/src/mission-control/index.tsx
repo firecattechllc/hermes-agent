@@ -31,7 +31,7 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const RELEASE_STAGE = 'ALPHA 1'
+const RELEASE_STAGE = 'ALPHA 1.3'
 
 const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
