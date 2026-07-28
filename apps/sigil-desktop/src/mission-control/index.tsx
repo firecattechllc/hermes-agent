@@ -1078,15 +1078,13 @@ export function SigilOperatorView({
               <span
                 className="
                   rounded-sm
-                  border border-lime-400
-                  bg-lime-400/15
+                  border border-lime-400/70
+                  bg-lime-400/8
                   px-2 py-0.5
-                  font-mono text-[0.625rem] font-bold
+                  font-mono text-[0.625rem] font-semibold
                   uppercase tracking-[0.12em]
-                  text-lime-300
-                  shadow-[0_0_10px_rgba(163,230,53,0.7)]
-                  animate-[pulse_1.8s_ease-in-out_infinite]
-                  motion-reduce:animate-none
+                  text-lime-300/90
+                  shadow-[0_0_7px_rgba(163,230,53,0.38)]
                 "
               >
                 ● {RELEASE_STAGE}
@@ -1113,19 +1111,16 @@ export function SigilOperatorView({
               <button
                 className="
                   rounded-sm
-                  border border-lime-400
-                  bg-lime-400/15
+                  border border-lime-400/70
+                  bg-lime-400/8
                   px-3 py-1
-                  font-mono text-[0.625rem] font-bold
+                  font-mono text-[0.625rem] font-semibold
                   uppercase tracking-[0.08em]
-                  text-lime-300
-                  shadow-[0_0_12px_rgba(163,230,53,0.65)]
-                  animate-[pulse_1.8s_ease-in-out_infinite]
-                  motion-reduce:animate-none
-                  transition-all
-                  hover:bg-lime-400/25
+                  text-lime-300/90
+                  shadow-[0_0_8px_rgba(163,230,53,0.35)]
+                  transition-colors
+                  hover:bg-lime-400/12
                   hover:text-lime-200
-                  hover:shadow-[0_0_18px_rgba(163,230,53,0.9)]
                 "
                 data-sigil-build-badge
                 onClick={() => setAboutOpen(true)}
