@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import time
@@ -43,10 +44,13 @@ Transport = Callable[[str, dict[str, str], float], tuple[int, object]]
 
 
 def _urllib_transport(url: str, headers: dict[str, str], timeout: float) -> tuple[int, object]:
-    request = urllib.request.Request(url, headers=headers)
+    request = urllib.request.Request(url, headers={**headers, "Accept-Encoding": "gzip"})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.status, json.loads(response.read())
+            payload = response.read()
+            if response.headers.get("Content-Encoding", "").casefold() == "gzip":
+                payload = gzip.decompress(payload)
+            return response.status, json.loads(payload)
     except urllib.error.HTTPError as error:
         return error.code, {}
     except (OSError, TimeoutError, ValueError):

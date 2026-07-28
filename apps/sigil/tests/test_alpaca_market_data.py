@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gzip
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -12,6 +14,7 @@ from sigil.market_data.alpaca import (
     IexStreamManager,
     RankedCandidate,
 )
+from sigil.market_data.alpaca import client as alpaca_client
 from sigil.market_data.audit import MarketDataAudit
 from sigil.market_data.cache import MarketDataCache
 from sigil.market_universe.providers.alpaca import AlpacaAssetCatalogProvider
@@ -47,6 +50,38 @@ def test_configuration_secret_redaction_and_authentication_failures() -> None:
     )
     with pytest.raises(RuntimeError, match="authentication_failed"):
         client.assets()
+
+
+def test_urllib_transport_requests_and_decodes_gzip(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class Response:
+        status = 200
+        headers = {"Content-Encoding": "gzip"}
+
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return gzip.compress(json.dumps([asset(1)]).encode())
+
+    def urlopen(request: object, *, timeout: float) -> Response:
+        captured["accept_encoding"] = request.get_header("Accept-encoding")
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(alpaca_client.urllib.request, "urlopen", urlopen)
+    status, payload = alpaca_client._urllib_transport(
+        "https://provider.invalid/v2/assets",
+        {"APCA-API-KEY-ID": "key", "APCA-API-SECRET-KEY": "secret"},
+        7.5,
+    )
+    assert status == 200
+    assert payload == [asset(1)]
+    assert captured == {"accept_encoding": "gzip", "timeout": 7.5}
 
 
 def test_assets_are_normalized_or_explicitly_excluded() -> None:
