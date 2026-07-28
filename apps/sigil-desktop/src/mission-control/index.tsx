@@ -1075,8 +1075,19 @@ export function SigilOperatorView({
           <div>
             <div className="flex items-baseline gap-3">
               <h1 className="text-base font-bold uppercase tracking-[0.025em]">Sigil Operator</h1>
-              <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-primary">
-                {RELEASE_STAGE}
+              <span
+                className="
+                  rounded-sm
+                  border border-lime-400
+                  bg-lime-400/15
+                  px-2 py-0.5
+                  font-mono text-[0.625rem] font-bold
+                  uppercase tracking-[0.12em]
+                  text-lime-300
+                  shadow-[0_0_10px_rgba(163,230,53,0.7)]
+                "
+              >
+                ● {RELEASE_STAGE}
               </span>
               <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-(--ui-text-tertiary)">
                 Mission control
@@ -1098,7 +1109,20 @@ export function SigilOperatorView({
             <StatusLabel tone="success">{snapshot.certificationStatus}</StatusLabel>
             {desktopApi()?.buildInfo ? (
               <button
-                className="font-mono text-[0.625rem] text-(--ui-text-tertiary) hover:text-primary"
+                className="
+                  rounded-sm
+                  border border-lime-400
+                  bg-lime-400/15
+                  px-3 py-1
+                  font-mono text-[0.625rem] font-bold
+                  uppercase tracking-[0.08em]
+                  text-lime-300
+                  shadow-[0_0_12px_rgba(163,230,53,0.65)]
+                  transition-all
+                  hover:bg-lime-400/25
+                  hover:text-lime-200
+                  hover:shadow-[0_0_18px_rgba(163,230,53,0.9)]
+                "
                 data-sigil-build-badge
                 onClick={() => setAboutOpen(true)}
                 type="button"
