@@ -14,6 +14,8 @@ export const SIGIL_PAPER_CYCLE_CONTROL_CHANNEL = 'sigil:control-paper-cycle'
 export const SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL = 'sigil:control-paper-authorization'
 export const SIGIL_PAPER_RUNTIME_RESET_CHANNEL = 'sigil:reset-paper-runtime'
 export const SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'
+export const SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL = 'sigil:get-market-universe-status'
+export const SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL = 'sigil:search-market-universe'
 export const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
 export const SIGIL_RELEASE_CERTIFICATION_CHANNEL = 'sigil:release-certification'
 
@@ -268,6 +270,8 @@ export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL)
   ipcMain.removeHandler(SIGIL_PAPER_RUNTIME_RESET_CHANNEL)
   ipcMain.removeHandler(SIGIL_PROVIDER_SNAPSHOT_CHANNEL)
+  ipcMain.removeHandler(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL)
+  ipcMain.removeHandler(SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL)
   ipcMain.removeHandler(SIGIL_UPDATE_CHECK_CHANNEL)
   ipcMain.removeHandler(SIGIL_RELEASE_CERTIFICATION_CHANNEL)
 
@@ -306,6 +310,14 @@ export function registerSigilIpc(): void {
   )
   ipcMain.handle(SIGIL_PROVIDER_SNAPSHOT_CHANNEL, () =>
     runBridgeRequest({ command: 'provider_snapshot' })
+  )
+  ipcMain.handle(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL, () =>
+    runBridgeRequest({ command: 'market_universe_status' })
+  )
+  ipcMain.handle(
+    SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL,
+    (_event, payload: Readonly<Record<string, unknown>>) =>
+      runBridgeRequest({ command: 'market_universe_search', payload })
   )
   ipcMain.handle(SIGIL_UPDATE_CHECK_CHANNEL, () => ({
     status: app.isPackaged ? 'unavailable' : 'disabled',

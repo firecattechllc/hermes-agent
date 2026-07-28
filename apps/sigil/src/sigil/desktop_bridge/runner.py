@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from typing import Any, Final
 
 from .providers import provider_snapshot
+from .market_universe import market_universe_search, market_universe_status
+from sigil.market_universe import UniverseValidationError
 from .runtime import (
     control_paper_authorization,
     control_paper_cycle,
@@ -30,6 +32,8 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "control_paper_authorization",
     "reset_paper_runtime",
     "provider_snapshot",
+    "market_universe_status",
+    "market_universe_search",
 )
 
 
@@ -249,6 +253,18 @@ def handle_request(request: object) -> dict[str, Any]:
 
     if command == "provider_snapshot":
         return {"ok": True, "result": provider_snapshot()}
+
+    if command == "market_universe_status":
+        return {"ok": True, "result": market_universe_status()}
+
+    if command == "market_universe_search":
+        try:
+            return {
+                "ok": True,
+                "result": market_universe_search(request.get("payload")),
+            }
+        except UniverseValidationError as error:
+            return error_response("invalid_universe_query", str(error))
 
     return error_response(
         "unsupported_command",

@@ -134,6 +134,60 @@ describe('standalone Sigil Mission Control', () => {
             ]
           }
         }
+      }),
+      getMarketUniverseStatus: async () => ({
+        ok: true,
+        result: {
+          schema_version: 1,
+          policy_version: 'sigil-market-universe-v1',
+          snapshot_id: 'abc123',
+          generated_at: '2026-07-27T00:00:00Z',
+          source_record_count: 12,
+          master_count: 12,
+          broker_tradable_count: 12,
+          actively_researched_count: 12,
+          proposal_eligible_count: 12,
+          conflicted_count: 0,
+          excluded_count: 0,
+          target_minimum: 8000,
+          target_maximum: 12000,
+          target_capacity_validated: false,
+          catalog_source: 'Sigil bounded Alpha 1.4 seed catalog',
+          catalog_scope: '12 validated demonstration equities',
+          capacity_certification: 'deterministic synthetic suite validates 10,000 source records',
+          coverage_limitation: 'Real catalog coverage requires provider credentials.',
+          broker_submission_available: false,
+          execution_authorized: false
+        }
+      }),
+      searchMarketUniverse: async payload => ({
+        ok: true,
+        result: {
+          query: String(payload.query ?? ''),
+          universe: String(payload.universe ?? 'master'),
+          total: 1,
+          offset: 0,
+          limit: 50,
+          has_more: false,
+          results: [{
+            instrument_id: 'SIGIL-1',
+            symbol: 'MSFT',
+            name: 'Microsoft Corporation',
+            exchange: 'XNAS',
+            asset_class: 'equity',
+            lifecycle_status: 'active',
+            reconciliation_status: 'validated',
+            monitoring_tier: 'proposal_eligible',
+            aliases: ['MSFT'],
+            sector: 'Technology',
+            broker_tradable: true,
+            actively_researched: true,
+            proposal_eligible: true,
+            exclusion_reasons: []
+          }],
+          broker_submission_available: false,
+          execution_authorized: false
+        }
       })
     }
 
@@ -150,6 +204,10 @@ describe('standalone Sigil Mission Control', () => {
       expect(screen.getAllByText('MSFT').length).toBeGreaterThan(0)
       expect(screen.getByText('•••• 1234')).toBeTruthy()
       expect(screen.getByText(/secrets exposed: no/i)).toBeTruthy()
+      expect(screen.getByText('Governed market universe')).toBeTruthy()
+      expect(screen.getByText('12 validated demonstration equities')).toBeTruthy()
+      expect(screen.getByText(/Target 8,000–12,000/)).toBeTruthy()
+      expect(screen.getByText(/Real catalog coverage requires provider credentials/)).toBeTruthy()
       expect(screen.queryByText(/alpaca-secret|public-secret/i)).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: /Refresh providers/i }))
       await waitFor(() => expect(screen.getByText('Read-only market data is current.')).toBeTruthy())

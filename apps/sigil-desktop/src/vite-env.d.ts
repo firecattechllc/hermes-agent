@@ -1,6 +1,10 @@
 /// <reference types="vite/client" />
 
-import type { SigilProviderSnapshot } from './mission-control/types'
+import type {
+  MarketUniverseSearchResult,
+  MarketUniverseStatus,
+  SigilProviderSnapshot
+} from './mission-control/types'
 
 declare global {
 type SigilBackendStatus = {
@@ -86,6 +90,12 @@ interface SigilDesktopApi {
   getProviderSnapshot?: () => Promise<
     SigilBackendResponse<SigilProviderSnapshot>
   >
+  getMarketUniverseStatus?: () => Promise<
+    SigilBackendResponse<MarketUniverseStatus>
+  >
+  searchMarketUniverse?: (
+    payload: Readonly<Record<string, unknown>>
+  ) => Promise<SigilBackendResponse<MarketUniverseSearchResult>>
   explainProposal: (
     payload: SigilProposalExplanationPayload
   ) => Promise<SigilBackendResponse<SigilBackendProposalExplanation>>

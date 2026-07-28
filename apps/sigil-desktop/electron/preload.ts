@@ -12,6 +12,8 @@ const SIGIL_PAPER_CYCLE_CONTROL_CHANNEL = 'sigil:control-paper-cycle'
 const SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL = 'sigil:control-paper-authorization'
 const SIGIL_PAPER_RUNTIME_RESET_CHANNEL = 'sigil:reset-paper-runtime'
 const SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'
+const SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL = 'sigil:get-market-universe-status'
+const SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL = 'sigil:search-market-universe'
 const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
 const SIGIL_RELEASE_CERTIFICATION_CHANNEL = 'sigil:release-certification'
 
@@ -39,6 +41,9 @@ contextBridge.exposeInMainWorld('sigilDesktop', {
     ipcRenderer.invoke(SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL, action),
   resetPaperRuntime: () => ipcRenderer.invoke(SIGIL_PAPER_RUNTIME_RESET_CHANNEL),
   getProviderSnapshot: () => ipcRenderer.invoke(SIGIL_PROVIDER_SNAPSHOT_CHANNEL),
+  getMarketUniverseStatus: () => ipcRenderer.invoke(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL),
+  searchMarketUniverse: (payload: Readonly<Record<string, unknown>>) =>
+    ipcRenderer.invoke(SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL, payload),
   explainProposal: (payload: Readonly<Record<string, unknown>>) =>
     ipcRenderer.invoke(SIGIL_EXPLAIN_PROPOSAL_CHANNEL, payload)
 })

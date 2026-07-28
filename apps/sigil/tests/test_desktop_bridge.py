@@ -41,6 +41,8 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "control_paper_authorization",
         "reset_paper_runtime",
         "provider_snapshot",
+        "market_universe_status",
+        "market_universe_search",
     ]
 
 
@@ -101,6 +103,29 @@ def test_unknown_command_fails_closed() -> None:
         "error": "unsupported_command",
         "message": "Only allow-listed local paper commands are available.",
     }
+
+
+def test_market_universe_projection_and_bounded_search_are_read_only() -> None:
+    status = handle_request({"command": "market_universe_status"})
+    assert status["ok"] is True
+    assert status["result"]["master_count"] == 12
+    assert status["result"]["target_minimum"] == 8000
+    assert status["result"]["target_capacity_validated"] is False
+    assert status["result"]["broker_submission_available"] is False
+
+    search = handle_request(
+        {
+            "command": "market_universe_search",
+            "payload": {"query": "apple", "universe": "proposal_eligible", "limit": 10},
+        }
+    )
+    assert search["ok"] is True
+    assert search["result"]["total"] == 1
+    assert search["result"]["results"][0]["symbol"] == "AAPL"
+    denied = handle_request(
+        {"command": "market_universe_search", "payload": {"limit": 101}}
+    )
+    assert denied["error"] == "invalid_universe_query"
 
 
 def test_non_object_request_fails_closed() -> None:

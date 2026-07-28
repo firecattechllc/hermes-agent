@@ -22,6 +22,8 @@ import { desktopSigilOperatorAdapter } from './desktop-adapter'
 import { sigilOperatorAdapter as mockSigilOperatorAdapter } from './mock-adapter'
 import type {
   AuditEvent,
+  MarketUniverseSearchResult,
+  MarketUniverseStatus,
   PipelineStage,
   Proposal,
   SigilOperatorAdapter,
@@ -31,7 +33,7 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const RELEASE_STAGE = 'ALPHA 1.4'
+const RELEASE_STAGE = 'ALPHA 1.5'
 
 const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
@@ -990,6 +992,111 @@ function ProviderPanel({
   )
 }
 
+function MarketUniversePanel({
+  error,
+  loading,
+  onSearch,
+  results,
+  status
+}: {
+  error: string | null
+  loading: boolean
+  onSearch: (query: string, universe: string) => void
+  results: MarketUniverseSearchResult | null
+  status: MarketUniverseStatus | null
+}) {
+  const [query, setQuery] = useState('')
+  const [universe, setUniverse] = useState('master')
+
+  const applySearch = (nextQuery: string, nextUniverse = universe): void => {
+    setQuery(nextQuery)
+    onSearch(nextQuery, nextUniverse)
+  }
+
+  return (
+    <section className={cn('border-b border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)} data-testid="market-universe">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.1em]">Governed market universe</h2>
+          <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+            Canonical identity, source reconciliation, lifecycle controls, and deterministic monitoring tiers
+          </p>
+        </div>
+        <StatusLabel tone={status?.target_capacity_validated ? 'success' : 'warning'}>
+          {status?.catalog_scope ?? 'Catalog unavailable'}
+        </StatusLabel>
+      </div>
+      {status ? (
+        <>
+          <div className="mt-3 grid gap-px bg-(--ui-stroke-tertiary) sm:grid-cols-4">
+            {[
+              ['Master', status.master_count],
+              ['Broker tradable', status.broker_tradable_count],
+              ['Actively researched', status.actively_researched_count],
+              ['Proposal eligible', status.proposal_eligible_count]
+            ].map(([label, value]) => (
+              <div className="bg-(--ui-bg-secondary) p-3" key={label}>
+                <div className="text-[0.625rem] uppercase text-(--ui-text-tertiary)">{label}</div>
+                <div className="mt-1 font-mono text-sm">{value}</div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[0.6875rem] text-amber-700 dark:text-amber-300">
+            Coverage boundary: {status.coverage_limitation}
+          </p>
+          <p className="mt-1 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+            Target {status.target_minimum.toLocaleString()}–{status.target_maximum.toLocaleString()} · {status.capacity_certification} · broker submission unavailable
+          </p>
+        </>
+      ) : null}
+      <div className="mt-3 flex gap-2">
+        <SearchField
+          aria-label="Search governed instruments"
+          containerClassName="min-w-0 flex-1"
+          onChange={applySearch}
+          placeholder="Search symbol, issuer, exchange, or alias"
+          value={query}
+        />
+        <select
+          aria-label="Filter governed universe"
+          className="border border-(--ui-stroke-secondary) bg-(--ui-bg-secondary) px-2 text-xs"
+          onChange={event => {
+            setUniverse(event.target.value)
+            onSearch(query, event.target.value)
+          }}
+          value={universe}
+        >
+          <option value="master">Master</option>
+          <option value="broker_tradable">Broker tradable</option>
+          <option value="actively_researched">Actively researched</option>
+          <option value="proposal_eligible">Proposal eligible</option>
+          <option value="excluded">Excluded</option>
+        </select>
+      </div>
+      {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
+      {loading ? <div className="mt-3"><Loader label="Searching governed universe" /></div> : null}
+      {!loading && results ? (
+        <div className="mt-3 divide-y divide-(--ui-stroke-tertiary)">
+          {results.results.map(item => (
+            <div className="flex items-center justify-between gap-3 py-2" key={item.instrument_id}>
+              <div>
+                <span className="font-mono text-xs font-semibold">{item.symbol}</span>
+                <span className="ml-2 text-[0.6875rem] text-(--ui-text-tertiary)">{item.name}</span>
+              </div>
+              <span className="font-mono text-[0.625rem] text-(--ui-text-tertiary)">
+                {item.asset_class} · {item.monitoring_tier.replaceAll('_', ' ')}
+              </span>
+            </div>
+          ))}
+          <p className="pt-2 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+            Showing {results.results.length} of {results.total}; results bounded to {results.limit}
+          </p>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 const localHermesEngine = new LocalHermesEngine()
 
 type ProviderResponse =
@@ -999,6 +1106,14 @@ type ProviderResponse =
 interface MissionControlDesktopApi {
   getRuntimeSnapshot?: () => Promise<unknown>
   getProviderSnapshot?: () => Promise<ProviderResponse>
+  getMarketUniverseStatus?: () => Promise<
+    { ok: true; result: MarketUniverseStatus } | { ok: false; error: string; message: string }
+  >
+  searchMarketUniverse?: (
+    payload: Readonly<Record<string, unknown>>
+  ) => Promise<
+    { ok: true; result: MarketUniverseSearchResult } | { ok: false; error: string; message: string }
+  >
   buildInfo?: {
     version: string
     build: string
@@ -1043,6 +1158,10 @@ export function SigilOperatorView({
   const [providerSnapshot, setProviderSnapshot] = useState<SigilProviderSnapshot | null>(null)
   const [providerLoading, setProviderLoading] = useState(false)
   const [providerError, setProviderError] = useState<string | null>(null)
+  const [universeStatus, setUniverseStatus] = useState<MarketUniverseStatus | null>(null)
+  const [universeResults, setUniverseResults] = useState<MarketUniverseSearchResult | null>(null)
+  const [universeLoading, setUniverseLoading] = useState(false)
+  const [universeError, setUniverseError] = useState<string | null>(null)
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [pendingAuthorizationAction, setPendingAuthorizationAction] = useState<'grant' | 'revoke' | null>(null)
   const [pendingPaperReset, setPendingPaperReset] = useState(false)
@@ -1071,6 +1190,27 @@ export function SigilOperatorView({
       })
       .catch(reason => setProviderError(reason instanceof Error ? reason.message : String(reason)))
       .finally(() => setProviderLoading(false))
+  }, [])
+
+  const searchUniverse = useCallback((query: string, universe: string): void => {
+    const api = desktopApi()?.searchMarketUniverse
+
+    if (!api) {
+      return
+    }
+
+    setUniverseLoading(true)
+    setUniverseError(null)
+    void api({ query, universe, limit: 50, offset: 0 })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(response.message)
+        }
+
+        setUniverseResults(response.result)
+      })
+      .catch(reason => setUniverseError(reason instanceof Error ? reason.message : String(reason)))
+      .finally(() => setUniverseLoading(false))
   }, [])
 
   useEffect(() => {
@@ -1111,6 +1251,23 @@ export function SigilOperatorView({
 
     return () => window.clearInterval(providerTimer)
   }, [refreshProviders])
+
+  useEffect(() => {
+    const api = desktopApi()?.getMarketUniverseStatus
+
+    if (!api) {
+      return
+    }
+
+    void api().then(response => {
+      if (response.ok) {
+        setUniverseStatus(response.result)
+      } else {
+        setUniverseError(response.message)
+      }
+    })
+    searchUniverse('', 'master')
+  }, [searchUniverse])
 
   useEffect(() => {
     let cancelled = false
@@ -1439,6 +1596,13 @@ export function SigilOperatorView({
                 loading={providerLoading}
                 onRefresh={refreshProviders}
                 snapshot={providerSnapshot}
+              />
+              <MarketUniversePanel
+                error={universeError}
+                loading={universeLoading}
+                onSearch={searchUniverse}
+                results={universeResults}
+                status={universeStatus}
               />
               <div className={cn('py-4', PAGE_INSET_X)}>
                 <div className="mb-3 flex items-center justify-between">

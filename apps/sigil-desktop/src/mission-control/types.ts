@@ -150,6 +150,58 @@ export interface SigilProviderSnapshot {
   }
 }
 
+export interface MarketUniverseStatus {
+  schema_version: number
+  policy_version: string
+  snapshot_id: string
+  generated_at: string
+  source_record_count: number
+  master_count: number
+  broker_tradable_count: number
+  actively_researched_count: number
+  proposal_eligible_count: number
+  conflicted_count: number
+  excluded_count: number
+  target_minimum: number
+  target_maximum: number
+  target_capacity_validated: boolean
+  catalog_source: string
+  catalog_scope: string
+  capacity_certification: string
+  coverage_limitation: string
+  broker_submission_available: false
+  execution_authorized: false
+}
+
+export interface MarketUniverseInstrument {
+  instrument_id: string
+  symbol: string
+  name: string
+  exchange: string
+  asset_class: string
+  lifecycle_status: string
+  reconciliation_status: string
+  monitoring_tier: string
+  aliases: string[]
+  sector: string | null
+  broker_tradable: boolean
+  actively_researched: boolean
+  proposal_eligible: boolean
+  exclusion_reasons: string[]
+}
+
+export interface MarketUniverseSearchResult {
+  query: string
+  universe: string
+  total: number
+  offset: number
+  limit: number
+  has_more: boolean
+  results: MarketUniverseInstrument[]
+  broker_submission_available: false
+  execution_authorized: false
+}
+
 export interface SigilSnapshot {
   dataState: SigilDataState
   lastUpdated: string
