@@ -163,15 +163,34 @@ describe('standalone Sigil Mission Control', () => {
 
     render(<SigilOperatorView adapter={adapter} />)
     await screen.findByTestId('sigil-operator')
-    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start' }),
+    )
 
-    expect(screen.getByText('Confirm paper automation start')).toBeTruthy()
-    expect(screen.getByText(/cannot submit to a broker/i)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Start paper automation' }))
-    expect(await screen.findByText('Paper automation running')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '● Running' }).className).toContain('bg-emerald-500')
+    expect(
+      screen.queryByText('Confirm paper automation start'),
+    ).toBeNull()
+
+    await waitFor(() => {
+      expect(screen.getByText(/paper automation running/i)).toBeTruthy()
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Pause' }),
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/paper automation paused/i)).toBeTruthy()
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Stop' }),
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/paper automation stopped/i)).toBeTruthy()
+    })
   })
-
   it('refreshes visible portfolio values when backend state changes', async () => {
     const adapter = new MockSigilOperatorAdapter()
     const initialRead = adapter.readSnapshot.bind(adapter)
