@@ -78,6 +78,31 @@ def test_mission_control_status_is_paper_only() -> None:
     assert len(status["open_orders"]) == 1
 
 
+def test_paper_automation_state_survives_runtime_restart(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    state_directory = tmp_path / "restart-safe-paper-state"
+    monkeypatch.setenv("SIGIL_DESKTOP_STATE_DIR", str(state_directory))
+
+    paused = runtime.control_paper_cycle("pause", now=NOW)
+
+    assert paused["automation"]["state"] == "paused"
+
+    state_path = state_directory / "runtime-state.json"
+    assert state_path.exists()
+
+    envelope = json.loads(state_path.read_text(encoding="utf-8"))
+    assert envelope["payload"]["automation"]["state"] == "paused"
+    assert len(envelope["sha256"]) == 64
+
+    restored = runtime.runtime_snapshot(now=NOW + timedelta(seconds=1))
+
+    assert restored["automation"]["state"] == "paused"
+    assert restored["revision"] >= paused["revision"]
+    assert restored["broker_submission_available"] is False
+
+
 def test_monthly_authorization_gates_automatic_paper_buys_and_sells() -> None:
     initial = runtime.runtime_snapshot(now=NOW)
     authorization = initial["paper_authorization"]
