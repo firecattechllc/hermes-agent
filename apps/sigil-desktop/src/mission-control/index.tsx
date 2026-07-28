@@ -1200,7 +1200,20 @@ export function SigilOperatorView({
                       : snapshot.automationState === 'stopped'
                 }
                 key={action}
-                onClick={() => setPendingCycleAction(action)}
+                onClick={async () => {
+                  if (!adapter.controlPaperCycle) {
+                    return
+                  }
+
+                  try {
+                    setControlError(null)
+                    setSnapshot(await adapter.controlPaperCycle(action))
+                  } catch (reason) {
+                    setControlError(
+                      reason instanceof Error ? reason.message : String(reason)
+                    )
+                  }
+                }}
                 size="xs"
                 variant={
                   action === 'stop'
