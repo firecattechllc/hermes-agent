@@ -1,4 +1,4 @@
-"""Immutable models for governed market-data packages."""
+"""Immutable models for governed market-data packages and provider evidence."""
 
 from __future__ import annotations
 
@@ -46,22 +46,27 @@ class MarketDataObservation:
     source_id: str
     source_sequence: str | None = None
     evidence_references: tuple[str, ...] = ()
+    symbol: str | None = None
+    provider: str | None = None
+    feed: str | None = None
+    observation_type: str | None = None
+    price_fields: tuple[tuple[str, str], ...] = ()
+    volume_fields: tuple[tuple[str, str], ...] = ()
+    bid_ask_fields: tuple[tuple[str, str], ...] = ()
+    bar_timeframe: str | None = None
+    classification: str | None = None
+    expected_delay_seconds: int | None = None
+    evidence_digest: str | None = None
+    quality_flags: tuple[str, ...] = ()
     observation_identity: str = field(init=False)
 
     def __post_init__(self) -> None:
         for name in (
-            "observation_id",
-            "instrument_id",
-            "field_name",
-            "value",
-            "unit",
-            "observed_at",
-            "received_at",
-            "source_id",
+            "observation_id", "instrument_id", "field_name", "value", "unit",
+            "observed_at", "received_at", "source_id",
         ):
             if not getattr(self, name):
                 raise MarketDataValidationError(f"{name} must not be empty")
-
         object.__setattr__(
             self,
             "observation_identity",
@@ -99,19 +104,15 @@ class MarketDataProvenance:
             raise MarketDataValidationError("policy_identity must not be empty")
         if not self.source_ids:
             raise MarketDataValidationError("source_ids must not be empty")
-
         object.__setattr__(
-            self,
-            "provenance_identity",
-            canonical_digest(
-                {
-                    "request_identity": self.request_identity,
-                    "policy_identity": self.policy_identity,
-                    "source_ids": self.source_ids,
-                    "input_observation_identities": self.input_observation_identities,
-                    "upstream_package_identities": self.upstream_package_identities,
-                }
-            ),
+            self, "provenance_identity",
+            canonical_digest({
+                "request_identity": self.request_identity,
+                "policy_identity": self.policy_identity,
+                "source_ids": self.source_ids,
+                "input_observation_identities": self.input_observation_identities,
+                "upstream_package_identities": self.upstream_package_identities,
+            }),
         )
 
 
@@ -137,16 +138,11 @@ class GovernedMarketDataPackage:
         if not self.observations:
             raise MarketDataValidationError("observations must not be empty")
         if any(item.instrument_id != self.instrument_id for item in self.observations):
-            raise MarketDataValidationError(
-                "all observations must reference the package instrument"
-            )
+            raise MarketDataValidationError("all observations must reference the package instrument")
         if not self.analytical_only:
             raise MarketDataValidationError("market-data packages must remain analytical")
         if self.trading_authorized:
-            raise MarketDataValidationError(
-                "market-data packages cannot authorize trading"
-            )
-
+            raise MarketDataValidationError("market-data packages cannot authorize trading")
         object.__setattr__(
             self,
             "package_identity",
@@ -187,3 +183,29 @@ class MarketDataComparison:
             "quality_change": self.quality_change,
             "freshness_change": self.freshness_change,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class MarketDataFeedState:
+    provider: str
+    feed: str
+    connection_state: str
+    last_message: str | None
+    last_successful_observation: str | None
+    active_symbols: tuple[str, ...]
+    allowed_symbol_capacity: int
+    reconnect_attempts: int
+    degradation_reason: str | None
+    stale: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateSubscription:
+    instrument_id: str
+    symbol: str
+    rank: int
+    rank_reason: str
+    added_timestamp: str
+    removed_timestamp: str | None
+    feed: str
+    policy_version: str

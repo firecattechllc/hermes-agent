@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Final
 
 from .providers import provider_snapshot
+from .alpaca_market_data import alpaca_market_data_status, control_alpaca_market_data
 from .market_universe import market_universe_search, market_universe_status
 from sigil.market_universe import UniverseValidationError
 from .runtime import (
@@ -34,6 +35,8 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "provider_snapshot",
     "market_universe_status",
     "market_universe_search",
+    "alpaca_market_data_status",
+    "control_alpaca_market_data",
 )
 
 
@@ -265,6 +268,15 @@ def handle_request(request: object) -> dict[str, Any]:
             }
         except UniverseValidationError as error:
             return error_response("invalid_universe_query", str(error))
+
+    if command == "alpaca_market_data_status":
+        return {"ok": True, "result": alpaca_market_data_status()}
+
+    if command == "control_alpaca_market_data":
+        try:
+            return {"ok": True, "result": control_alpaca_market_data(request.get("payload"))}
+        except ValueError as error:
+            return error_response("alpaca_market_data_control_denied", str(error))
 
     return error_response(
         "unsupported_command",

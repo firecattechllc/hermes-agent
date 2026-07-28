@@ -16,6 +16,8 @@ export const SIGIL_PAPER_RUNTIME_RESET_CHANNEL = 'sigil:reset-paper-runtime'
 export const SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'
 export const SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL = 'sigil:get-market-universe-status'
 export const SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL = 'sigil:search-market-universe'
+export const SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL = 'sigil:get-alpaca-market-data-status'
+export const SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL = 'sigil:control-alpaca-market-data'
 export const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
 export const SIGIL_RELEASE_CERTIFICATION_CHANNEL = 'sigil:release-certification'
 
@@ -318,6 +320,14 @@ export function registerSigilIpc(): void {
     SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL,
     (_event, payload: Readonly<Record<string, unknown>>) =>
       runBridgeRequest({ command: 'market_universe_search', payload })
+  )
+  ipcMain.handle(SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL, () =>
+    runBridgeRequest({ command: 'alpaca_market_data_status' })
+  )
+  ipcMain.handle(
+    SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL,
+    (_event, action: string) =>
+      runBridgeRequest({ command: 'control_alpaca_market_data', payload: { action } })
   )
   ipcMain.handle(SIGIL_UPDATE_CHECK_CHANNEL, () => ({
     status: app.isPackaged ? 'unavailable' : 'disabled',

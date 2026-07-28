@@ -202,6 +202,30 @@ export interface MarketUniverseSearchResult {
   execution_authorized: false
 }
 
+export interface AlpacaMarketDataStatus {
+  configured: boolean
+  authenticated: boolean
+  provider_state: string
+  asset_catalog: {
+    refresh_state: string; source_count: number; accepted_count: number
+    excluded_count: number; conflict_count: number; generated_at: string | null
+    age_seconds: number | null; stale: boolean; last_error: string | null
+  }
+  delayed_sip: {
+    classification: string; expected_delay_minutes: number; scanned_count: number
+    universe_total: number; current_batch: number; total_batches: number; provider_state: string
+  }
+  live_iex: {
+    classification: string; partial_market: true; connected: boolean
+    active_symbol_count: number; maximum_symbol_count: number; subscribed_symbols: string[]
+    last_message_at: string | null; stale: boolean; provider_state: string
+  }
+  safety: {
+    broker_submission_available: false; execution_authorized: false
+    live_trading_enabled: false; data_only_mode: true
+  }
+}
+
 export interface SigilSnapshot {
   dataState: SigilDataState
   lastUpdated: string

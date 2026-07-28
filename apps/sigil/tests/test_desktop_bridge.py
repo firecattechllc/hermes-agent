@@ -43,6 +43,8 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "provider_snapshot",
         "market_universe_status",
         "market_universe_search",
+        "alpaca_market_data_status",
+        "control_alpaca_market_data",
     ]
 
 
@@ -51,6 +53,20 @@ def test_health_request_returns_status() -> None:
 
     assert response["ok"] is True
     assert response["result"]["mode"] == "local-read-only"
+
+
+def test_alpaca_market_data_projection_is_data_only(monkeypatch) -> None:
+    monkeypatch.delenv("APCA_API_KEY_ID", raising=False)
+    monkeypatch.delenv("APCA_API_SECRET_KEY", raising=False)
+    response = handle_request({"command": "alpaca_market_data_status"})
+    assert response["ok"] is True
+    result = response["result"]
+    assert result["delayed_sip"]["classification"] == "15-minute delayed SIP"
+    assert result["live_iex"]["classification"] == "live partial-market IEX"
+    assert result["live_iex"]["maximum_symbol_count"] == 30
+    assert result["safety"]["data_only_mode"] is True
+    assert result["safety"]["execution_authorized"] is False
+    assert result["safety"]["live_trading_enabled"] is False
 
 
 def test_explain_proposal_returns_governed_result() -> None:

@@ -69,6 +69,16 @@ class SourceInstrument:
     cusip: str | None = None
     sector: str | None = None
     industry: str | None = None
+    provider_asset_class: str | None = None
+    provider_status: str | None = None
+    fractionable: bool = False
+    marginable: bool = False
+    shortable: bool = False
+    easy_to_borrow: bool = False
+    borrow_status: str | None = None
+    maintenance_margin_requirement: str | None = None
+    provider_schema: str | None = None
+    raw_evidence_digest: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

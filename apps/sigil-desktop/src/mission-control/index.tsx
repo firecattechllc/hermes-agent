@@ -21,6 +21,7 @@ import {
 import { desktopSigilOperatorAdapter } from './desktop-adapter'
 import { sigilOperatorAdapter as mockSigilOperatorAdapter } from './mock-adapter'
 import type {
+  AlpacaMarketDataStatus,
   AuditEvent,
   MarketUniverseSearchResult,
   MarketUniverseStatus,
@@ -33,7 +34,7 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const RELEASE_STAGE = 'ALPHA 1.5'
+const RELEASE_STAGE = 'ALPHA 1.6'
 
 const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
@@ -810,11 +811,15 @@ function AuditTable({ events }: { events: AuditEvent[] }) {
 }
 
 function ProviderPanel({
+  alpacaMarketData,
+  onAlpacaControl,
   error,
   loading,
   onRefresh,
   snapshot
 }: {
+  alpacaMarketData: AlpacaMarketDataStatus | null
+  onAlpacaControl: (action: string) => void
   error: string | null
   loading: boolean
   onRefresh: () => void
@@ -865,6 +870,40 @@ function ProviderPanel({
       {error ? (
         <div className={cn('border-t border-(--ui-stroke-tertiary) py-3 text-xs text-destructive', PAGE_INSET_X)} role="alert">
           Provider refresh degraded safely: {error}
+        </div>
+      ) : null}
+      {alpacaMarketData ? (
+        <div className={cn('border-t border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-xs font-semibold">Alpaca Market Data</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <StatusLabel tone={alpacaMarketData.configured ? 'success' : 'muted'}>
+                  {alpacaMarketData.authenticated ? 'Authenticated' : 'Unconfigured'}
+                </StatusLabel>
+                <StatusLabel tone="warning">15-minute delayed SIP</StatusLabel>
+                <StatusLabel tone="info">live partial-market IEX</StatusLabel>
+                <StatusLabel tone="muted">Data-only mode</StatusLabel>
+                <StatusLabel tone="danger">Live trading disabled</StatusLabel>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => onAlpacaControl('refresh_assets')} size="xs" variant="outline">Refresh Alpaca assets</Button>
+              <Button onClick={() => onAlpacaControl('start_delayed_sip')} size="xs" variant="outline">Start delayed-SIP scan</Button>
+              <Button onClick={() => onAlpacaControl('stop_delayed_sip')} size="xs" variant="outline">Stop delayed-SIP scan</Button>
+              <Button onClick={() => onAlpacaControl('connect_live_iex')} size="xs" variant="outline">Connect live IEX</Button>
+              <Button onClick={() => onAlpacaControl('disconnect_live_iex')} size="xs" variant="outline">Disconnect live IEX</Button>
+            </div>
+          </div>
+          <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+            <div><dt className="text-(--ui-text-tertiary)">Asset catalog</dt><dd>{alpacaMarketData.asset_catalog.accepted_count} accepted · {alpacaMarketData.asset_catalog.excluded_count} excluded · {alpacaMarketData.asset_catalog.conflict_count} conflicts</dd></div>
+            <div><dt className="text-(--ui-text-tertiary)">Catalog freshness</dt><dd>{alpacaMarketData.asset_catalog.stale ? 'Cached / stale' : `${alpacaMarketData.asset_catalog.age_seconds ?? 0}s old`}</dd></div>
+            <div><dt className="text-(--ui-text-tertiary)">Delayed SIP scan</dt><dd>{alpacaMarketData.delayed_sip.scanned_count}/{alpacaMarketData.delayed_sip.universe_total} · batch {alpacaMarketData.delayed_sip.current_batch}/{alpacaMarketData.delayed_sip.total_batches}</dd></div>
+            <div><dt className="text-(--ui-text-tertiary)">Live IEX capacity</dt><dd>{alpacaMarketData.live_iex.active_symbol_count}/{alpacaMarketData.live_iex.maximum_symbol_count} symbols · {alpacaMarketData.live_iex.stale ? 'stale/unavailable' : 'current'}</dd></div>
+          </dl>
+          <p className="mt-3 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+            Subscribed: {alpacaMarketData.live_iex.subscribed_symbols.join(', ') || 'none'} · Last message: {alpacaMarketData.live_iex.last_message_at ?? 'none'} · Provider: {alpacaMarketData.provider_state} · Error: {alpacaMarketData.asset_catalog.last_error ?? 'none'}
+          </p>
         </div>
       ) : null}
       {!snapshot && loading ? (
@@ -1106,6 +1145,12 @@ type ProviderResponse =
 interface MissionControlDesktopApi {
   getRuntimeSnapshot?: () => Promise<unknown>
   getProviderSnapshot?: () => Promise<ProviderResponse>
+  getAlpacaMarketDataStatus?: () => Promise<
+    { ok: true; result: AlpacaMarketDataStatus } | { ok: false; error: string; message: string }
+  >
+  controlAlpacaMarketData?: (action: string) => Promise<
+    { ok: true; result: AlpacaMarketDataStatus } | { ok: false; error: string; message: string }
+  >
   getMarketUniverseStatus?: () => Promise<
     { ok: true; result: MarketUniverseStatus } | { ok: false; error: string; message: string }
   >
@@ -1158,6 +1203,7 @@ export function SigilOperatorView({
   const [providerSnapshot, setProviderSnapshot] = useState<SigilProviderSnapshot | null>(null)
   const [providerLoading, setProviderLoading] = useState(false)
   const [providerError, setProviderError] = useState<string | null>(null)
+  const [alpacaMarketData, setAlpacaMarketData] = useState<AlpacaMarketDataStatus | null>(null)
   const [universeStatus, setUniverseStatus] = useState<MarketUniverseStatus | null>(null)
   const [universeResults, setUniverseResults] = useState<MarketUniverseSearchResult | null>(null)
   const [universeLoading, setUniverseLoading] = useState(false)
@@ -1190,6 +1236,24 @@ export function SigilOperatorView({
       })
       .catch(reason => setProviderError(reason instanceof Error ? reason.message : String(reason)))
       .finally(() => setProviderLoading(false))
+  }, [])
+
+  const controlAlpaca = useCallback((action: string): void => {
+    const request = action === 'refresh_status'
+      ? desktopApi()?.getAlpacaMarketDataStatus?.()
+      : desktopApi()?.controlAlpacaMarketData?.(action)
+
+    if (!request) {
+      return
+    }
+
+    void request.then(response => {
+      if (response.ok) {
+        setAlpacaMarketData(response.result)
+      } else {
+        setProviderError(response.message)
+      }
+    })
   }, [])
 
   const searchUniverse = useCallback((query: string, universe: string): void => {
@@ -1251,6 +1315,10 @@ export function SigilOperatorView({
 
     return () => window.clearInterval(providerTimer)
   }, [refreshProviders])
+
+  useEffect(() => {
+    controlAlpaca('refresh_status')
+  }, [controlAlpaca])
 
   useEffect(() => {
     const api = desktopApi()?.getMarketUniverseStatus
@@ -1592,8 +1660,10 @@ export function SigilOperatorView({
               <MetricStrip snapshot={snapshot} />
               <RuntimeVisibilityCard onOpenAudit={() => setSection('audit')} snapshot={snapshot} />
               <ProviderPanel
+                alpacaMarketData={alpacaMarketData}
                 error={providerError}
                 loading={providerLoading}
+                onAlpacaControl={controlAlpaca}
                 onRefresh={refreshProviders}
                 snapshot={providerSnapshot}
               />

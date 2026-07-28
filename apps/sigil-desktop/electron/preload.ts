@@ -14,6 +14,8 @@ const SIGIL_PAPER_RUNTIME_RESET_CHANNEL = 'sigil:reset-paper-runtime'
 const SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'
 const SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL = 'sigil:get-market-universe-status'
 const SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL = 'sigil:search-market-universe'
+const SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL = 'sigil:get-alpaca-market-data-status'
+const SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL = 'sigil:control-alpaca-market-data'
 const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
 const SIGIL_RELEASE_CERTIFICATION_CHANNEL = 'sigil:release-certification'
 
@@ -44,6 +46,10 @@ contextBridge.exposeInMainWorld('sigilDesktop', {
   getMarketUniverseStatus: () => ipcRenderer.invoke(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL),
   searchMarketUniverse: (payload: Readonly<Record<string, unknown>>) =>
     ipcRenderer.invoke(SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL, payload),
+  getAlpacaMarketDataStatus: () =>
+    ipcRenderer.invoke(SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL),
+  controlAlpacaMarketData: (action: string) =>
+    ipcRenderer.invoke(SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL, action),
   explainProposal: (payload: Readonly<Record<string, unknown>>) =>
     ipcRenderer.invoke(SIGIL_EXPLAIN_PROPOSAL_CHANNEL, payload)
 })
