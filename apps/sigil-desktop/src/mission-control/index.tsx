@@ -31,7 +31,7 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const RELEASE_STAGE = 'ALPHA 1.3'
+const RELEASE_STAGE = 'ALPHA 1.4'
 
 const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
@@ -133,6 +133,172 @@ function MetricStrip({ snapshot }: { snapshot: SigilSnapshot }) {
         </div>
       ))}
     </dl>
+  )
+}
+
+function timeUntil(timestamp: string | null | undefined): string {
+  if (!timestamp) {
+    return 'No cycle scheduled'
+  }
+
+  const seconds = Math.max(0, Math.ceil((Date.parse(timestamp) - Date.now()) / 1_000))
+
+  if (seconds < 60) {
+    return `${seconds}s until next cycle`
+  }
+
+  const minutes = Math.ceil(seconds / 60)
+
+  return `${minutes}m until next cycle`
+}
+
+function RuntimeVisibilityCard({
+  onOpenAudit,
+  snapshot
+}: {
+  onOpenAudit: () => void
+  snapshot: SigilSnapshot
+}) {
+  const visibility = snapshot.runtimeVisibility
+
+  if (!visibility) {
+    return null
+  }
+
+  const latestProposal = snapshot.proposals[0]
+  const latestExecution = snapshot.receipts[0]
+
+  const recentAudit = [...snapshot.auditEvents]
+    .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
+    .slice(0, 10)
+
+  const stateTone: SigilTone =
+    visibility.operationalState === 'running'
+      ? 'success'
+      : visibility.operationalState === 'blocked'
+        ? 'danger'
+        : 'warning'
+
+  const healthTone: SigilTone =
+    visibility.health === 'healthy'
+      ? 'success'
+      : visibility.health === 'blocked'
+        ? 'danger'
+        : 'warning'
+
+  return (
+    <section
+      aria-labelledby="runtime-visibility-title"
+      className="border-b border-(--ui-stroke-tertiary)"
+      data-testid="runtime-visibility"
+    >
+      <div className={cn('py-4', PAGE_INSET_X)}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="runtime-visibility-title">
+              Governed runtime status
+            </h2>
+            <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+              Paper-only · {visibility.automationMode}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <StatusLabel tone={stateTone}>{visibility.operationalState.toUpperCase()}</StatusLabel>
+            <StatusLabel tone={healthTone}>{visibility.health.toUpperCase()}</StatusLabel>
+            <StatusLabel tone={visibility.connectionState === 'connected' ? 'success' : 'warning'}>
+              {visibility.connectionState}
+            </StatusLabel>
+          </div>
+        </div>
+
+        <dl className="mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            ['Completed cycles', String(visibility.counts.cycles), `Last: ${snapshot.automationLastCycleAt ?? 'Never'}`],
+            [
+              'Next scheduled cycle',
+              snapshot.automationState === 'running'
+                ? snapshot.automationNextCycleAt ?? 'No cycle scheduled'
+                : 'No cycle scheduled',
+              snapshot.automationState === 'running'
+                ? timeUntil(snapshot.automationNextCycleAt)
+                : 'Paused or stopped'
+            ],
+            [
+              'Governed records',
+              `${visibility.counts.proposals} proposals · ${visibility.counts.executions} executions`,
+              `${visibility.counts.reconciliation} reconciliation · ${visibility.counts.auditEvents} audit`
+            ],
+            [
+              'Latest activity',
+              latestProposal ? `${latestProposal.id} · ${latestProposal.status}` : 'No proposal',
+              latestExecution
+                ? `${latestExecution.orderId} · ${latestExecution.brokerStatus}`
+                : 'No execution'
+            ]
+          ].map(([label, value, detail]) => (
+            <div className="bg-(--ui-bg-secondary) p-3" key={label}>
+              <dt className="text-[0.625rem] uppercase tracking-[0.1em] text-(--ui-text-tertiary)">{label}</dt>
+              <dd className="mt-1 break-words font-mono text-xs font-semibold">{value}</dd>
+              <dd className="mt-1 break-words text-[0.6875rem] text-(--ui-text-tertiary)">{detail}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          <div>
+            <h3 className="text-[0.625rem] font-semibold uppercase tracking-[0.1em]">Safety and next action</h3>
+            <p className="mt-2 text-xs">{visibility.nextAction}</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="border border-emerald-500/30 bg-emerald-500/8 p-3 text-xs">
+                <strong>Local paper execution:</strong>{' '}
+                {visibility.paperExecutionAvailable ? 'available' : 'currently blocked'}
+              </div>
+              <div className="border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-3 text-xs">
+                <strong>Real broker submission:</strong>{' '}
+                {visibility.brokerSubmissionAvailable ? 'available' : 'unavailable'}
+              </div>
+            </div>
+            <ul aria-label="Runtime blocking reasons" className="mt-3 space-y-2">
+              {visibility.blockingReasons.map(reason => (
+                <li
+                  className="flex items-start justify-between gap-3 border-l-2 border-(--ui-stroke-tertiary) pl-3 text-xs"
+                  key={reason.code}
+                >
+                  <span>
+                    <span className="block">{reason.summary}</span>
+                    <span className="font-mono text-[0.625rem] text-(--ui-text-quaternary)">{reason.code}</span>
+                  </span>
+                  <StatusLabel
+                    tone={reason.severity === 'critical' ? 'danger' : reason.severity === 'warning' ? 'warning' : 'info'}
+                  >
+                    {reason.severity}
+                  </StatusLabel>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-[0.625rem] font-semibold uppercase tracking-[0.1em]">Recent audit timeline</h3>
+              <Button onClick={onOpenAudit} size="xs" variant="outline">View all</Button>
+            </div>
+            <ol className="mt-2 divide-y divide-(--ui-stroke-tertiary)">
+              {recentAudit.map(event => (
+                <li className="py-2 text-[0.6875rem]" key={event.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <span>{event.summary}</span>
+                    <StatusLabel tone="muted">{event.status}</StatusLabel>
+                  </div>
+                  <div className="mt-1 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+                    {event.timestamp} · proposal {event.proposalId} · order {event.orderId} · {event.evidenceReference}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -1223,7 +1389,11 @@ export function SigilOperatorView({
                       : 'outline'
                 }
               >
-                {action === 'start' && snapshot.automationState === 'running' ? '● Running' : `${action[0]?.toUpperCase()}${action.slice(1)}`}
+                {action === 'start' && snapshot.automationState === 'running'
+                  ? '● Running'
+                  : action === 'start' && snapshot.automationState === 'paused'
+                    ? 'Resume'
+                    : `${action[0]?.toUpperCase()}${action.slice(1)}`}
               </Button>
             ))}
           </div>
@@ -1263,6 +1433,7 @@ export function SigilOperatorView({
           <div className="flex min-h-full flex-col xl:flex-row">
             <div className="min-w-0 flex-1">
               <MetricStrip snapshot={snapshot} />
+              <RuntimeVisibilityCard onOpenAudit={() => setSection('audit')} snapshot={snapshot} />
               <ProviderPanel
                 error={providerError}
                 loading={providerLoading}

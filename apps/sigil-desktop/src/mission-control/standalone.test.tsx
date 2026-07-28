@@ -164,7 +164,7 @@ describe('standalone Sigil Mission Control', () => {
     render(<SigilOperatorView adapter={adapter} />)
     await screen.findByTestId('sigil-operator')
     fireEvent.click(
-      screen.getByRole('button', { name: 'Start' }),
+      screen.getByRole('button', { name: 'Resume' }),
     )
 
     expect(
@@ -184,6 +184,13 @@ describe('standalone Sigil Mission Control', () => {
     })
 
     fireEvent.click(
+      screen.getByRole('button', { name: 'Resume' }),
+    )
+    await waitFor(() => {
+      expect(screen.getByText(/paper automation running/i)).toBeTruthy()
+    })
+
+    fireEvent.click(
       screen.getByRole('button', { name: 'Stop' }),
     )
 
@@ -191,6 +198,76 @@ describe('standalone Sigil Mission Control', () => {
       expect(screen.getByText(/paper automation stopped/i)).toBeTruthy()
     })
   })
+
+  it('renders governed runtime status, cycle timing, counts, and blocking reasons', async () => {
+    render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
+
+    const card = await screen.findByTestId('runtime-visibility')
+    expect(card.textContent).toContain('Governed runtime status')
+    expect(card.textContent).toContain('PAUSED')
+    expect(card.textContent).toContain('HEALTHY')
+    expect(card.textContent).toContain('Completed cycles')
+    expect(card.textContent).toContain('3')
+    expect(card.textContent).toContain('2026-07-25T14:32:13Z')
+    expect(card.textContent).toContain('No cycle scheduled')
+    expect(card.textContent).toContain('Automation is paused by the owner')
+    expect(card.textContent).toContain('Local paper execution: available')
+    expect(card.textContent).toContain('Real broker submission: unavailable')
+    expect(card.textContent).not.toContain('Local paper execution: currently blocked')
+  })
+
+  it('distinguishes a safety-triggered pause from a manual pause', async () => {
+    const adapter = new MockSigilOperatorAdapter()
+    const snapshot = await adapter.readSnapshot()
+    adapter.readSnapshot = async () => ({
+      ...snapshot,
+      systemHealth: 'Runtime degraded',
+      runtimeVisibility: {
+        ...snapshot.runtimeVisibility!,
+        operationalState: 'paused',
+        health: 'degraded',
+        rawHealth: 'degraded',
+        pauseCause: 'safety',
+        nextAction: 'Resolve the safety condition, then explicitly resume automation',
+        blockingReasons: [
+          {
+            code: 'automation_safety_paused',
+            severity: 'warning',
+            summary: 'Runtime health is degraded',
+            requiresManualResume: true
+          }
+        ]
+      }
+    })
+
+    render(<SigilOperatorView adapter={adapter} />)
+
+    const card = await screen.findByTestId('runtime-visibility')
+    expect(card.textContent).toContain('Runtime health is degraded')
+    expect(card.textContent).toContain('automation_safety_paused')
+    expect(card.textContent).toContain('explicitly resume')
+    expect(card.textContent).not.toContain('paused by the owner')
+  })
+
+  it('renders the recent audit timeline newest first with complete references', async () => {
+    const adapter = new MockSigilOperatorAdapter()
+    const snapshot = await adapter.readSnapshot()
+    adapter.readSnapshot = async () => ({
+      ...snapshot,
+      auditEvents: [snapshot.auditEvents[2]!, snapshot.auditEvents[0]!, snapshot.auditEvents[1]!]
+    })
+
+    render(<SigilOperatorView adapter={adapter} />)
+
+    const card = await screen.findByTestId('runtime-visibility')
+    const summaries = card.querySelectorAll('ol li')
+    expect(summaries[0]?.textContent).toContain('Immutable simulated receipt recorded')
+    expect(summaries[0]?.textContent).toContain('PRP-20260725-0042')
+    expect(summaries[0]?.textContent).toContain('ORD-20260725-018')
+    expect(summaries[0]?.textContent).toContain('EVD-9F3A7B1C')
+    expect(screen.getByRole('button', { name: 'View all' })).toBeTruthy()
+  })
+
   it('refreshes visible portfolio values when backend state changes', async () => {
     const adapter = new MockSigilOperatorAdapter()
     const initialRead = adapter.readSnapshot.bind(adapter)

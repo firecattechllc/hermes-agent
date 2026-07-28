@@ -304,3 +304,112 @@ def test_runtime_health_is_healthy_for_consistent_state() -> None:
 
     assert evaluate_runtime_health(state) == "healthy"
     assert state["runtime_health"] == "healthy"
+
+
+def test_running_healthy_runtime_visibility_projection() -> None:
+    runtime.control_paper_cycle("start", now=NOW)
+    snapshot = runtime.runtime_snapshot(now=NOW)
+    visibility = snapshot["runtime_visibility"]
+
+    assert visibility["operational_state"] == "running"
+    assert visibility["health"] == "healthy"
+    assert visibility["paper_execution_available"] is True
+    assert visibility["counts"]["cycles"] == 1
+    assert visibility["counts"]["proposals"] == 1
+
+
+def test_paused_runtime_visibility_projection() -> None:
+    snapshot = runtime.control_paper_cycle("pause", now=NOW)
+    visibility = snapshot["runtime_visibility"]
+
+    assert visibility["operational_state"] == "paused"
+    assert visibility["pause_cause"] == "manual"
+    assert any(
+        reason["code"] == "automation_paused"
+        for reason in visibility["blocking_reasons"]
+    )
+
+
+def test_stopped_runtime_visibility_projection() -> None:
+    snapshot = runtime.runtime_snapshot(now=NOW)
+
+    assert snapshot["runtime_visibility"]["operational_state"] == "stopped"
+    assert any(
+        reason["code"] == "automation_stopped"
+        for reason in snapshot["runtime_visibility"]["blocking_reasons"]
+    )
+
+
+def test_inactive_authorization_is_a_visibility_blocker() -> None:
+    snapshot = runtime.control_paper_authorization("revoke", now=NOW)
+
+    assert snapshot["runtime_visibility"]["paper_execution_available"] is False
+    assert any(
+        reason["code"] == "authorization_revoked"
+        and reason["severity"] == "critical"
+        for reason in snapshot["runtime_visibility"]["blocking_reasons"]
+    )
+
+
+def test_unhealthy_runtime_auto_pause_is_visible_and_recovery_stays_paused() -> None:
+    runtime.control_paper_cycle("start", now=NOW)
+    with runtime._locked_state() as (state_path, state):
+        state["balances"]["buying_power"] = "1.00"
+        runtime._persist(state_path, state)
+
+    unhealthy = runtime.runtime_snapshot(now=NOW + timedelta(seconds=1))
+
+    assert unhealthy["automation"]["state"] == "paused"
+    assert unhealthy["runtime_visibility"]["pause_cause"] == "safety"
+    assert unhealthy["runtime_visibility"]["health"] == "degraded"
+    assert any(
+        reason["code"] == "automation_safety_paused"
+        and reason["requires_manual_resume"] is True
+        for reason in unhealthy["runtime_visibility"]["blocking_reasons"]
+    )
+    assert unhealthy["audit"][0]["status"] == "safety_paused"
+
+    with runtime._locked_state() as (state_path, state):
+        state["balances"]["buying_power"] = state["balances"]["cash"]
+        runtime._persist(state_path, state)
+
+    recovered = runtime.runtime_snapshot(now=NOW + timedelta(seconds=2))
+
+    assert recovered["runtime_visibility"]["health"] == "healthy"
+    assert recovered["automation"]["state"] == "paused"
+    assert recovered["runtime_visibility"]["pause_cause"] == "safety"
+    assert "explicitly resume" in recovered["runtime_visibility"]["next_action"]
+
+
+def test_broker_unavailable_is_separate_from_local_paper_availability() -> None:
+    snapshot = runtime.runtime_snapshot(now=NOW)
+    visibility = snapshot["runtime_visibility"]
+
+    assert visibility["paper_execution_available"] is True
+    assert visibility["broker_submission_available"] is False
+    broker_reason = next(
+        reason
+        for reason in visibility["blocking_reasons"]
+        if reason["code"] == "broker_submission_unavailable"
+    )
+    assert broker_reason["severity"] == "info"
+    assert "local paper simulation remains separate" in broker_reason["summary"]
+
+
+def test_alpha_1_3_persisted_state_upgrades_safely(tmp_path) -> None:
+    snapshot = runtime.runtime_snapshot(now=NOW)
+    snapshot["schema_version"] = 3
+    snapshot["automation"].pop("pause_cause")
+    snapshot["automation"].pop("pause_reason")
+    snapshot.pop("runtime_visibility")
+    state_path = tmp_path / "paper-state" / "runtime-state.json"
+    state_path.write_text(
+        json.dumps({"payload": snapshot, "sha256": runtime._digest(snapshot)})
+    )
+
+    upgraded = runtime.runtime_snapshot(now=NOW + timedelta(seconds=1))
+
+    assert upgraded["schema_version"] == 4
+    assert upgraded["automation"]["pause_cause"] is None
+    assert upgraded["runtime_visibility"]["health"] == "healthy"
+    assert upgraded["broker_submission_available"] is False

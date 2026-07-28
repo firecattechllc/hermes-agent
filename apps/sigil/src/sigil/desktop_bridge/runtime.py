@@ -33,7 +33,7 @@ from .paper_execution import (
 )
 from .universe import PAPER_SIMULATION_PRICES, US_LISTED_SCREENING_UNIVERSE
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 CYCLE_SECONDS = 5
 CONTROL_ACTIONS = frozenset({"start", "pause", "stop"})
 AUTHORIZATION_ACTIONS = frozenset({"grant", "revoke"})
@@ -132,6 +132,8 @@ def _initial_state(now: datetime) -> dict[str, Any]:
             "last_cycle_at": None,
             "next_cycle_at": None,
             "mode": "monthly-authorized-paper-execution",
+            "pause_cause": None,
+            "pause_reason": None,
         },
         "paper_authorization": authorization,
         "proposals": [],
@@ -266,6 +268,8 @@ def _upgrade_runtime_state(state: dict[str, Any]) -> None:
     automation = state.setdefault("automation", {})
     automation.pop("proposal_only", None)
     automation.setdefault("mode", "monthly-authorized-paper-execution")
+    automation.setdefault("pause_cause", None)
+    automation.setdefault("pause_reason", None)
     state.setdefault(
         "paper_authorization",
         {
@@ -324,7 +328,7 @@ def _locked_state() -> Iterator[tuple[Path, dict[str, Any]]]:
             if (
                 not isinstance(payload, dict)
                 or envelope.get("sha256") != _digest(payload)
-                or payload.get("schema_version") not in {1, 2, SCHEMA_VERSION}
+                or payload.get("schema_version") not in {1, 2, 3, SCHEMA_VERSION}
             ):
                 raise RuntimeError("paper runtime state integrity validation failed")
             _upgrade_runtime_state(payload)
@@ -437,8 +441,30 @@ def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
     automation = state["automation"]
     health = evaluate_runtime_health(state)
     if health != "healthy":
+        was_running = automation.get("state") == "running"
         automation["state"] = "paused"
         automation["next_cycle_at"] = None
+        automation["pause_cause"] = "safety"
+        automation["pause_reason"] = f"Runtime health is {health}"
+        if was_running:
+            state["audit"].insert(
+                0,
+                {
+                    "id": f"AUD-SAFETY-{int(state['revision']) + 1:06d}",
+                    "timestamp": _timestamp(now),
+                    "status": "safety_paused",
+                    "proposal_id": "—",
+                    "order_id": "—",
+                    "evidence_reference": "RUNTIME-HEALTH",
+                    "summary": f"Paper automation paused by safety condition: {health}",
+                    "details": {
+                        "paper_only": True,
+                        "runtime_health": health,
+                        "requires_manual_resume": True,
+                        "broker_submission_attempted": False,
+                    },
+                },
+            )
         return
     if automation["state"] != "running":
         return
@@ -569,8 +595,161 @@ def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
             "next_cycle_at": _timestamp(
                 now.replace(microsecond=0) + timedelta(seconds=CYCLE_SECONDS)
             ),
+            "pause_cause": None,
+            "pause_reason": None,
         }
     )
+
+
+def _runtime_visibility(
+    state: dict[str, Any], now: datetime
+) -> dict[str, Any]:
+    """Project governed runtime state without creating execution authority."""
+    automation = state["automation"]
+    raw_health = str(state.get("runtime_health", "corrupt"))
+    health = (
+        "healthy"
+        if raw_health == "healthy"
+        else "degraded"
+        if raw_health == "degraded"
+        else "blocked"
+    )
+    authorization = state["paper_authorization"]
+    authorization_status = str(authorization.get("status", "required"))
+    expires_at = authorization.get("expires_at")
+    authorization_active = authorization_status == "active"
+    if authorization_active and isinstance(expires_at, str):
+        authorization_active = (
+            datetime.fromisoformat(expires_at.replace("Z", "+00:00")) > now
+        )
+
+    reasons: list[dict[str, object]] = []
+
+    def reason(
+        code: str,
+        severity: str,
+        summary: str,
+        *,
+        requires_manual_resume: bool = False,
+    ) -> None:
+        reasons.append(
+            {
+                "code": code,
+                "severity": severity,
+                "summary": summary,
+                "requires_manual_resume": requires_manual_resume,
+            }
+        )
+
+    automation_state = str(automation.get("state", "stopped"))
+    if automation_state == "paused":
+        if automation.get("pause_cause") == "safety":
+            reason(
+                "automation_safety_paused",
+                "critical" if health == "blocked" else "warning",
+                str(
+                    automation.get("pause_reason")
+                    or "Automation was paused by a runtime safety condition"
+                ),
+                requires_manual_resume=True,
+            )
+        else:
+            reason(
+                "automation_paused",
+                "warning",
+                "Automation is paused by the owner",
+                requires_manual_resume=True,
+            )
+    elif automation_state == "stopped":
+        reason(
+            "automation_stopped",
+            "warning",
+            "Automation is stopped",
+            requires_manual_resume=True,
+        )
+
+    if not authorization_active:
+        reason(
+            f"authorization_{authorization_status}",
+            "critical",
+            f"Paper authorization is {authorization_status}",
+        )
+    if health != "healthy":
+        reason(
+            f"runtime_health_{raw_health}",
+            "critical" if health == "blocked" else "warning",
+            f"Runtime health is {raw_health.replace('_', ' ')}",
+        )
+    connection = state.get("connection", {})
+    if connection.get("status") != "connected" or connection.get(
+        "degraded_services"
+    ):
+        reason(
+            "services_degraded",
+            "warning",
+            "Connection or required services are degraded",
+        )
+    if not state.get("execution_authorized", False):
+        reason(
+            "execution_authorization_false",
+            "info",
+            "Real broker execution authorization is disabled",
+        )
+    if not state.get("broker_submission_available", False):
+        reason(
+            "broker_submission_unavailable",
+            "info",
+            "Real broker submission is unavailable; local paper simulation remains separate",
+        )
+
+    critical_block = any(
+        item["severity"] == "critical" for item in reasons
+    )
+    operational_state = automation_state
+    if automation_state == "running" and critical_block:
+        operational_state = "blocked"
+
+    paper_execution_available = (
+        state.get("environment") == "paper"
+        and state.get("simulation") is True
+        and authorization_active
+        and health == "healthy"
+    )
+    if operational_state == "running":
+        next_action = "Run the next governed local paper cycle when scheduled"
+    elif automation.get("pause_cause") == "safety":
+        next_action = "Resolve the safety condition, then explicitly resume automation"
+    elif operational_state == "paused":
+        next_action = "Explicitly resume local paper automation"
+    elif operational_state == "stopped":
+        next_action = "Explicitly start local paper automation"
+    else:
+        next_action = "Resolve critical blocking reasons"
+
+    return {
+        "operational_state": operational_state,
+        "health": health,
+        "raw_health": raw_health,
+        "paper_execution_available": paper_execution_available,
+        "broker_submission_available": bool(
+            state.get("broker_submission_available", False)
+        ),
+        "execution_authorized": bool(
+            state.get("execution_authorized", False)
+        ),
+        "connection_state": str(connection.get("status", "disconnected")),
+        "automation_mode": str(automation.get("mode", "unknown")),
+        "pause_cause": automation.get("pause_cause"),
+        "next_action": next_action,
+        "blocking_reasons": reasons,
+        "counts": {
+            "cycles": int(automation.get("cycle_count", 0)),
+            "proposals": len(state.get("proposals", [])),
+            "executions": len(state.get("executions", [])),
+            "reconciliation": len(state.get("reconciliation", [])),
+            "audit_events": len(state.get("audit", [])),
+        },
+    }
 
 
 def runtime_snapshot(*, now: datetime | None = None) -> dict[str, Any]:
@@ -580,6 +759,7 @@ def runtime_snapshot(*, now: datetime | None = None) -> dict[str, Any]:
         evaluate_runtime_health(state)
         _run_due_cycle(state, observed_at)
         evaluate_runtime_health(state)
+        state["runtime_visibility"] = _runtime_visibility(state, observed_at)
         state["revision"] = int(state["revision"]) + 1
         state["generated_at"] = _timestamp(observed_at)
         state["connection"]["last_refresh_at"] = _timestamp(observed_at)
@@ -660,11 +840,22 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
                 )
             automation["state"] = "running"
             automation["next_cycle_at"] = _timestamp(observed_at)
+            automation["pause_cause"] = None
+            automation["pause_reason"] = None
         elif action == "pause":
             automation["state"] = "paused"
             automation["next_cycle_at"] = None
+            automation["pause_cause"] = "manual"
+            automation["pause_reason"] = "Paused by owner control"
         else:
-            automation.update({"state": "stopped", "next_cycle_at": None})
+            automation.update(
+                {
+                    "state": "stopped",
+                    "next_cycle_at": None,
+                    "pause_cause": None,
+                    "pause_reason": None,
+                }
+            )
         state["revision"] = int(state["revision"]) + 1
         state["generated_at"] = _timestamp(observed_at)
         state["audit"].insert(
@@ -686,6 +877,8 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
                 },
             },
         )
+        evaluate_runtime_health(state)
+        state["runtime_visibility"] = _runtime_visibility(state, observed_at)
         _persist(state_path, state)
         return json.loads(json.dumps(state))
 
@@ -709,7 +902,14 @@ def control_paper_authorization(
             authorization.update(
                 {"status": "revoked", "revoked_at": timestamp}
             )
-            state["automation"].update({"state": "paused", "next_cycle_at": None})
+            state["automation"].update(
+                {
+                    "state": "paused",
+                    "next_cycle_at": None,
+                    "pause_cause": "safety",
+                    "pause_reason": "Paper authorization was revoked",
+                }
+            )
         state["revision"] = int(state["revision"]) + 1
         state["generated_at"] = timestamp
         state["audit"].insert(
@@ -737,6 +937,8 @@ def control_paper_authorization(
                 },
             },
         )
+        evaluate_runtime_health(state)
+        state["runtime_visibility"] = _runtime_visibility(state, observed_at)
         _persist(state_path, state)
         return json.loads(json.dumps(state))
 

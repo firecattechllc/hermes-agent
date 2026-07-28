@@ -77,6 +77,34 @@ export interface AuditEvent {
   details: Readonly<Record<string, unknown>>
 }
 
+export interface RuntimeBlockingReason {
+  code: string
+  severity: 'critical' | 'info' | 'warning'
+  summary: string
+  requiresManualResume: boolean
+}
+
+export interface RuntimeVisibility {
+  operationalState: 'blocked' | 'paused' | 'running' | 'stopped'
+  health: 'blocked' | 'degraded' | 'healthy'
+  rawHealth: string
+  paperExecutionAvailable: boolean
+  brokerSubmissionAvailable: boolean
+  executionAuthorized: boolean
+  connectionState: string
+  automationMode: string
+  pauseCause: 'manual' | 'safety' | null
+  nextAction: string
+  blockingReasons: RuntimeBlockingReason[]
+  counts: {
+    cycles: number
+    proposals: number
+    executions: number
+    reconciliation: number
+    auditEvents: number
+  }
+}
+
 export interface SigilProviderSnapshot {
   checked_at: string
   broker_submission_available: false
@@ -141,6 +169,9 @@ export interface SigilSnapshot {
   activeStrategies: number
   automationState?: 'paused' | 'running' | 'stopped'
   automationCycleCount?: number
+  automationLastCycleAt?: string | null
+  automationNextCycleAt?: string | null
+  runtimeVisibility?: RuntimeVisibility
   pendingApprovals: number
   killSwitch: 'armed' | 'engaged'
   certificationStatus: string

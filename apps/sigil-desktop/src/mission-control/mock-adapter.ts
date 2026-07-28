@@ -48,6 +48,41 @@ export const INITIAL_SIGIL_SNAPSHOT: SigilSnapshot = {
   },
   automationState: 'paused',
   automationCycleCount: 3,
+  automationLastCycleAt: '2026-07-25T14:32:13Z',
+  automationNextCycleAt: null,
+  runtimeVisibility: {
+    operationalState: 'paused',
+    health: 'healthy',
+    rawHealth: 'healthy',
+    paperExecutionAvailable: true,
+    brokerSubmissionAvailable: false,
+    executionAuthorized: false,
+    connectionState: 'connected',
+    automationMode: 'monthly-authorized-paper-execution',
+    pauseCause: 'manual',
+    nextAction: 'Explicitly resume local paper automation',
+    blockingReasons: [
+      {
+        code: 'automation_paused',
+        severity: 'warning',
+        summary: 'Automation is paused by the owner',
+        requiresManualResume: true
+      },
+      {
+        code: 'broker_submission_unavailable',
+        severity: 'info',
+        summary: 'Real broker submission is unavailable; local paper simulation remains separate',
+        requiresManualResume: false
+      }
+    ],
+    counts: {
+      cycles: 3,
+      proposals: 3,
+      executions: 3,
+      reconciliation: 3,
+      auditEvents: 3
+    }
+  },
   activeStrategies: 4,
   pendingApprovals: 2,
   killSwitch: 'armed',
@@ -269,9 +304,34 @@ export class MockSigilOperatorAdapter implements SigilOperatorAdapter {
   }
 
   async controlPaperCycle(action: 'start' | 'pause' | 'stop'): Promise<SigilSnapshot> {
+    const state = action === 'start' ? 'running' : action === 'pause' ? 'paused' : 'stopped'
     this.snapshot = {
       ...this.snapshot,
-      automationState: action === 'start' ? 'running' : action === 'pause' ? 'paused' : 'stopped'
+      automationState: state,
+      automationNextCycleAt: state === 'running' ? '2099-07-25T14:32:23Z' : null,
+      runtimeVisibility: this.snapshot.runtimeVisibility
+        ? {
+            ...this.snapshot.runtimeVisibility,
+            operationalState: state,
+            pauseCause: state === 'paused' ? 'manual' : null,
+            blockingReasons:
+              state === 'running'
+                ? this.snapshot.runtimeVisibility.blockingReasons.filter(
+                    reason => reason.code !== 'automation_paused' && reason.code !== 'automation_stopped'
+                  )
+                : [
+                    {
+                      code: state === 'paused' ? 'automation_paused' : 'automation_stopped',
+                      severity: 'warning',
+                      summary: state === 'paused' ? 'Automation is paused by the owner' : 'Automation is stopped',
+                      requiresManualResume: true
+                    },
+                    ...this.snapshot.runtimeVisibility.blockingReasons.filter(
+                      reason => reason.code !== 'automation_paused' && reason.code !== 'automation_stopped'
+                    )
+                  ]
+          }
+        : undefined
     }
 
     return structuredClone(this.snapshot)

@@ -1,4 +1,4 @@
-import type { SigilOperatorAdapter, SigilSnapshot, SimulatedOperatorAction } from './types'
+import type { RuntimeVisibility, SigilOperatorAdapter, SigilSnapshot, SimulatedOperatorAction } from './types'
 
 type RuntimeHealth =
   | 'healthy'
@@ -33,6 +33,33 @@ type SigilRuntimeSnapshot = {
   automation: {
     state: string
     cycle_count?: number
+    last_cycle_at?: string | null
+    next_cycle_at?: string | null
+  }
+  runtime_visibility?: {
+    operational_state: 'blocked' | 'paused' | 'running' | 'stopped'
+    health: 'blocked' | 'degraded' | 'healthy'
+    raw_health: string
+    paper_execution_available: boolean
+    broker_submission_available: boolean
+    execution_authorized: boolean
+    connection_state: string
+    automation_mode: string
+    pause_cause: 'manual' | 'safety' | null
+    next_action: string
+    blocking_reasons: Array<{
+      code: string
+      severity: 'critical' | 'info' | 'warning'
+      summary: string
+      requires_manual_resume: boolean
+    }>
+    counts: {
+      cycles: number
+      proposals: number
+      executions: number
+      reconciliation: number
+      audit_events: number
+    }
   }
   paper_authorization: {
     status: 'active' | 'expired' | 'required' | 'revoked'
@@ -122,20 +149,59 @@ export function runtimeHealthLabel(
   switch (runtime.runtime_health) {
     case 'healthy':
       return 'Runtime healthy'
+
     case 'degraded':
       return 'Runtime degraded'
+
     case 'recovery_required':
       return 'Recovery required'
+
     case 'corrupt':
       return 'Runtime corruption detected'
+
     case 'locked':
       return 'Runtime unavailable'
+
     default:
       return 'Runtime health unknown'
   }
 }
 
-function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
+function mapVisibility(runtime: SigilRuntimeSnapshot): RuntimeVisibility | undefined {
+  const visibility = runtime.runtime_visibility
+
+  if (!visibility) {
+    return undefined
+  }
+
+  return {
+    operationalState: visibility.operational_state,
+    health: visibility.health,
+    rawHealth: visibility.raw_health,
+    paperExecutionAvailable: visibility.paper_execution_available,
+    brokerSubmissionAvailable: visibility.broker_submission_available,
+    executionAuthorized: visibility.execution_authorized,
+    connectionState: visibility.connection_state,
+    automationMode: visibility.automation_mode,
+    pauseCause: visibility.pause_cause,
+    nextAction: visibility.next_action,
+    blockingReasons: visibility.blocking_reasons.map(reason => ({
+      code: reason.code,
+      severity: reason.severity,
+      summary: reason.summary,
+      requiresManualResume: reason.requires_manual_resume
+    })),
+    counts: {
+      cycles: visibility.counts.cycles,
+      proposals: visibility.counts.proposals,
+      executions: visibility.counts.executions,
+      reconciliation: visibility.counts.reconciliation,
+      auditEvents: visibility.counts.audit_events
+    }
+  }
+}
+
+export function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
   const totalAccountValue = Number(
     runtime.balances.total_account_value ?? runtime.balances.portfolio_value
   )
@@ -198,6 +264,9 @@ function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
         ? runtime.automation.state
         : 'stopped',
     automationCycleCount: runtime.automation.cycle_count ?? 0,
+    automationLastCycleAt: runtime.automation.last_cycle_at ?? null,
+    automationNextCycleAt: runtime.automation.next_cycle_at ?? null,
+    runtimeVisibility: mapVisibility(runtime),
     pendingApprovals: runtime.proposals.filter(proposal => proposal.status === 'pending').length,
     killSwitch: 'armed',
     certificationStatus: 'Paper runtime',
@@ -261,16 +330,18 @@ function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
           reconciliation?.evidence_reference ?? `PAPER-RUNTIME:${execution.order_id}`
       }
     }),
-    auditEvents: runtime.audit.map(event => ({
-      id: event.id,
-      timestamp: event.timestamp,
-      orderId: event.order_id,
-      proposalId: event.proposal_id,
-      status: event.status,
-      evidenceReference: event.evidence_reference,
-      summary: event.summary,
-      details: event.details
-    }))
+    auditEvents: [...runtime.audit]
+      .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
+      .map(event => ({
+        id: event.id,
+        timestamp: event.timestamp,
+        orderId: event.order_id,
+        proposalId: event.proposal_id,
+        status: event.status,
+        evidenceReference: event.evidence_reference,
+        summary: event.summary,
+        details: event.details
+      }))
   }
 }
 
