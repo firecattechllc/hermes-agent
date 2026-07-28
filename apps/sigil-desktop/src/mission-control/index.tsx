@@ -1085,6 +1085,8 @@ export function SigilOperatorView({
                   uppercase tracking-[0.12em]
                   text-lime-300
                   shadow-[0_0_10px_rgba(163,230,53,0.7)]
+                  animate-[pulse_1.8s_ease-in-out_infinite]
+                  motion-reduce:animate-none
                 "
               >
                 ● {RELEASE_STAGE}
@@ -1118,6 +1120,8 @@ export function SigilOperatorView({
                   uppercase tracking-[0.08em]
                   text-lime-300
                   shadow-[0_0_12px_rgba(163,230,53,0.65)]
+                  animate-[pulse_1.8s_ease-in-out_infinite]
+                  motion-reduce:animate-none
                   transition-all
                   hover:bg-lime-400/25
                   hover:text-lime-200
