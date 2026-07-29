@@ -61,11 +61,19 @@ def initialize_execution_state(state: dict[str, Any]) -> None:
         position.setdefault("market_value", money(market_value))
         position.setdefault("unrealized_pnl", "0.00")
         position.setdefault("realized_pnl", "0.00")
+        position.setdefault("mark_status", "unavailable")
+        position.setdefault("mark_price", None)
+        position.setdefault("mark_timestamp", None)
+        position.setdefault("mark_source", None)
+        position.setdefault("mark_evidence_identity", None)
+        position.setdefault("mark_error", "validated_position_mark_unavailable")
+        position.setdefault("unrealized_pnl_status", "unavailable")
     state.setdefault("orders", {})
     state.setdefault("filled_orders", [])
     state.setdefault("cancelled_orders", [])
     state.setdefault("rejected_orders", [])
     state.setdefault("last_execution", None)
+    state.setdefault("closed_positions", [])
     state.setdefault("runtime_health", "healthy")
     state["schema_version"] = max(int(state.get("schema_version", 1)), 2)
 
@@ -321,6 +329,62 @@ def recalculate(state: dict[str, Any], snapshot: dict[str, Any]) -> None:
     cash = Decimal(state["balances"]["cash"])
     equity = cash + market_value
     state["balances"].update({"portfolio_value": money(market_value), "equity": money(equity), "unrealized_pnl": money(unrealized), "total_account_value": money(equity), "buying_power": money(cash - Decimal(state["balances"]["reserved_cash"]))})
+
+
+def apply_position_marks(
+    state: dict[str, Any],
+    marks: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Persist validated local marks and recalculate only from fresh evidence."""
+    initialize_execution_state(state)
+    snapshot: dict[str, str] = {}
+    unavailable: list[str] = []
+    for position in state["positions"]:
+        if Decimal(str(position.get("quantity", "0"))) <= 0:
+            continue
+        symbol = str(position["symbol"])
+        mark = marks.get(symbol)
+        status = str(mark.get("status")) if isinstance(mark, dict) else "unavailable"
+        position["mark_status"] = status
+        position["mark_error"] = (
+            None
+            if status == "fresh"
+            else str(
+                mark.get("reason", "validated_position_mark_unavailable")
+                if isinstance(mark, dict)
+                else "validated_position_mark_unavailable"
+            )
+        )
+        if isinstance(mark, dict):
+            position["mark_timestamp"] = mark.get("timestamp")
+            position["mark_source"] = mark.get("source")
+            position["mark_evidence_identity"] = mark.get("evidence_identity")
+        if status != "fresh" or not isinstance(mark, dict):
+            position["unrealized_pnl_status"] = status
+            unavailable.append(symbol)
+            continue
+        price = number(mark.get("price"), "position mark", positive=True)
+        position["mark_price"] = str(price)
+        position["unrealized_pnl_status"] = "fresh"
+        snapshot[symbol] = str(price)
+
+    active = [
+        position
+        for position in state["positions"]
+        if Decimal(str(position.get("quantity", "0"))) > 0
+    ]
+    if active and unavailable:
+        state["balances"]["valuation_status"] = "unavailable"
+        state["balances"]["unrealized_pnl_status"] = "unavailable"
+    else:
+        recalculate(state, snapshot)
+        state["balances"]["valuation_status"] = "fresh"
+        state["balances"]["unrealized_pnl_status"] = "fresh"
+    return {
+        "status": "fresh" if not unavailable else "unavailable",
+        "fresh_symbols": sorted(snapshot),
+        "unavailable_symbols": sorted(unavailable),
+    }
 
 
 def mission_control_status(state: dict[str, Any]) -> dict[str, Any]:

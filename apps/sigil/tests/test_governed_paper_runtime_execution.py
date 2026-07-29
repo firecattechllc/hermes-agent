@@ -176,6 +176,124 @@ def test_production_local_simulator_fails_closed_on_expired_or_duplicate_proposa
     assert state["audit"][0]["details"]["reason"] == "production_proposal_expired"
 
 
+def _marked_position_state() -> dict[str, object]:
+    state = runtime._initial_state(NOW)
+    state["positions"] = [
+        {
+            "symbol": "AAPL",
+            "quantity": "1",
+            "average_cost": "100.00",
+            "market_value": "100.00",
+            "unrealized_pnl": "0.00",
+            "entry_at": NOW.isoformat(),
+            "entry_proposal_id": "SIGIL-V21-PRP-MARK",
+            "strategy_id": "sigil-liquid-trend",
+            "strategy_version": "2.1.0",
+            "exit_plan": {
+                "stop_loss_percent": "0.05",
+                "take_profit_percent": "0.10",
+                "maximum_holding_days": 10,
+            },
+        }
+    ]
+    state["balances"].update(
+        {
+            "cash": "9900.00",
+            "reserved_cash": "0.00",
+            "buying_power": "9900.00",
+            "equity": "10000.00",
+            "portfolio_value": "100.00",
+            "realized_pnl": "0.00",
+            "unrealized_pnl": "0.00",
+            "total_account_value": "10000.00",
+        }
+    )
+    return state
+
+
+def test_position_monitor_persists_fresh_marks_and_exposes_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sigil.desktop_bridge import production_research
+
+    state = _marked_position_state()
+    fresh_mark = {
+        "AAPL": {
+            "status": "fresh",
+            "price": "105.00",
+            "timestamp": NOW.isoformat(),
+            "source": "alpaca_iex_latest_quote_midpoint",
+            "evidence_identity": "mark-evidence",
+        }
+    }
+    monkeypatch.setattr(
+        production_research,
+        "collect_local_position_marks",
+        lambda _symbols, *, now: fresh_mark,
+    )
+    result = runtime._monitor_local_simulated_positions(
+        state, sequence=3, execution_id="cycle-mark-3", now=NOW
+    )
+    assert result["status"] == "fresh"
+    assert state["positions"][0]["mark_price"] == "105.00"
+    assert state["positions"][0]["mark_source"] == "alpaca_iex_latest_quote_midpoint"
+    assert state["positions"][0]["unrealized_pnl"] == "5.00"
+    assert state["balances"]["unrealized_pnl"] == "5.00"
+
+    unavailable = {
+        "AAPL": {
+            "status": "stale",
+            "timestamp": NOW.isoformat(),
+            "source": "alpaca_iex_latest_quote_midpoint",
+            "evidence_identity": "stale-evidence",
+            "reason": "stale_quote",
+        }
+    }
+    monkeypatch.setattr(
+        production_research,
+        "collect_local_position_marks",
+        lambda _symbols, *, now: unavailable,
+    )
+    result = runtime._monitor_local_simulated_positions(
+        state, sequence=4, execution_id="cycle-mark-4", now=NOW
+    )
+    assert result["status"] == "unavailable"
+    assert state["positions"][0]["mark_status"] == "stale"
+    assert state["positions"][0]["unrealized_pnl_status"] == "stale"
+    assert state["balances"]["unrealized_pnl_status"] == "unavailable"
+    assert state["positions"][0]["unrealized_pnl"] == "5.00"
+
+
+def test_governed_local_stop_exit_preserves_realized_pnl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sigil.desktop_bridge import production_research
+
+    state = _marked_position_state()
+    monkeypatch.setattr(
+        production_research,
+        "collect_local_position_marks",
+        lambda _symbols, *, now: {
+            "AAPL": {
+                "status": "fresh",
+                "price": "94.00",
+                "timestamp": now.isoformat(),
+                "source": "alpaca_iex_latest_quote_midpoint",
+                "evidence_identity": "stop-evidence",
+            }
+        },
+    )
+    result = runtime._monitor_local_simulated_positions(
+        state, sequence=5, execution_id="cycle-exit-5", now=NOW
+    )
+    assert result["exit_triggered"] == "protective_stop"
+    assert state["positions"] == []
+    assert state["balances"]["realized_pnl"] == "-6.00"
+    assert state["closed_positions"][0]["exit_trigger"] == "protective_stop"
+    assert state["orders"][result["exit_order_id"]]["side"] == "SELL"
+    assert state["last_execution"]["broker_submission_attempted"] is False
+
+
 def test_paper_automation_state_survives_runtime_restart(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,

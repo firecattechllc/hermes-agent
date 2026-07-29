@@ -640,7 +640,7 @@ function PaperPortfolio({
           ['Buying power', snapshot.buyingPower ?? snapshot.cash],
           ['Holdings value', snapshot.portfolioValue],
           ['Total account value', snapshot.totalAccountValue ?? snapshot.portfolioValue],
-          ['Unrealized P&L', snapshot.unrealizedPnl ?? '$0.00'],
+          ['Unrealized P&L', snapshot.unrealizedPnl ?? 'Unavailable'],
           ['Realized P&L', snapshot.realizedPnl ?? '$0.00']
         ].map(([label, value]) => (
           <div className="bg-(--ui-bg-secondary) px-3 py-3" key={label}>
@@ -657,7 +657,7 @@ function PaperPortfolio({
               Current simulated holdings
             </h3>
             <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
-              Quantity, cost, allocation, and P&L refresh with the local five-second snapshot.
+              Quantity, cost, allocation, and P&L use persisted validated position marks.
             </p>
           </div>
           <span className="font-mono text-[0.625rem] text-(--ui-text-tertiary)">
@@ -682,7 +682,14 @@ function PaperPortfolio({
                     <td className="px-3 py-3 font-mono">{position.averageCost}</td>
                     <td className="px-3 py-3 font-mono">{position.marketValue}</td>
                     <td className="px-3 py-3 font-mono">{position.allocation}</td>
-                    <td className="px-3 py-3 font-mono">{position.unrealizedPnl}</td>
+                    <td className="px-3 py-3 font-mono">
+                      <span className="block">{position.unrealizedPnl}</span>
+                      <span className="mt-1 block text-[0.625rem] text-(--ui-text-tertiary)">
+                        {position.valuationStatus === 'fresh'
+                          ? `${position.markPrice ?? 'Marked'} · ${position.markTimestamp ?? 'timestamp unavailable'}`
+                          : `${position.valuationStatus} mark`}
+                      </span>
+                    </td>
                     <td className="px-3 py-3 font-mono">{position.realizedPnl}</td>
                     <td className="px-3 py-3">
                       <button className="font-mono text-[0.6875rem] text-primary hover:underline" onClick={onOpenAudit} type="button">
@@ -1288,7 +1295,11 @@ function ProductionResearchPanel({ status }: { status: ProductionResearchStatus 
         {[
           ['Research state', progress.state.replaceAll('_', ' '), `${progress.provider_status} · ${progress.market_data_freshness}`],
           ['Batch and cursor', `${progress.current_batch} · ${progress.current_cursor}`, `${progress.symbols_researched} symbols researched`],
-          ['Evidence', `${progress.evidence_completeness} complete`, `${progress.research_successes} success · ${progress.research_failures} failure`],
+          [
+            'Evidence',
+            `${progress.evidence_complete_count ?? 0} complete · ${progress.evidence_incomplete_count ?? 0} incomplete`,
+            `${progress.scored_count ?? progress.research_successes} scored · ${progress.hard_rejected_count ?? progress.research_failures} hard-gate rejected; counts may overlap`
+          ],
           ['Candidates', String(progress.candidates_produced), `${progress.proposals_generated} proposals generated`],
           ['Shadow positions', String(status.active_shadow_positions), `${status.completed_shadow_outcomes} completed outcomes`],
           ['Shadow performance', status.shadow_simulated_return, `${status.shadow_win_rate} simulated win rate`],

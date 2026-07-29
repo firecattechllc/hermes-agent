@@ -51,6 +51,11 @@ export interface PaperPosition {
   marketValue: string
   unrealizedPnl: string
   realizedPnl: string
+  valuationStatus?: 'fresh' | 'stale' | 'unavailable'
+  markPrice?: string | null
+  markTimestamp?: string | null
+  markSource?: string | null
+  markEvidenceIdentity?: string | null
   allocation: string
   auditReferences: string[]
 }
@@ -284,6 +289,10 @@ export interface ProductionResearchStatus {
     symbols_researched: number
     research_successes: number
     research_failures: number
+    scored_count?: number
+    hard_rejected_count?: number
+    evidence_complete_count?: number
+    evidence_incomplete_count?: number
     evidence_completeness: string
     candidates_produced: number
     proposals_generated: number
@@ -374,6 +383,7 @@ export interface SigilSnapshot {
   totalAccountValue?: string
   realizedPnl?: string
   unrealizedPnl?: string
+  valuationStatus?: 'fresh' | 'stale' | 'unavailable'
   positions?: PaperPosition[]
   paperAuthorization?: PaperAuthorization
   activeStrategies: number

@@ -13,6 +13,7 @@ from sigil.production_research import (
     ProductionResearchService,
     ProductionResearchStore,
 )
+from sigil.production_research.engine import MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS
 from sigil.production_research.models import decimal, parse_time
 
 from .autonomous_paper import _service as _execution_service
@@ -66,6 +67,73 @@ def request_paper_promotion() -> dict[str, Any]:
 def reconcile_positions() -> dict[str, Any]:
     """Refresh paper orders and positions without mutating broker state."""
     return _execution_service().reconcile()
+
+
+def collect_local_position_marks(
+    symbols: tuple[str, ...],
+    *,
+    now: datetime,
+) -> dict[str, dict[str, Any]]:
+    """Collect fresh bid-side marks for local positions without broker mutation."""
+    if len(symbols) > 3:
+        raise ValueError("local simulated position monitoring is bounded to three symbols")
+    if not symbols:
+        return {}
+    try:
+        evidence = AlpacaProductionDataClient.from_environment().collect_batch(
+            tuple(sorted(set(symbols))),
+            now=now,
+        )
+    except ProductionDataError as error:
+        return {
+            symbol: {
+                "status": "unavailable",
+                "price": None,
+                "timestamp": None,
+                "source": "alpaca_market_data",
+                "evidence_identity": None,
+                "reason": error.code,
+            }
+            for symbol in symbols
+        }
+
+    result: dict[str, dict[str, Any]] = {}
+    by_symbol = {item.symbol: item for item in evidence}
+    for symbol in symbols:
+        item = by_symbol.get(symbol)
+        if item is None:
+            result[symbol] = {
+                "status": "unavailable",
+                "price": None,
+                "timestamp": None,
+                "source": "alpaca_market_data",
+                "evidence_identity": None,
+                "reason": "position_mark_missing",
+            }
+            continue
+        age = int(
+            (now - parse_time(item.observed_at, "position quote timestamp")).total_seconds()
+        )
+        fresh = (
+            item.status.value == "complete"
+            and item.bid is not None
+            and -MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS <= age <= 30
+        )
+        result[symbol] = {
+            "status": "fresh" if fresh else ("stale" if item.bid is not None else "unavailable"),
+            "price": str(item.bid) if fresh and item.bid is not None else None,
+            "timestamp": item.observed_at,
+            "source": f"{item.source}:{item.feed}",
+            "evidence_identity": item.evidence_checksum,
+            "reason": (
+                None
+                if fresh
+                else "position_mark_stale"
+                if item.bid is not None
+                else "position_mark_incomplete"
+            ),
+        }
+    return result
 
 
 def emergency_paper_liquidation() -> dict[str, Any]:

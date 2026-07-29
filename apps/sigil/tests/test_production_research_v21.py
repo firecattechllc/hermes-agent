@@ -20,8 +20,41 @@ from sigil.production_research import (
     ProductionResearchService,
     ProductionResearchStore,
 )
+from sigil.production_research.engine import (
+    MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS,
+    _daily_bar_is_stale,
+)
 
 NOW = datetime(2026, 7, 29, 15, 30, tzinfo=UTC)
+
+
+def test_daily_bar_remains_fresh_through_the_next_regular_session() -> None:
+    completed_bar = "2026-07-28T04:00:00Z"
+    assert _daily_bar_is_stale(completed_bar, datetime(2026, 7, 29, 19, tzinfo=UTC)) is False
+    assert _daily_bar_is_stale(completed_bar, datetime(2026, 7, 30, 15, tzinfo=UTC)) is True
+
+
+def test_friday_daily_bar_remains_fresh_before_monday_close() -> None:
+    completed_bar = "2026-07-24T04:00:00Z"
+    assert _daily_bar_is_stale(completed_bar, datetime(2026, 7, 27, 15, tzinfo=UTC)) is False
+
+
+def test_small_provider_clock_skew_is_tolerated_but_large_future_skew_fails(tmp_path) -> None:
+    research = service(tmp_path)
+    accepted = evidence(
+        observed_at=(
+            NOW + timedelta(seconds=MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS)
+        ).isoformat()
+    )
+    rejected = evidence(
+        observed_at=(
+            NOW + timedelta(seconds=MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS + 1)
+        ).isoformat()
+    )
+    assert research.score(asset(), accepted, now=NOW).hard_rejection_reasons == ()
+    assert "stale_quote" in research.score(
+        asset(), rejected, now=NOW
+    ).hard_rejection_reasons
 
 
 def test_effective_market_data_configuration_rejects_non_paper_urls(monkeypatch):

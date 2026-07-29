@@ -21,6 +21,8 @@ type SigilRuntimeSnapshot = {
     total_account_value?: string
     realized_pnl?: string
     unrealized_pnl?: string
+    valuation_status?: 'fresh' | 'stale' | 'unavailable'
+    unrealized_pnl_status?: 'fresh' | 'stale' | 'unavailable'
   }
   positions: Array<{
     symbol: string
@@ -29,6 +31,12 @@ type SigilRuntimeSnapshot = {
     market_value: string
     unrealized_pnl?: string
     realized_pnl?: string
+    mark_status?: 'fresh' | 'stale' | 'unavailable'
+    mark_price?: string | null
+    mark_timestamp?: string | null
+    mark_source?: string | null
+    mark_evidence_identity?: string | null
+    unrealized_pnl_status?: 'fresh' | 'stale' | 'unavailable'
   }>
   automation: {
     state: string
@@ -233,14 +241,28 @@ export function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
       runtime.balances.total_account_value ?? runtime.balances.portfolio_value
     ),
     realizedPnl: currency(runtime.balances.realized_pnl ?? '0'),
-    unrealizedPnl: currency(runtime.balances.unrealized_pnl ?? '0'),
+    unrealizedPnl:
+      runtime.balances.unrealized_pnl_status === 'fresh'
+        ? currency(runtime.balances.unrealized_pnl ?? '0')
+        : 'Unavailable',
+    valuationStatus: runtime.balances.valuation_status ?? 'unavailable',
     positions: runtime.positions.map(position => ({
       symbol: position.symbol,
       quantity: position.quantity,
       averageCost: currency(position.average_cost ?? '0'),
       marketValue: currency(position.market_value),
-      unrealizedPnl: currency(position.unrealized_pnl ?? '0'),
+      unrealizedPnl:
+        position.unrealized_pnl_status === 'fresh'
+          ? currency(position.unrealized_pnl ?? '0')
+          : position.unrealized_pnl_status === 'stale'
+            ? 'Stale'
+            : 'Unavailable',
       realizedPnl: currency(position.realized_pnl ?? '0'),
+      valuationStatus: position.mark_status ?? 'unavailable',
+      markPrice: position.mark_price ? currency(position.mark_price) : null,
+      markTimestamp: position.mark_timestamp ?? null,
+      markSource: position.mark_source ?? null,
+      markEvidenceIdentity: position.mark_evidence_identity ?? null,
       allocation:
         totalAccountValue > 0
           ? `${((Number(position.market_value) / totalAccountValue) * 100).toFixed(1)}%`

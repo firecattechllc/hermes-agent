@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sigil.asset_catalog import NormalizedAsset
 
@@ -30,6 +31,8 @@ PROMOTION_MINIMUM_DAYS = 14
 PROMOTION_MINIMUM_COMPLETENESS = Decimal("0.90")
 PROMOTION_MINIMUM_NET_RETURN = Decimal("-0.05")
 PROMOTION_MAXIMUM_DRAWDOWN = Decimal("0.15")
+MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS = 10
+NEW_YORK = ZoneInfo("America/New_York")
 
 
 def _mean(values: list[Decimal]) -> Decimal:
@@ -42,6 +45,20 @@ def _quantize(value: Decimal) -> Decimal:
 
 def _return(current: Decimal, previous: Decimal) -> Decimal:
     return (current / previous) - Decimal(1)
+
+
+def _daily_bar_is_stale(bar_timestamp: str, now: datetime) -> bool:
+    """Treat the prior completed weekday bar as valid through the next session."""
+    local_now = now.astimezone(NEW_YORK)
+    expected = local_now.date()
+    if local_now.time() < time(16, 15):
+        expected -= timedelta(days=1)
+    while expected.weekday() >= 5:
+        expected -= timedelta(days=1)
+    bar_time = parse_time(bar_timestamp, "latest bar")
+    if bar_time > now.astimezone(UTC):
+        return True
+    return bar_time.astimezone(NEW_YORK).date() < expected
 
 
 def _audit(state: dict[str, Any], event: str, evidence_id: str, details: dict[str, Any]) -> None:
@@ -132,14 +149,13 @@ class ProductionResearchService:
         quote_age = (
             now.astimezone(UTC) - parse_time(evidence.observed_at, "quote")
         ).total_seconds()
-        if quote_age < 0 or quote_age > self.policy.maximum_quote_age_seconds:
+        if (
+            quote_age < -MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS
+            or quote_age > self.policy.maximum_quote_age_seconds
+        ):
             reasons.append("stale_quote")
-        if bars:
-            bar_age = (
-                now.astimezone(UTC) - parse_time(bars[-1].timestamp, "latest bar")
-            ).total_seconds()
-            if bar_age < 0 or bar_age > self.policy.maximum_bar_age_seconds:
-                reasons.append("stale_bars")
+        if bars and _daily_bar_is_stale(bars[-1].timestamp, now):
+            reasons.append("stale_bars")
         if reasons or evidence.bid is None or evidence.ask is None or len(bars) < 2:
             return self._rejected(evidence, now, reasons)
 
@@ -369,6 +385,16 @@ class ProductionResearchService:
                     "research_successes": sum(score.total_score > 0 for score in scores),
                     "research_failures": sum(
                         bool(score.hard_rejection_reasons) for score in scores
+                    ),
+                    "scored_count": sum(score.total_score > 0 for score in scores),
+                    "hard_rejected_count": sum(
+                        bool(score.hard_rejection_reasons) for score in scores
+                    ),
+                    "evidence_complete_count": sum(
+                        item.status is EvidenceStatus.COMPLETE for item in evidence
+                    ),
+                    "evidence_incomplete_count": sum(
+                        item.status is not EvidenceStatus.COMPLETE for item in evidence
                     ),
                     "evidence_completeness": str(
                         _quantize(

@@ -15,6 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from .paper_execution import (
+    apply_position_marks as _apply_position_marks,
+)
+from .paper_execution import (
     cancel as _cancel_order,
 )
 from .paper_execution import (
@@ -636,6 +639,7 @@ def _admit_production_proposal_to_local_simulator(
                 "Maximum local simulated deployed capital: $75",
                 "Broker submission disabled",
             ],
+            "exit_plan": dict(proposal.get("exit_plan", {})),
         },
     )
     order = _submit_order(
@@ -655,6 +659,25 @@ def _admit_production_proposal_to_local_simulator(
     if order["status"] != "open":
         raise RuntimeError(f"governed local simulated order rejected: {order.get('reason')}")
     _fill_order(state, order_id, {symbol: str(price)}, timestamp=timestamp)
+    position = next(
+        item for item in state["positions"] if item.get("symbol") == symbol
+    )
+    position.update(
+        {
+            "entry_at": timestamp,
+            "entry_proposal_id": local_proposal_id,
+            "strategy_id": proposal.get("strategy_id"),
+            "strategy_version": proposal.get("strategy_version"),
+            "exit_plan": dict(proposal.get("exit_plan", {})),
+            "mark_status": "fresh",
+            "mark_price": str(price),
+            "mark_timestamp": timestamp,
+            "mark_source": "validated_production_proposal",
+            "mark_evidence_identity": str(proposal["evidence_identity"]),
+            "mark_error": None,
+            "unrealized_pnl_status": "fresh",
+        }
+    )
     state["reconciliation"].insert(
         0,
         {
@@ -692,6 +715,187 @@ def _admit_production_proposal_to_local_simulator(
         },
     )
     return True
+
+
+def _monitor_local_simulated_positions(
+    state: dict[str, Any],
+    *,
+    sequence: int,
+    execution_id: str,
+    now: datetime,
+) -> dict[str, Any]:
+    active = tuple(
+        sorted(
+            str(item["symbol"])
+            for item in state.get("positions", [])
+            if Decimal(str(item.get("quantity", "0"))) > 0
+        )
+    )
+    if not active:
+        _apply_position_marks(state, {})
+        return {"status": "fresh", "fresh_symbols": [], "unavailable_symbols": []}
+
+    from .production_research import collect_local_position_marks
+
+    marks = collect_local_position_marks(active, now=now)
+    result = _apply_position_marks(state, marks)
+    timestamp = _timestamp(now)
+    state["audit"].insert(
+        0,
+        {
+            "id": f"AUD-POSITION-MARK-{sequence:06d}",
+            "timestamp": timestamp,
+            "status": "local_position_marks_refreshed",
+            "proposal_id": "—",
+            "order_id": "—",
+            "evidence_reference": _digest(marks),
+            "summary": (
+                "Validated local simulated position marks refreshed"
+                if result["status"] == "fresh"
+                else "Local position valuation unavailable fail-closed"
+            ),
+            "details": {
+                "paper_only": True,
+                "local_simulation": True,
+                "fresh_symbols": result["fresh_symbols"],
+                "unavailable_symbols": result["unavailable_symbols"],
+                "broker_submission_attempted": False,
+            },
+        },
+    )
+    if result["status"] != "fresh":
+        return result
+
+    for position in list(state["positions"]):
+        quantity = Decimal(str(position.get("quantity", "0")))
+        if quantity <= 0 or position.get("mark_status") != "fresh":
+            continue
+        price = Decimal(str(position["mark_price"]))
+        entry = Decimal(str(position["average_cost"]))
+        plan = position.get("exit_plan")
+        if not isinstance(plan, dict):
+            continue
+        trigger: str | None = None
+        stop = Decimal(str(plan.get("stop_loss_percent", "0.05")))
+        profit = Decimal(str(plan.get("take_profit_percent", "0.10")))
+        maximum_days = int(plan.get("maximum_holding_days", 10))
+        entry_at = datetime.fromisoformat(str(position.get("entry_at", timestamp)))
+        if price <= entry * (Decimal(1) - stop):
+            trigger = "protective_stop"
+        elif price >= entry * (Decimal(1) + profit):
+            trigger = "profit_taking"
+        elif now - entry_at >= timedelta(days=maximum_days):
+            trigger = "maximum_holding_period"
+        if trigger is None:
+            continue
+
+        material = {
+            "symbol": position["symbol"],
+            "entry_proposal_id": position.get("entry_proposal_id"),
+            "trigger": trigger,
+        }
+        order_id = f"PAPER-EXIT-{hashlib.sha256(_canonical(material)).hexdigest()[:20]}"
+        if order_id in state["orders"]:
+            continue
+        state["audit"].insert(
+            0,
+            {
+                "id": f"AUD-EXIT-INTENT-{sequence:06d}-{position['symbol']}",
+                "timestamp": timestamp,
+                "status": "local_exit_intent_created",
+                "proposal_id": str(position.get("entry_proposal_id", "—")),
+                "order_id": order_id,
+                "evidence_reference": str(position.get("mark_evidence_identity", "—")),
+                "summary": f"Governed local simulated exit admitted: {trigger}",
+                "details": {
+                    "paper_only": True,
+                    "local_simulation": True,
+                    "trigger": trigger,
+                    "quantity": str(quantity),
+                    "mark_price": str(price),
+                    "broker_submission_attempted": False,
+                },
+            },
+        )
+        order = _submit_order(
+            state,
+            {
+                "order_id": order_id,
+                "symbol": position["symbol"],
+                "side": "SELL",
+                "order_type": "MARKET",
+                "quantity": str(quantity),
+                "reference_price": str(price),
+                "environment": "paper",
+                "broker_submission": False,
+            },
+            timestamp=timestamp,
+        )
+        if order["status"] != "open":
+            continue
+        valuation_snapshot = {
+            str(item.get("symbol", "")): str(item.get("mark_price"))
+            for item in state.get("positions", [])
+            if item.get("mark_status") == "fresh" and item.get("mark_price") is not None
+        }
+        valuation_snapshot[str(position["symbol"])] = str(price)
+        _fill_order(
+            state,
+            order_id,
+            valuation_snapshot,
+            timestamp=timestamp,
+        )
+        closed = dict(position)
+        closed.update(
+            {
+                "exit_at": timestamp,
+                "exit_price": str(price),
+                "exit_trigger": trigger,
+                "exit_order_id": order_id,
+            }
+        )
+        state["closed_positions"].insert(0, closed)
+        state["positions"].remove(position)
+        state["reconciliation"].insert(
+            0,
+            {
+                "order_id": order_id,
+                "status": "reconciled-local-paper",
+                "required": False,
+                "automatic_retry_allowed": False,
+                "timestamp": timestamp,
+                "evidence_reference": str(
+                    position.get("mark_evidence_identity", "—")
+                ),
+            },
+        )
+        state["audit"].insert(
+            0,
+            {
+                "id": f"AUD-EXIT-FILL-{sequence:06d}-{position['symbol']}",
+                "timestamp": timestamp,
+                "status": "local_position_exit_simulated",
+                "proposal_id": str(position.get("entry_proposal_id", "—")),
+                "order_id": order_id,
+                "evidence_reference": str(
+                    position.get("mark_evidence_identity", "—")
+                ),
+                "summary": f"Governed local simulated position exited: {trigger}",
+                "details": {
+                    "paper_only": True,
+                    "local_simulation": True,
+                    "trigger": trigger,
+                    "quantity": str(quantity),
+                    "price": str(price),
+                    "cycle_execution_id": execution_id,
+                    "broker_submission_attempted": False,
+                },
+            },
+        )
+        result["exit_triggered"] = trigger
+        result["exit_order_id"] = order_id
+        break
+    return result
 
 
 def _cycle_order(
@@ -860,6 +1064,12 @@ def _run_due_cycle(
             execution_id=execution_id,
             now=now,
         )
+        local_position_monitoring = _monitor_local_simulated_positions(
+            state,
+            sequence=sequence,
+            execution_id=execution_id,
+            now=now,
+        )
         _clear_cycle_claim(automation, last_status="research_batch_completed")
         state["audit"].insert(
             0,
@@ -882,6 +1092,7 @@ def _run_due_cycle(
                     "broker_submission_attempted": production["broker_submission_attempted"],
                     "proposal_created": (production["progress"]["proposals_generated"] > 0),
                     "local_simulated_execution": local_simulated_execution,
+                    "local_position_monitoring": local_position_monitoring["status"],
                     "candidate_scoring_completed": True,
                     "strategy_id": production["strategy_id"],
                     "strategy_version": production["strategy_version"],
