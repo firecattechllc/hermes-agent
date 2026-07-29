@@ -244,7 +244,14 @@ export function runBridgeRequest<T>(
         error: 'backend_timeout',
         message: 'The local Sigil backend did not respond in time.'
       })
-    }, ['provider_snapshot', 'asset_catalog_refresh'].includes(request.command) ? 45_000 : 5_000)
+    }, [
+      'provider_snapshot',
+      'asset_catalog_refresh',
+      'runtime_snapshot',
+      'control_paper_cycle'
+    ].includes(request.command)
+      ? 45_000
+      : 5_000)
 
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')

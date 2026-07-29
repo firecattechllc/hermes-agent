@@ -36,6 +36,9 @@ describe('Sigil Electron startup', () => {
     expect(preloadSource).not.toContain('SIGIL_ALPACA_API_SECRET_KEY')
     expect(preloadSource).not.toContain('SIGIL_PUBLIC_API_SECRET')
     expect(preloadSource).not.toContain('submitOrder')
+    expect(mainSource).toContain("'runtime_snapshot',")
+    expect(mainSource).toContain("'control_paper_cycle'")
+    expect(mainSource).toContain('? 45_000')
   })
 
   it('exposes only data controls for Alpaca free market data', () => {

@@ -30,6 +30,21 @@ def test_effective_market_data_configuration_rejects_non_paper_urls(monkeypatch)
         AlpacaConfig.from_environment()
 
 
+@pytest.mark.parametrize(
+    ("reason", "status"),
+    [
+        ("credentials_unavailable", EvidenceStatus.UNAVAILABLE),
+        ("authentication_failed", EvidenceStatus.PROVIDER_ERROR),
+        ("rate_limited", EvidenceStatus.RATE_LIMITED),
+        ("provider_request_rejected", EvidenceStatus.UNSUPPORTED),
+    ],
+)
+def test_provider_failure_reason_is_preserved(tmp_path, reason, status):
+    item = service(tmp_path).unavailable_evidence("AAPL", NOW, reason)
+    assert item.status is status
+    assert item.missing_classifications == (reason,)
+
+
 def asset(symbol: str = "AAPL", **changes: Any) -> dict[str, Any]:
     value = {
         "asset_id": f"id-{symbol}",

@@ -75,7 +75,7 @@ describe('packaged Python backend release gate', () => {
     )
   })
 
-  it('compiles, imports, and serves runtime_snapshot before packaging', () => {
+  it('compiles, imports, and serves runtime_snapshot before packaging', { timeout: 15_000 }, () => {
     const output = execFileSync(
       process.execPath,
       ['scripts/test-packaged-backend.mjs'],

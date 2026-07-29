@@ -420,8 +420,17 @@ class ProductionResearchService:
             return self._projection(state)
 
     @staticmethod
-    def unavailable_evidence(symbol: str, now: datetime) -> MarketEvidence:
+    def unavailable_evidence(
+        symbol: str, now: datetime, reason: str = "provider_data_unavailable"
+    ) -> MarketEvidence:
         value = now.isoformat().replace("+00:00", "Z")
+        status = {
+            "credentials_unavailable": EvidenceStatus.UNAVAILABLE,
+            "authentication_failed": EvidenceStatus.PROVIDER_ERROR,
+            "rate_limited": EvidenceStatus.RATE_LIMITED,
+            "malformed": EvidenceStatus.MALFORMED,
+            "provider_request_rejected": EvidenceStatus.UNSUPPORTED,
+        }.get(reason, EvidenceStatus.PROVIDER_ERROR)
         return MarketEvidence(
             symbol=symbol,
             observed_at=value,
@@ -429,7 +438,7 @@ class ProductionResearchService:
             source="alpaca_market_data",
             feed="iex",
             adjustment="all",
-            status=EvidenceStatus.UNAVAILABLE,
+            status=status,
             bid=None,
             ask=None,
             bid_size=None,
@@ -437,7 +446,7 @@ class ProductionResearchService:
             last_trade=None,
             last_trade_at=None,
             daily_bars=(),
-            missing_classifications=("provider_data_unavailable",),
+            missing_classifications=(reason,),
         )
 
     def _proposal(

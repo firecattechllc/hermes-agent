@@ -108,11 +108,15 @@ def run_production_batch(
     selected = set(symbols)
     assets = [asset for asset in snapshot.normalized_assets if asset.symbol in selected]
     data_client = AlpacaProductionDataClient.from_environment()
+    provider_failure = None
     try:
         evidence = data_client.collect_batch(tuple(symbols), now=now)
         provider_available = True
-    except ProductionDataError:
-        evidence = tuple(_service().unavailable_evidence(symbol, now) for symbol in symbols)
+    except ProductionDataError as error:
+        provider_failure = error.code
+        evidence = tuple(
+            _service().unavailable_evidence(symbol, now, error.code) for symbol in symbols
+        )
         provider_available = False
     execution = _execution_service()
     execution_status = execution.status()
@@ -231,7 +235,12 @@ def run_production_batch(
                 }
                 execution.monitor_positions(position_prices, now=now)
     if not provider_available:
+        result["progress"]["provider_status"] = provider_failure
+        result["progress"]["market_data_freshness"] = "unavailable"
         result["degraded_conditions"] = sorted(
-            {*result["degraded_conditions"], "market_data_provider_unavailable"}
+            {
+                *result["degraded_conditions"],
+                f"market_data_{provider_failure}",
+            }
         )
     return result
