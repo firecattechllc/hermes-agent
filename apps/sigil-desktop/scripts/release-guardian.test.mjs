@@ -45,7 +45,15 @@ describe('Sigil Release Guardian', () => {
       'sigil:control-paper-authorization',
       'sigil:reset-paper-runtime',
       'sigil:get-provider-snapshot',
+      'sigil:get-market-universe-status',
+      'sigil:search-market-universe',
+      'sigil:get-alpaca-market-data-status',
+      'sigil:control-alpaca-market-data',
+      'sigil:get-updater-snapshot',
       'sigil:check-for-updates',
+      'sigil:approve-update-download',
+      'sigil:defer-update',
+      'sigil:restart-and-install-update',
       'sigil:release-certification'
     ])
   })

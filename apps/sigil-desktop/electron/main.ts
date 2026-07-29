@@ -5,6 +5,12 @@ import { fileURLToPath } from 'node:url'
 
 import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron'
 
+import {
+  GovernedUpdater,
+  UnavailableUpdater,
+  type UpdaterController
+} from './updater'
+
 export const SIGIL_APP_NAME = 'Sigil'
 export const SIGIL_BUNDLE_ID = 'com.firecattechnology.sigil'
 export const SIGIL_USER_DATA_DIRECTORY = 'Sigil'
@@ -19,7 +25,11 @@ export const SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL = 'sigil:get-market-universe-s
 export const SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL = 'sigil:search-market-universe'
 export const SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL = 'sigil:get-alpaca-market-data-status'
 export const SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL = 'sigil:control-alpaca-market-data'
+export const SIGIL_UPDATER_SNAPSHOT_CHANNEL = 'sigil:get-updater-snapshot'
 export const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
+export const SIGIL_UPDATE_DOWNLOAD_CHANNEL = 'sigil:approve-update-download'
+export const SIGIL_UPDATE_DEFER_CHANNEL = 'sigil:defer-update'
+export const SIGIL_UPDATE_INSTALL_CHANNEL = 'sigil:restart-and-install-update'
 export const SIGIL_RELEASE_CERTIFICATION_CHANNEL = 'sigil:release-certification'
 
 const certificationProposals = new Map([
@@ -283,6 +293,52 @@ export function readBackendStatus(): Promise<BackendResponse> {
   return runBridgeRequest<BackendStatus>({ command: 'health' })
 }
 
+let governedUpdater: UpdaterController | null = null
+
+async function installReadiness(): Promise<Readonly<{ ready: boolean; reason?: string }>> {
+  const response = await runBridgeRequest<{
+    automation?: { state?: string }
+    runtime_health?: string
+  }>({ command: 'runtime_snapshot' })
+
+  if (!response.ok) {
+    return { ready: false, reason: 'The protected paper runtime could not be verified.' }
+  }
+
+  if (response.result.automation?.state === 'running') {
+    return { ready: false, reason: 'Pause the governed paper cycle before installing.' }
+  }
+
+  if (['locked', 'recovery_required', 'corrupt'].includes(response.result.runtime_health ?? '')) {
+    return { ready: false, reason: 'Resolve the protected runtime state before installing.' }
+  }
+
+  return { ready: true }
+}
+
+async function initializeUpdater(): Promise<GovernedUpdater> {
+  const { autoUpdater } = await import('electron-updater')
+  const developmentEnabled = process.env.SIGIL_ENABLE_DEV_UPDATES === '1'
+  const internalTest = process.env.SIGIL_INTERNAL_UPDATE_CHANNEL === '1'
+
+  const updater = new GovernedUpdater({
+    client: autoUpdater,
+    policy: {
+      packaged: app.isPackaged,
+      developmentEnabled,
+      internalTest,
+      currentVersion: app.getVersion()
+    },
+    auditPath: path.join(app.getPath('userData'), 'updater', 'audit.jsonl'),
+    getWindows: () => BrowserWindow.getAllWindows(),
+    installReady: installReadiness
+  })
+
+  governedUpdater = updater
+
+  return updater
+}
+
 export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_BACKEND_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_EXPLAIN_PROPOSAL_CHANNEL)
@@ -294,6 +350,10 @@ export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL)
   ipcMain.removeHandler(SIGIL_UPDATE_CHECK_CHANNEL)
+  ipcMain.removeHandler(SIGIL_UPDATER_SNAPSHOT_CHANNEL)
+  ipcMain.removeHandler(SIGIL_UPDATE_DOWNLOAD_CHANNEL)
+  ipcMain.removeHandler(SIGIL_UPDATE_DEFER_CHANNEL)
+  ipcMain.removeHandler(SIGIL_UPDATE_INSTALL_CHANNEL)
   ipcMain.removeHandler(SIGIL_RELEASE_CERTIFICATION_CHANNEL)
 
   ipcMain.handle(SIGIL_BACKEND_STATUS_CHANNEL, () => readBackendStatus())
@@ -348,12 +408,11 @@ export function registerSigilIpc(): void {
     (_event, action: string) =>
       runBridgeRequest({ command: 'control_alpaca_market_data', payload: { action } })
   )
-  ipcMain.handle(SIGIL_UPDATE_CHECK_CHANNEL, () => ({
-    status: app.isPackaged ? 'unavailable' : 'disabled',
-    message: app.isPackaged
-      ? 'No signed production update feed is configured.'
-      : 'Development mode does not install updates.'
-  }))
+  ipcMain.handle(SIGIL_UPDATER_SNAPSHOT_CHANNEL, () => governedUpdater?.getSnapshot())
+  ipcMain.handle(SIGIL_UPDATE_CHECK_CHANNEL, () => governedUpdater?.check())
+  ipcMain.handle(SIGIL_UPDATE_DOWNLOAD_CHANNEL, () => governedUpdater?.approveDownload())
+  ipcMain.handle(SIGIL_UPDATE_DEFER_CHANNEL, () => governedUpdater?.defer())
+  ipcMain.handle(SIGIL_UPDATE_INSTALL_CHANNEL, () => governedUpdater?.restartAndInstall())
   ipcMain.handle(
     SIGIL_RELEASE_CERTIFICATION_CHANNEL,
     (_event, payload: Readonly<Record<string, unknown>>) =>
@@ -390,9 +449,24 @@ export function createSigilWindow(): BrowserWindow {
   return window
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  let updater: UpdaterController
+
+  try {
+    updater = await initializeUpdater()
+  } catch (error) {
+    updater = new UnavailableUpdater(app.getVersion(), error)
+    governedUpdater = updater
+  }
+
   registerSigilIpc()
   createSigilWindow()
+
+  if (app.isPackaged && updater instanceof GovernedUpdater) {
+    setTimeout(() => {
+      void updater.check()
+    }, 8_000)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

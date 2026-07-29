@@ -34,7 +34,7 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const RELEASE_STAGE = 'ALPHA 1.6'
+const RELEASE_STAGE = 'V1.8'
 
 const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
@@ -1167,7 +1167,23 @@ interface MissionControlDesktopApi {
     channel: 'dev' | 'release'
     applicationMode: 'Live development' | 'Packaged release'
   }
-  checkForUpdates?: () => Promise<{ status: string; message: string }>
+  getUpdaterSnapshot?: () => Promise<UpdaterSnapshot>
+  checkForUpdates?: () => Promise<UpdaterSnapshot>
+  approveUpdateDownload?: () => Promise<UpdaterSnapshot>
+  deferUpdate?: () => Promise<UpdaterSnapshot>
+  restartAndInstallUpdate?: () => Promise<UpdaterSnapshot>
+  subscribeToUpdaterState?: (listener: (snapshot: UpdaterSnapshot) => void) => () => void
+}
+
+type UpdaterSnapshot = {
+  status: 'idle' | 'checking' | 'update-available' | 'up-to-date' | 'downloading' | 'downloaded' | 'installing' | 'deferred' | 'failed' | 'disabled'
+  currentVersion: string
+  availableVersion: string | null
+  releaseNotes: string | null
+  progress: { percent: number; transferred: number; total: number; bytesPerSecond: number } | null
+  internalTest: boolean
+  message: string
+  error: { code: string; message: string } | null
 }
 
 function desktopApi(): MissionControlDesktopApi | undefined {
@@ -1213,9 +1229,16 @@ export function SigilOperatorView({
   const [pendingPaperReset, setPendingPaperReset] = useState(false)
   const [controlError, setControlError] = useState<string | null>(null)
   const [aboutOpen, setAboutOpen] = useState(false)
-  const [updateMessage, setUpdateMessage] = useState<string | null>(null)
+  const [updater, setUpdater] = useState<UpdaterSnapshot | null>(null)
   const liveRuntime = typeof adapter.controlPaperCycle === 'function'
   const liveAuthorization = typeof adapter.controlPaperAuthorization === 'function'
+
+  useEffect(() => {
+    const api = desktopApi()
+    void api?.getUpdaterSnapshot?.().then(setUpdater)
+
+    return api?.subscribeToUpdaterState?.(setUpdater)
+  }, [])
 
   const refreshProviders = useCallback((): void => {
     const providerApi = desktopApi()?.getProviderSnapshot
@@ -2062,16 +2085,40 @@ export function SigilOperatorView({
               ))}
             </dl>
             <div className="px-5 py-4">
-              <Button
-                onClick={() => {
-                  void desktopApi()?.checkForUpdates?.().then(result => setUpdateMessage(result.message))
-                }}
-                size="sm"
-                variant="outline"
-              >
-                Check for Updates
-              </Button>
-              {updateMessage ? <p className="mt-3 text-xs text-(--ui-text-tertiary)">{updateMessage}</p> : null}
+              {updater?.internalTest ? (
+                <p className="mb-3 border border-amber-500/40 bg-amber-500/10 p-2 text-xs font-semibold">
+                  INTERNAL TEST UPDATE
+                </p>
+              ) : null}
+              <dl className="grid grid-cols-2 gap-2 text-xs">
+                <div><dt className="text-(--ui-text-tertiary)">Installed</dt><dd className="font-mono">{updater?.currentVersion ?? desktopApi()?.buildInfo?.version}</dd></div>
+                <div><dt className="text-(--ui-text-tertiary)">Available</dt><dd className="font-mono">{updater?.availableVersion ?? '—'}</dd></div>
+                <div><dt className="text-(--ui-text-tertiary)">Status</dt><dd className="font-mono">{updater?.status ?? 'loading'}</dd></div>
+              </dl>
+              {updater?.progress ? (
+                <div className="mt-3">
+                  <progress aria-label="Update download progress" className="w-full" max={100} value={updater.progress.percent} />
+                  <p className="font-mono text-[0.625rem] text-(--ui-text-tertiary)">
+                    {updater.progress.percent.toFixed(1)}% · {updater.progress.transferred}/{updater.progress.total} bytes · {updater.progress.bytesPerSecond} B/s
+                  </p>
+                </div>
+              ) : null}
+              {updater?.releaseNotes ? <p className="mt-3 whitespace-pre-wrap text-xs">{updater.releaseNotes}</p> : null}
+              <div className="mt-4 flex flex-wrap gap-2">
+                {['idle', 'up-to-date', 'failed', 'disabled'].includes(updater?.status ?? 'idle') ? (
+                  <Button disabled={updater?.status === 'checking' || updater?.status === 'disabled'} onClick={() => void desktopApi()?.checkForUpdates?.().then(setUpdater)} size="sm" variant="outline">Check for Updates</Button>
+                ) : null}
+                {updater?.status === 'update-available' ? (
+                  <Button onClick={() => void desktopApi()?.approveUpdateDownload?.().then(setUpdater)} size="sm">Download Update</Button>
+                ) : null}
+                {['update-available', 'downloaded'].includes(updater?.status ?? '') ? (
+                  <Button onClick={() => void desktopApi()?.deferUpdate?.().then(setUpdater)} size="sm" variant="outline">Later</Button>
+                ) : null}
+                {['downloaded', 'deferred'].includes(updater?.status ?? '') ? (
+                  <Button onClick={() => void desktopApi()?.restartAndInstallUpdate?.().then(setUpdater)} size="sm">Restart and Install</Button>
+                ) : null}
+              </div>
+              {updater ? <p aria-live="polite" className="mt-3 text-xs text-(--ui-text-tertiary)">{updater.message}</p> : null}
             </div>
           </section>
         </div>

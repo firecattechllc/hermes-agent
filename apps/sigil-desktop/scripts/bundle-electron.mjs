@@ -28,6 +28,7 @@ await build({
   external: ['electron'],
   format: 'esm',
   outfile: 'dist/electron-main.mjs',
+  packages: 'external',
   platform: 'node',
   define: identityDefinitions,
   sourcemap: true

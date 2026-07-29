@@ -41,7 +41,7 @@ describe('Sigil Electron startup', () => {
   it('exposes only data controls for Alpaca free market data', () => {
     const source = fs.readFileSync(path.resolve('src/mission-control/index.tsx'), 'utf8')
 
-    expect(source).toContain('ALPHA 1.6')
+    expect(source).toContain("RELEASE_STAGE = 'V1.8'")
     expect(source).toContain('15-minute delayed SIP')
     expect(source).toContain('live partial-market IEX')
     expect(source).toContain('Live IEX capacity')
