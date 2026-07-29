@@ -86,7 +86,7 @@ def exposure_report(inputs: PortfolioRiskInput) -> PortfolioExposureReport:
         (exact(item.weight, "weight") for item in positions if item.weight is not None),
         reverse=True,
     )
-    top = lambda count: text(sum(weights[:count], ZERO)) if denominator is not None else None
+    top = lambda count: text(sum(weights[:count], ZERO)) if denominator is not None else None  # noqa: E731
     hhi = (
         text(sum((weight * weight for weight in weights), ZERO))
         if complete and denominator
