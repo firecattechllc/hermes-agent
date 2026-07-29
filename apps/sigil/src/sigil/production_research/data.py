@@ -10,7 +10,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from .models import EvidenceStatus, MarketBar, MarketEvidence, decimal
 
@@ -113,6 +113,8 @@ class AlpacaProductionDataClient:
         ordered = tuple(sorted(set(symbols)))
         if not ordered or len(ordered) > MAX_BATCH_SIZE:
             raise ValueError("production research batch must contain 1 to 25 symbols")
+        observed_now = now or datetime.now(UTC)
+        completed_bar_cutoff = observed_now.replace(hour=0, minute=0, second=0, microsecond=0)
         joined = ",".join(ordered)
         quotes_payload = self._get("/v2/stocks/quotes/latest", {"symbols": joined, "feed": "iex"})
         trades_payload = self._get("/v2/stocks/trades/latest", {"symbols": joined, "feed": "iex"})
@@ -125,6 +127,10 @@ class AlpacaProductionDataClient:
                 "adjustment": "all",
                 "feed": "iex",
                 "sort": "asc",
+                "start": (completed_bar_cutoff - timedelta(days=120))
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "end": completed_bar_cutoff.isoformat().replace("+00:00", "Z"),
             },
         )
         if not all(
@@ -134,7 +140,7 @@ class AlpacaProductionDataClient:
         quotes = quotes_payload.get("quotes", {})
         trades = trades_payload.get("trades", {})
         bars = bars_payload.get("bars", {})
-        received = (now or datetime.now(UTC)).isoformat().replace("+00:00", "Z")
+        received = observed_now.isoformat().replace("+00:00", "Z")
         return tuple(
             self._normalize_symbol(
                 symbol,
@@ -196,6 +202,15 @@ class AlpacaProductionDataClient:
             normalized_bars = ()
             bid = ask = bid_size = ask_size = last_trade = None
             missing.append("malformed_provider_payload")
+        if bid is not None and bid <= 0:
+            bid = None
+            missing.append("invalid_bid")
+        if ask is not None and ask <= 0:
+            ask = None
+            missing.append("invalid_ask")
+        if last_trade is not None and last_trade <= 0:
+            last_trade = None
+            missing.append("invalid_last_trade")
         if bid is None or ask is None:
             missing.append("invalid_quote")
         elif ask < bid:

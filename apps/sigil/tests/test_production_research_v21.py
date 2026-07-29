@@ -464,6 +464,9 @@ def test_bounded_market_data_client_produces_valid_evidence():
     assert all(len(item.daily_bars) == 60 for item in result)
     assert len(fake.calls) == 3
     assert all("symbols=AAPL%2CMSFT" in call for call in fake.calls)
+    bars_call = next(call for call in fake.calls if "/bars?" in call)
+    assert "start=2026-03-31T00%3A00%3A00Z" in bars_call
+    assert "end=2026-07-29T00%3A00%3A00Z" in bars_call
 
 
 def test_market_data_missing_symbol_does_not_block_batch():
@@ -479,6 +482,30 @@ def test_market_data_missing_symbol_does_not_block_batch():
     result = client.collect_batch(("AAPL", "MSFT"), now=NOW)
     assert result[0].status is EvidenceStatus.COMPLETE
     assert result[1].status is EvidenceStatus.INCOMPLETE
+
+
+def test_zero_quote_rejects_only_affected_symbol():
+    fake = FakeMarketData()
+
+    def zero_quote(url, headers, timeout):
+        status, payload = fake(url, headers, timeout)
+        if urlparse(url).path.endswith("/quotes/latest"):
+            payload["quotes"]["MSFT"]["bp"] = "0"
+            payload["quotes"]["MSFT"]["ap"] = "0"
+        return status, payload
+
+    client = AlpacaProductionDataClient("paper-key", "paper-secret", transport=zero_quote)
+    result = client.collect_batch(("AAPL", "MSFT"), now=NOW)
+    by_symbol = {item.symbol: item for item in result}
+    assert by_symbol["AAPL"].status is EvidenceStatus.COMPLETE
+    assert by_symbol["MSFT"].status is EvidenceStatus.INCOMPLETE
+    assert by_symbol["MSFT"].bid is None
+    assert by_symbol["MSFT"].ask is None
+    assert set(by_symbol["MSFT"].missing_classifications) == {
+        "invalid_ask",
+        "invalid_bid",
+        "invalid_quote",
+    }
 
 
 def test_market_data_retries_only_reads_with_deterministic_backoff():
