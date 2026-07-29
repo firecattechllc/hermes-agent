@@ -55,6 +55,14 @@ export type UpdaterPolicy = Readonly<{
   currentVersion: string
 }>
 
+export interface UpdaterController {
+  getSnapshot(): UpdaterSnapshot
+  check(): Promise<UpdaterSnapshot>
+  approveDownload(): Promise<UpdaterSnapshot>
+  defer(): UpdaterSnapshot
+  restartAndInstall(): Promise<UpdaterSnapshot>
+}
+
 type Dependencies = Readonly<{
   client: UpdaterClient
   policy: UpdaterPolicy
@@ -118,7 +126,7 @@ function releaseNotes(info: UpdateInfo): string | null {
   return null
 }
 
-export class GovernedUpdater {
+export class GovernedUpdater implements UpdaterController {
   private snapshot: UpdaterSnapshot
   private checkPromise: Promise<UpdaterSnapshot> | null = null
   private downloadPromise: Promise<UpdaterSnapshot> | null = null
@@ -339,5 +347,46 @@ export class GovernedUpdater {
         window.webContents.send('sigil:updater-state', this.snapshot)
       }
     }
+  }
+}
+
+export class UnavailableUpdater implements UpdaterController {
+  private readonly snapshot: UpdaterSnapshot
+
+  constructor(currentVersion: string, error: unknown) {
+    const message = sanitizeUpdaterText(
+      error instanceof Error ? error.message : error
+    )
+
+    this.snapshot = {
+      status: 'failed',
+      currentVersion,
+      availableVersion: null,
+      releaseNotes: null,
+      progress: null,
+      internalTest: false,
+      message: `Updates are unavailable: ${message}`,
+      error: { code: 'initialization_failed', message }
+    }
+  }
+
+  getSnapshot(): UpdaterSnapshot {
+    return this.snapshot
+  }
+
+  async check(): Promise<UpdaterSnapshot> {
+    return this.snapshot
+  }
+
+  async approveDownload(): Promise<UpdaterSnapshot> {
+    return this.snapshot
+  }
+
+  defer(): UpdaterSnapshot {
+    return this.snapshot
+  }
+
+  async restartAndInstall(): Promise<UpdaterSnapshot> {
+    return this.snapshot
   }
 }

@@ -3,7 +3,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { compareVersions, GovernedUpdater, sanitizeUpdaterText, type UpdaterClient } from './updater'
+import {
+  compareVersions,
+  GovernedUpdater,
+  sanitizeUpdaterText,
+  UnavailableUpdater,
+  type UpdaterClient
+} from './updater'
 
 class FakeUpdater extends EventEmitter implements UpdaterClient {
   autoDownload = true
@@ -47,6 +53,22 @@ function harness(overrides: { packaged?: boolean; developmentEnabled?: boolean; 
 }
 
 describe('GovernedUpdater', () => {
+  it('degrades updater initialization failures without rejecting UI operations', async () => {
+    const controller = new UnavailableUpdater(
+      '1.8.0',
+      new Error('startup token=secret')
+    )
+
+    expect(controller.getSnapshot()).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'initialization_failed',
+        message: 'startup token=[REDACTED]'
+      }
+    })
+    await expect(controller.check()).resolves.toEqual(controller.getSnapshot())
+  })
+
   it('is disabled in ordinary development and enables the explicit internal channel', () => {
     expect(harness({ packaged: false }).controller.getSnapshot().status).toBe('disabled')
     const internal = harness({ packaged: false, developmentEnabled: true, internalTest: true })

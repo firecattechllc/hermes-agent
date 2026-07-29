@@ -5,7 +5,11 @@ import { fileURLToPath } from 'node:url'
 
 import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron'
 
-import { GovernedUpdater } from './updater'
+import {
+  GovernedUpdater,
+  UnavailableUpdater,
+  type UpdaterController
+} from './updater'
 
 export const SIGIL_APP_NAME = 'Sigil'
 export const SIGIL_BUNDLE_ID = 'com.firecattechnology.sigil'
@@ -289,7 +293,7 @@ export function readBackendStatus(): Promise<BackendResponse> {
   return runBridgeRequest<BackendStatus>({ command: 'health' })
 }
 
-let governedUpdater: GovernedUpdater | null = null
+let governedUpdater: UpdaterController | null = null
 
 async function installReadiness(): Promise<Readonly<{ ready: boolean; reason?: string }>> {
   const response = await runBridgeRequest<{
@@ -316,7 +320,8 @@ async function initializeUpdater(): Promise<GovernedUpdater> {
   const { autoUpdater } = await import('electron-updater')
   const developmentEnabled = process.env.SIGIL_ENABLE_DEV_UPDATES === '1'
   const internalTest = process.env.SIGIL_INTERNAL_UPDATE_CHANNEL === '1'
-  governedUpdater = new GovernedUpdater({
+
+  const updater = new GovernedUpdater({
     client: autoUpdater,
     policy: {
       packaged: app.isPackaged,
@@ -329,7 +334,9 @@ async function initializeUpdater(): Promise<GovernedUpdater> {
     installReady: installReadiness
   })
 
-  return governedUpdater
+  governedUpdater = updater
+
+  return updater
 }
 
 export function registerSigilIpc(): void {
@@ -443,11 +450,19 @@ export function createSigilWindow(): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
-  const updater = await initializeUpdater()
+  let updater: UpdaterController
+
+  try {
+    updater = await initializeUpdater()
+  } catch (error) {
+    updater = new UnavailableUpdater(app.getVersion(), error)
+    governedUpdater = updater
+  }
+
   registerSigilIpc()
   createSigilWindow()
 
-  if (app.isPackaged) {
+  if (app.isPackaged && updater instanceof GovernedUpdater) {
     setTimeout(() => {
       void updater.check()
     }, 8_000)

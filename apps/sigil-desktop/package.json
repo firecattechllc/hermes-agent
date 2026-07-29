@@ -24,6 +24,7 @@
     "release:mac:notarized": "node scripts/release-config.mjs notarized",
     "release:verify": "node scripts/release-certify.mjs verify",
     "release:certify": "node scripts/release-certify.mjs certify",
+    "smoke:packaged": "node scripts/packaged-launch-smoke.mjs",
     "check": "npm run typecheck && npm run test && npm run lint",
     "fix": "eslint src electron scripts --fix"
   },
