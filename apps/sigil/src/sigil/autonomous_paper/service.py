@@ -131,9 +131,9 @@ class GovernedPaperExecutionService:
                 evidence_id=f"SIGIL-V2-ACTIVATE-{state['revision']}",
                 details={
                     "account_status": account["status"],
-                    "maximum_order_notional": "25.00",
-                    "maximum_open_positions": 3,
-                    "maximum_deployed_capital": "75.00",
+                    "maximum_order_notional": str(self.policy.maximum_order_notional),
+                    "maximum_open_positions": self.policy.maximum_open_positions,
+                    "maximum_deployed_capital": str(self.policy.maximum_deployed_capital),
                     "long_only": True,
                 },
             )
@@ -353,7 +353,7 @@ class GovernedPaperExecutionService:
                     "proposals_rejected": 0,
                     "leading_rejection_reasons": {rejection_reason: len(symbols)},
                     "next_cycle_at": next_cycle_at,
-                    "state": "awaiting_fresh_data",
+                    "state": "market_data_unavailable",
                 }
             )
             _audit(
@@ -578,7 +578,7 @@ class GovernedPaperExecutionService:
         ).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
         if notional <= 0:
             raise ValueError("governed allocation or cash buffer exhausted")
-        if notional > Decimal("25.00"):
+        if notional > self.policy.maximum_order_notional:
             raise ValueError("paper order exceeds maximum notional")
         return notional
 
@@ -852,6 +852,15 @@ class GovernedPaperExecutionService:
         def last(name: str) -> dict[str, Any] | None:
             return state[name][0] if state[name] else None
 
+        progress = dict(state["progress"])
+        if (
+            progress.get("state") == "awaiting_fresh_data"
+            and progress.get("leading_rejection_reasons", {}).get(
+                "validated_market_research_unavailable"
+            )
+        ):
+            progress["state"] = "market_data_unavailable"
+
         managed_symbols = {
             item.get("symbol") for item in state["fills"] if item.get("side") == "buy"
         }
@@ -880,7 +889,7 @@ class GovernedPaperExecutionService:
             "degraded_conditions": degraded_conditions,
             "unmanaged_position_symbols": unmanaged_symbols,
             "policy": state["policy"] or self.policy.to_dict(),
-            "progress": state["progress"],
+            "progress": progress,
             "open_positions": len(state["positions"]),
             "open_orders": sum(
                 item.get("status") not in TERMINAL_ORDER_STATUSES for item in state["orders"]

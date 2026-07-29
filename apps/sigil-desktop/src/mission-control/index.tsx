@@ -602,6 +602,8 @@ function PaperPortfolio({
   onOpenAudit: () => void
   snapshot: SigilSnapshot
 }) {
+  const positions = snapshot.positions ?? []
+  const emptyHoldingSlots = Math.max(0, 10 - positions.length)
   const [activityQuery, setActivityQuery] = useState('')
   const [activitySide, setActivitySide] = useState<'ALL' | 'BUY' | 'SELL'>('ALL')
 
@@ -661,10 +663,10 @@ function PaperPortfolio({
             </p>
           </div>
           <span className="font-mono text-[0.625rem] text-(--ui-text-tertiary)">
-            {snapshot.positions?.length ?? 0} paper positions
+            {positions.length} of 10 paper slots occupied
           </span>
         </div>
-        {snapshot.positions?.length ? (
+        {positions.length ? (
           <div className="overflow-x-auto border border-(--ui-stroke-tertiary)">
             <table className="w-full min-w-[62rem] text-left text-xs">
               <thead className="bg-(--ui-bg-secondary) text-[0.625rem] uppercase tracking-[0.1em] text-(--ui-text-tertiary)">
@@ -675,7 +677,7 @@ function PaperPortfolio({
                 </tr>
               </thead>
               <tbody>
-                {snapshot.positions.map(position => (
+                {positions.map(position => (
                   <tr className="border-b border-(--ui-stroke-tertiary) last:border-b-0" key={position.symbol}>
                     <td className="px-3 py-3 font-mono font-semibold">{position.symbol}</td>
                     <td className="px-3 py-3 font-mono">{position.quantity}</td>
@@ -696,6 +698,12 @@ function PaperPortfolio({
                         {position.auditReferences[0] ?? 'Inspect audit'}
                       </button>
                     </td>
+                  </tr>
+                ))}
+                {Array.from({ length: emptyHoldingSlots }, (_, index) => (
+                  <tr className="border-b border-(--ui-stroke-tertiary) last:border-b-0 text-(--ui-text-tertiary)" key={`empty-slot-${index}`}>
+                    <td className="px-3 py-3 font-mono">Empty slot {index + 1}</td>
+                    <td className="px-3 py-3" colSpan={7}>Available for a future paper position; no simulated holding.</td>
                   </tr>
                 ))}
               </tbody>
@@ -839,6 +847,22 @@ function ProviderPanel({
   onRefresh: () => void
   snapshot: SigilProviderSnapshot | null
 }) {
+  const [freshnessNow, setFreshnessNow] = useState(() => Date.now())
+  const [freshnessObservedAt, setFreshnessObservedAt] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setFreshnessNow(Date.now()), 5_000)
+
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    setFreshnessObservedAt(Date.now())
+  }, [alpacaMarketData])
+
+  const catalogAgeSeconds = (alpacaMarketData?.asset_catalog.age_seconds ?? 0)
+    + Math.max(0, Math.floor((freshnessNow - freshnessObservedAt) / 1_000))
+
   const [query, setQuery] = useState('')
   const [descending, setDescending] = useState(false)
 
@@ -895,6 +919,9 @@ function ProviderPanel({
                 <StatusLabel tone={alpacaMarketData.configured ? 'success' : 'muted'}>
                   {alpacaMarketData.authenticated ? 'Authenticated' : 'Unconfigured'}
                 </StatusLabel>
+                <StatusLabel tone={alpacaMarketData.provider_state === 'ready' ? 'success' : 'warning'}>
+                  Market data {alpacaMarketData.provider_state.replaceAll('_', ' ')}
+                </StatusLabel>
                 <StatusLabel tone="warning">15-minute delayed SIP</StatusLabel>
                 <StatusLabel tone="info">live partial-market IEX</StatusLabel>
                 <StatusLabel tone="muted">Data-only mode</StatusLabel>
@@ -922,7 +949,7 @@ function ProviderPanel({
           </p>
           <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
             <div><dt className="text-(--ui-text-tertiary)">Asset catalog</dt><dd>{alpacaMarketData.asset_catalog.accepted_count} accepted · {alpacaMarketData.asset_catalog.excluded_count} excluded · {alpacaMarketData.asset_catalog.conflict_count} conflicts</dd></div>
-            <div><dt className="text-(--ui-text-tertiary)">Catalog freshness</dt><dd>{alpacaMarketData.asset_catalog.stale ? 'Cached / stale' : `${alpacaMarketData.asset_catalog.age_seconds ?? 0}s old`}</dd></div>
+            <div><dt className="text-(--ui-text-tertiary)">Catalog freshness</dt><dd>{alpacaMarketData.asset_catalog.stale ? 'Cached / stale' : `${catalogAgeSeconds}s old`}</dd></div>
             <div><dt className="text-(--ui-text-tertiary)">Delayed SIP scan</dt><dd>{alpacaMarketData.delayed_sip.scanned_count}/{alpacaMarketData.delayed_sip.universe_total} · batch {alpacaMarketData.delayed_sip.current_batch}/{alpacaMarketData.delayed_sip.total_batches}</dd></div>
             <div><dt className="text-(--ui-text-tertiary)">Live IEX capacity</dt><dd>{alpacaMarketData.live_iex.active_symbol_count}/{alpacaMarketData.live_iex.maximum_symbol_count} symbols · {alpacaMarketData.live_iex.stale ? 'stale/unavailable' : 'current'}</dd></div>
           </dl>
@@ -1175,7 +1202,7 @@ function AutonomousPaperPanel({
   onAction,
   status
 }: {
-  onAction: (action: 'activate' | 'deactivate' | 'pause' | 'resume' | 'emergency_stop') => void
+  onAction: (action: 'deactivate') => void
   status: PaperExecutionStatus | null
 }) {
   if (!status) {
@@ -1190,6 +1217,12 @@ function AutonomousPaperPanel({
   const progress = status.progress
   const reasons = Object.entries(progress.leading_rejection_reasons)
 
+  const active =
+    status.activated &&
+    !status.paused &&
+    !status.kill_switch &&
+    status.broker_submission
+
   return (
     <section
       aria-labelledby="autonomous-paper-title"
@@ -1202,12 +1235,12 @@ function AutonomousPaperPanel({
             Governed autonomous Alpaca paper execution
           </h2>
           <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
-            Long-only · $25/order · 3 positions · $75 deployed cap · $100 cash buffer
+            Long-only · $1,000/order · 10 positions · $10,000 deployed cap · $100 cash buffer
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <StatusLabel tone={status.activated && !status.paused ? 'success' : 'muted'}>
-            {status.activated ? (status.paused ? 'PAUSED' : 'ENABLED') : 'DISABLED'}
+          <StatusLabel tone={active ? 'success' : 'muted'}>
+            {active ? 'ENABLED' : status.paused ? 'PAUSED' : 'DISABLED'}
           </StatusLabel>
           <StatusLabel tone={status.broker_submission ? 'warning' : 'muted'}>
             SUBMISSION {status.broker_submission ? 'ENABLED' : 'DISABLED'}
@@ -1234,17 +1267,9 @@ function AutonomousPaperPanel({
         ))}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        {!status.activated ? (
-          <Button onClick={() => onAction('activate')} size="xs">Activate governed paper execution</Button>
-        ) : (
-          <>
-            <Button onClick={() => onAction(status.paused ? 'resume' : 'pause')} size="xs" variant="outline">
-              {status.paused ? 'Resume paper execution' : 'Pause paper execution'}
-            </Button>
-            <Button onClick={() => onAction('deactivate')} size="xs" variant="outline">Deactivate</Button>
-            <Button onClick={() => onAction('emergency_stop')} size="xs" variant="destructive">Emergency paper stop</Button>
-          </>
-        )}
+        {active ? (
+          <Button onClick={() => onAction('deactivate')} size="xs" variant="destructive">Disable</Button>
+        ) : null}
       </div>
       <p className="mt-3 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
         Environment: paper · broker: Alpaca paper · endpoint: paper-api.alpaca.markets · live activation unavailable
@@ -1433,7 +1458,7 @@ export function SigilOperatorView({
   const [productionResearch, setProductionResearch] = useState<ProductionResearchStatus | null>(null)
 
   const [pendingPaperExecutionAction, setPendingPaperExecutionAction] = useState<
-    'activate' | 'deactivate' | 'pause' | 'resume' | 'emergency_stop' | null
+    'deactivate' | null
   >(null)
 
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
@@ -1496,7 +1521,9 @@ export function SigilOperatorView({
         setAlpacaMarketData(response.result)
         setAlpacaControlMessage(
           action === 'refresh_assets'
-            ? `Read-only Alpaca asset refresh completed: ${response.result.asset_catalog.accepted_count} accepted, ${response.result.asset_catalog.excluded_count} excluded.`
+            ? response.result.asset_catalog.last_error
+              ? `Read-only Alpaca asset refresh failed safely: ${response.result.asset_catalog.last_error}. ${response.result.asset_catalog.stale ? 'The cached catalog is stale or unavailable.' : 'The existing fresh catalog remains available.'}`
+              : `Read-only Alpaca asset refresh completed: ${response.result.asset_catalog.accepted_count} accepted, ${response.result.asset_catalog.excluded_count} excluded.`
             : `Alpaca market-data status refreshed: ${response.result.provider_state}.`
         )
       })
@@ -1723,7 +1750,7 @@ export function SigilOperatorView({
     }
   }, [pendingAction])
 
-  if (error) {
+  if (error && !snapshot) {
     return (
       <div className="grid h-full place-items-center p-6">
         <ErrorState description={error} title="Sigil snapshot unavailable">
@@ -2279,7 +2306,7 @@ export function SigilOperatorView({
           PAGE_INSET_X
         )}
       >
-        <span>Alpaca paper submission is activation-gated · live execution permanently disabled · account identity masked</span>
+        <span>Alpaca paper submission starts governed and enabled · live execution permanently disabled · account identity masked</span>
         <span>
           Adapter: governed local paper runtime · provider reads isolated in backend · {RELEASE_STAGE}
           {desktopApi()?.buildInfo
@@ -2288,21 +2315,13 @@ export function SigilOperatorView({
         </span>
       </footer>
       <ConfirmDialog
-        confirmLabel={
-          pendingPaperExecutionAction === 'activate'
-            ? 'Activate paper-only execution'
-            : pendingPaperExecutionAction === 'emergency_stop'
-              ? 'Stop paper execution'
-              : 'Confirm paper execution change'
-        }
+        confirmLabel="Disable paper execution"
         description={
-          pendingPaperExecutionAction === 'activate'
-            ? 'Activate autonomous Alpaca paper submissions with a $25 maximum order, three-position maximum, $75 deployed-capital cap, $100 cash buffer, long-only restrictions, and live execution permanently disabled?'
-            : pendingPaperExecutionAction
-              ? `Confirm ${pendingPaperExecutionAction.replaceAll('_', ' ')} for governed paper execution. Live execution remains unavailable.`
-              : undefined
+          pendingPaperExecutionAction
+            ? 'Disable governed paper execution and restore the paper submission kill switch. Live execution remains unavailable.'
+            : undefined
         }
-        destructive={pendingPaperExecutionAction === 'emergency_stop' || pendingPaperExecutionAction === 'deactivate'}
+        destructive
         onClose={() => setPendingPaperExecutionAction(null)}
         onConfirm={async () => {
           const action = pendingPaperExecutionAction
@@ -2321,7 +2340,7 @@ export function SigilOperatorView({
           setPendingPaperExecutionAction(null)
         }}
         open={Boolean(pendingPaperExecutionAction)}
-        title={pendingPaperExecutionAction === 'activate' ? 'Governed autonomous paper activation' : 'Paper execution control'}
+        title="Disable governed paper execution"
       />
       <ConfirmDialog
         confirmLabel={confirmation?.label}

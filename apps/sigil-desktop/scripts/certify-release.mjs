@@ -494,8 +494,10 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
   })`)
   result.paper_execution = await session.evaluate(`({
     panel_present: document.querySelector('[data-testid="autonomous-paper-execution"]') !== null,
-    disabled_by_default: document.body.textContent.includes('SUBMISSION DISABLED'),
-    activation_available: document.body.textContent.includes('Activate governed paper execution'),
+    automatic_start_contract: document.body.textContent.includes('starts governed and enabled'),
+    activation_control_absent: !document.body.textContent.includes('Activate governed paper execution'),
+    active_controls_bounded: [...(document.querySelector('[data-testid="autonomous-paper-execution"]')?.querySelectorAll('button') ?? [])]
+      .every(button => button.textContent?.trim() === 'Disable'),
     paper_endpoint: document.body.textContent.includes('paper-api.alpaca.markets'),
     live_disabled: document.body.textContent.includes('LIVE EXECUTION DISABLED'),
     order_cap: document.body.textContent.includes('$25/order'),
@@ -773,8 +775,9 @@ function featureResultsFromEvidence({ devUi, packagedUi, packageEvidence, regist
   })
   add('paper-execution.governed-autonomy', both(ui => allTrue(ui.paper_execution, [
     'panel_present',
-    'disabled_by_default',
-    'activation_available',
+    'automatic_start_contract',
+    'activation_control_absent',
+    'active_controls_bounded',
     'paper_endpoint',
     'live_disabled',
     'order_cap',
@@ -787,7 +790,7 @@ function featureResultsFromEvidence({ devUi, packagedUi, packageEvidence, regist
       'packaged-ui.json#paper_execution',
       'test-output.log'
     ],
-    testPerformed: 'Verified the governed paper panel, explicit activation gate, paper-only endpoint, permanent live disablement, and conservative allocation limits without activating submission.',
+    testPerformed: 'Verified the governed paper panel, automatic-start contract, bounded Disable-only active control, paper-only endpoint, permanent live disablement, and conservative allocation limits without placing an order.',
     limitations: ['Certification did not activate broker submission or place an order.'],
     dependencyState: 'Mocked execution tests plus mutation-free packaged UI verification.'
   })

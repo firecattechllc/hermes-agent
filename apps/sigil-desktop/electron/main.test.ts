@@ -41,6 +41,19 @@ describe('Sigil Electron startup', () => {
     expect(mainSource).toContain('? 45_000')
   })
 
+  it('enables governed paper execution during startup through the bounded bridge', () => {
+    const source = fs.readFileSync(path.resolve('electron/main.ts'), 'utf8')
+
+    expect(source).toContain('if (shouldEnableGovernedPaperExecution())')
+    expect(source).toContain("argument.startsWith('--sigil-release-certification=')")
+    expect(source).toContain("process.env.SIGIL_ADAPTER !== 'mock'")
+    expect(source).toContain('await enableGovernedPaperExecutionByDefault')
+    expect(source).toContain('runBridgeRequest<PaperExecutionStartupStatus>(request)')
+    expect(source.indexOf('await enableGovernedPaperExecutionByDefault')).toBeLessThan(
+      source.indexOf('createSigilWindow()', source.indexOf('app.whenReady()'))
+    )
+  })
+
   it('exposes only data controls for Alpaca free market data', () => {
     const source = fs.readFileSync(path.resolve('src/mission-control/index.tsx'), 'utf8')
     const mainSource = fs.readFileSync(path.resolve('electron/main.ts'), 'utf8')

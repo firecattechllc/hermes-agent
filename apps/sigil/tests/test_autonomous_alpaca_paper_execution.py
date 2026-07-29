@@ -208,9 +208,9 @@ def test_activation_authenticates_and_reconciles_before_enabling(tmp_path):
 @pytest.mark.parametrize(
     "change",
     [
-        {"maximum_order_notional": Decimal("25.01")},
-        {"maximum_open_positions": 4},
-        {"maximum_deployed_capital": Decimal("75.01")},
+        {"maximum_order_notional": Decimal("1000.01")},
+        {"maximum_open_positions": 11},
+        {"maximum_deployed_capital": Decimal("10000.01")},
         {"maximum_new_positions_per_cycle": 2},
         {"maximum_pending_entry_orders": 2},
     ],
@@ -299,7 +299,7 @@ def test_order_intent_is_flushed_before_exactly_once_paper_submission(tmp_path):
     assert len(post) == 1
     assert fake.intent_was_durable is True
     body = post[0][2]
-    assert body["notional"] == "25.00"
+    assert body["notional"] == "900.00"
     assert body["side"] == "buy"
     assert body["time_in_force"] == "day"
     assert body["extended_hours"] is False
@@ -374,8 +374,7 @@ def test_position_pending_duplicate_and_cap_gates(tmp_path):
         service,
         positions=[
             {"symbol": "AAPL", "market_value": "25"},
-            {"symbol": "MSFT", "market_value": "25"},
-            {"symbol": "GOOG", "market_value": "25"},
+            *[{"symbol": f"P{index}", "market_value": "25"} for index in range(9)],
         ],
         orders=[{"symbol": "NVDA", "status": "accepted"}],
     )
@@ -408,9 +407,7 @@ def test_deployed_cap_and_max_three_positions_are_enforced(tmp_path):
     save_state(
         service,
         positions=[
-            {"symbol": "A", "market_value": "25"},
-            {"symbol": "B", "market_value": "25"},
-            {"symbol": "C", "market_value": "25"},
+            *[{"symbol": f"P{index}", "market_value": "25"} for index in range(10)],
         ],
     )
     status = evaluate(service, [candidate()])
@@ -440,11 +437,23 @@ def test_no_candidate_batch_advances_with_explicit_progress(tmp_path):
     )
     assert status["progress"]["current_cursor"] == 50
     assert status["progress"]["current_batch"] == 2
-    assert status["progress"]["state"] == "awaiting_fresh_data"
+    assert status["progress"]["state"] == "market_data_unavailable"
     assert status["progress"]["leading_rejection_reasons"] == {
         "validated_market_research_unavailable": 25
     }
     assert fake.calls == []
+
+
+def test_projection_normalizes_legacy_market_data_status(tmp_path):
+    service, _ = service_for(tmp_path)
+    save_state(
+        service,
+        progress={
+            "state": "awaiting_fresh_data",
+            "leading_rejection_reasons": {"validated_market_research_unavailable": 25},
+        },
+    )
+    assert service.status()["progress"]["state"] == "market_data_unavailable"
 
 
 def test_batches_and_recent_views_are_bounded(tmp_path):

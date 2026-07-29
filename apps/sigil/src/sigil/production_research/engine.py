@@ -380,6 +380,14 @@ class ProductionResearchService:
                     "state": ("proposal_generated" if ranked else "no_eligible_candidate"),
                     "current_batch": batch_number,
                     "current_cursor": cursor,
+                    "symbols_in_batch": [
+                        str(
+                            asset.symbol
+                            if hasattr(asset, "symbol")
+                            else asset.get("symbol")
+                        )
+                        for asset in assets
+                    ],
                     "total_eligible": total_eligible,
                     "symbols_researched": len(scores),
                     "research_successes": sum(score.total_score > 0 for score in scores),

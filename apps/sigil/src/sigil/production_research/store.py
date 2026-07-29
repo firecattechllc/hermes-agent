@@ -35,6 +35,7 @@ def initial_state() -> dict[str, Any]:
             "state": "collecting_market_data",
             "current_batch": 0,
             "current_cursor": 0,
+            "symbols_in_batch": [],
             "symbols_researched": 0,
             "research_successes": 0,
             "research_failures": 0,

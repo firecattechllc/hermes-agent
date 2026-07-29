@@ -74,7 +74,7 @@ describe('standalone Sigil Mission Control', () => {
     const alpacaStatus = {
       configured: true,
       authenticated: true,
-      provider_state: 'ready',
+      provider_state: 'degraded',
       generated_at: '2026-07-29T16:00:00Z',
       asset_catalog: {
         refresh_state: 'ready',
@@ -260,10 +260,10 @@ describe('standalone Sigil Mission Control', () => {
           live_execution: false,
           broker: 'alpaca_paper',
           broker_base_url: 'https://paper-api.alpaca.markets',
-          broker_submission: false,
-          activated: false,
+          broker_submission: operation !== 'deactivate',
+          activated: operation !== 'deactivate',
           paused: false,
-          kill_switch: true,
+          kill_switch: operation === 'deactivate',
           revision: 7,
           evidence_identity: 'SIGIL-V2-BATCH-2-50',
           audit_identity: 'SIGIL-V2-AUD-00000007',
@@ -326,6 +326,13 @@ describe('standalone Sigil Mission Control', () => {
       expect(screen.getByText('•••• 1234')).toBeTruthy()
       expect(screen.getByText(/secrets exposed: no/i)).toBeTruthy()
       expect(await screen.findByText('Authenticated')).toBeTruthy()
+      expect(screen.getByText('Market data degraded')).toBeTruthy()
+      const catalogFreshness = screen.getByText('Catalog freshness').parentElement
+      expect(catalogFreshness?.textContent).toContain('0s old')
+      expect(catalogFreshness?.textContent).not.toContain('Cached / stale')
+      const iexCapacity = screen.getByText('Live IEX capacity').parentElement
+      expect(iexCapacity?.textContent).toContain('stale/unavailable')
+      expect(screen.getByText('15-minute delayed SIP')).toBeTruthy()
       expect(
         screen.getByRole('button', { name: 'Start delayed-SIP scan' }).hasAttribute('disabled')
       ).toBe(true)
@@ -347,6 +354,12 @@ describe('standalone Sigil Mission Control', () => {
       expect(execution.textContent).toContain('awaiting fresh data')
       expect(execution.textContent).toContain('validated_market_research_unavailable: 2')
       expect(execution.textContent).toContain('LIVE EXECUTION DISABLED')
+      expect(screen.getByRole('button', { name: 'Disable' })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: /Activate governed paper execution/i })).toBeNull()
+      expect(screen.queryByRole('button', { name: /Pause paper execution/i })).toBeNull()
+      expect(screen.queryByRole('button', { name: /Resume paper execution/i })).toBeNull()
+      expect(screen.queryByRole('button', { name: /Emergency paper stop/i })).toBeNull()
+      expect(screen.queryByText(/Governed autonomous paper activation/i)).toBeNull()
       expect(screen.queryByText(/loading autonomous paper execution/i)).toBeNull()
       expect(screen.queryByText(/alpaca-secret|public-secret/i)).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: /Refresh providers/i }))

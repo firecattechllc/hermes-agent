@@ -37,6 +37,12 @@ from .paper_execution import (
 
 SCHEMA_VERSION = 5
 CYCLE_SECONDS = 5
+
+# A cycle claim can legitimately remain active while Alpaca evidence is
+# collected and a complete research batch is evaluated. Status polling must
+# not mistake a recent claim for an abandoned process.
+CYCLE_CLAIM_TIMEOUT_SECONDS = 120
+
 CONTROL_ACTIONS = frozenset({"start", "pause", "stop"})
 AUTHORIZATION_ACTIONS = frozenset({"grant", "revoke"})
 
@@ -428,7 +434,7 @@ def _recover_interrupted_cycle(
     state: dict[str, Any],
     now: datetime,
 ) -> bool:
-    """Recover a persisted unfinished cycle and pause fail-closed."""
+    """Recover only an abandoned cycle claim and pause fail-closed."""
 
     automation = state["automation"]
     execution_id = automation.get("cycle_execution_id")
@@ -436,6 +442,31 @@ def _recover_interrupted_cycle(
         return False
 
     started_at = automation.get("cycle_started_at")
+    claim_age_seconds: int | None = None
+    timestamp_valid = False
+
+    if isinstance(started_at, str) and started_at:
+        try:
+            parsed_started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            if parsed_started_at.tzinfo is None:
+                parsed_started_at = parsed_started_at.replace(tzinfo=UTC)
+
+            claim_age_seconds = max(
+                0,
+                int((now.astimezone(UTC) - parsed_started_at.astimezone(UTC)).total_seconds()),
+            )
+            timestamp_valid = True
+        except ValueError:
+            timestamp_valid = False
+
+    # A recent persisted claim belongs to a currently executing cycle. Bridge
+    # status requests must leave that claim untouched.
+    if (
+        timestamp_valid
+        and claim_age_seconds is not None
+        and claim_age_seconds < CYCLE_CLAIM_TIMEOUT_SECONDS
+    ):
+        return False
 
     automation.update(
         {
@@ -453,7 +484,7 @@ def _recover_interrupted_cycle(
     state["audit"].insert(
         0,
         {
-            "id": (f"AUD-CYCLE-RECOVERY-{int(state['revision']) + 1:06d}"),
+            "id": f"AUD-CYCLE-RECOVERY-{int(state['revision']) + 1:06d}",
             "timestamp": _timestamp(now),
             "status": "paper_cycle_interrupted_recovered",
             "proposal_id": "—",
@@ -464,6 +495,9 @@ def _recover_interrupted_cycle(
                 "paper_only": True,
                 "execution_id": str(execution_id),
                 "cycle_started_at": started_at,
+                "cycle_started_at_valid": timestamp_valid,
+                "claim_age_seconds": claim_age_seconds,
+                "claim_timeout_seconds": CYCLE_CLAIM_TIMEOUT_SECONDS,
                 "requires_manual_resume": True,
                 "broker_submission_attempted": False,
             },
@@ -550,8 +584,7 @@ def _admit_production_proposal_to_local_simulator(
         if item.get("status") in {"open", "partially_filled"}
     }
     deployed = sum(
-        Decimal(str(item.get("market_value", "0")))
-        for item in state.get("positions", [])
+        Decimal(str(item.get("market_value", "0"))) for item in state.get("positions", [])
     )
     cash = Decimal(str(state.get("balances", {}).get("cash", "0")))
     if rejection is None and proposal.get("status") != "admitted_in_shadow":
@@ -622,9 +655,7 @@ def _admit_production_proposal_to_local_simulator(
             "side": side,
             "quantity": str(quantity),
             "estimated_notional": f"{notional:.2f}",
-            "strategy": (
-                f"{proposal.get('strategy_id')}@{proposal.get('strategy_version')}"
-            ),
+            "strategy": (f"{proposal.get('strategy_id')}@{proposal.get('strategy_version')}"),
             "status": "approved",
             "approval": {
                 "mode": "automatic-paper-only",
@@ -659,9 +690,7 @@ def _admit_production_proposal_to_local_simulator(
     if order["status"] != "open":
         raise RuntimeError(f"governed local simulated order rejected: {order.get('reason')}")
     _fill_order(state, order_id, {symbol: str(price)}, timestamp=timestamp)
-    position = next(
-        item for item in state["positions"] if item.get("symbol") == symbol
-    )
+    position = next(item for item in state["positions"] if item.get("symbol") == symbol)
     position.update(
         {
             "entry_at": timestamp,
@@ -864,9 +893,7 @@ def _monitor_local_simulated_positions(
                 "required": False,
                 "automatic_retry_allowed": False,
                 "timestamp": timestamp,
-                "evidence_reference": str(
-                    position.get("mark_evidence_identity", "—")
-                ),
+                "evidence_reference": str(position.get("mark_evidence_identity", "—")),
             },
         )
         state["audit"].insert(
@@ -877,9 +904,7 @@ def _monitor_local_simulated_positions(
                 "status": "local_position_exit_simulated",
                 "proposal_id": str(position.get("entry_proposal_id", "—")),
                 "order_id": order_id,
-                "evidence_reference": str(
-                    position.get("mark_evidence_identity", "—")
-                ),
+                "evidence_reference": str(position.get("mark_evidence_identity", "—")),
                 "summary": f"Governed local simulated position exited: {trigger}",
                 "details": {
                     "paper_only": True,
@@ -1004,40 +1029,224 @@ def _run_due_cycle(
     # Persist the claim before proposals, orders, or fills are created.
     _persist(state_path, state)
 
-    if os.environ.get("SIGIL_ASSET_CATALOG_MODE") != "demo":
-        from .asset_catalog import research_universe_status
+    # Handled Python failures are cleaned up immediately. A process crash or
+    # power loss never reaches this handler, so the persisted claim remains
+    # available for timeout-based interrupted-cycle recovery.
+    try:
+        if os.environ.get("SIGIL_ASSET_CATALOG_MODE") != "demo":
+            from .asset_catalog import research_universe_status
 
-        research = research_universe_status(advance=True)
-        if research.get("revision") == "catalog-unavailable":
+            research = research_universe_status(advance=True)
+            if research.get("revision") == "catalog-unavailable":
+                automation.update(
+                    {
+                        "state": "paused",
+                        "next_cycle_at": None,
+                        "pause_cause": "safety",
+                        "pause_reason": (
+                            "Governed Alpaca asset catalog is unavailable; "
+                            "catalog-dependent research suspended"
+                        ),
+                    }
+                )
+                _clear_cycle_claim(automation, last_status="catalog_unavailable")
+                state["audit"].insert(
+                    0,
+                    {
+                        "id": f"AUD-CATALOG-{sequence:06d}",
+                        "timestamp": timestamp,
+                        "status": "catalog_research_suspended",
+                        "proposal_id": "—",
+                        "order_id": "—",
+                        "evidence_reference": "CATALOG-UNAVAILABLE",
+                        "summary": ("Catalog-dependent research suspended fail-closed"),
+                        "details": {
+                            "paper_only": True,
+                            "broker_submission_attempted": False,
+                        },
+                    },
+                )
+                return
             automation.update(
                 {
-                    "state": "paused",
-                    "next_cycle_at": None,
-                    "pause_cause": "safety",
-                    "pause_reason": (
-                        "Governed Alpaca asset catalog is unavailable; "
-                        "catalog-dependent research suspended"
+                    "cycle_count": sequence,
+                    "last_cycle_at": timestamp,
+                    "next_cycle_at": _timestamp(
+                        now.replace(microsecond=0) + timedelta(seconds=CYCLE_SECONDS)
                     ),
                 }
             )
-            _clear_cycle_claim(automation, last_status="catalog_unavailable")
+            from .production_research import run_production_batch
+
+            production = run_production_batch(
+                list(research.get("symbols", [])),
+                cursor=int(research.get("next_cursor", 0)),
+                batch_number=int(research.get("current_batch", 0)),
+                total_eligible=int(research.get("proposal_eligible", 0)),
+                next_cycle_at=automation["next_cycle_at"],
+                now=now,
+            )
+            local_simulated_execution = _admit_production_proposal_to_local_simulator(
+                state,
+                production,
+                sequence=sequence,
+                execution_id=execution_id,
+                now=now,
+            )
+            local_position_monitoring = _monitor_local_simulated_positions(
+                state,
+                sequence=sequence,
+                execution_id=execution_id,
+                now=now,
+            )
+            _clear_cycle_claim(automation, last_status="research_batch_completed")
             state["audit"].insert(
                 0,
                 {
-                    "id": f"AUD-CATALOG-{sequence:06d}",
+                    "id": f"AUD-RESEARCH-{sequence:06d}",
                     "timestamp": timestamp,
-                    "status": "catalog_research_suspended",
+                    "status": "catalog_research_batch_completed",
                     "proposal_id": "—",
                     "order_id": "—",
-                    "evidence_reference": "CATALOG-UNAVAILABLE",
-                    "summary": ("Catalog-dependent research suspended fail-closed"),
+                    "evidence_reference": str(research["revision"]),
+                    "summary": (
+                        "Governed catalog batch completed production research "
+                        f"with state {production['progress']['state']}"
+                    ),
                     "details": {
                         "paper_only": True,
-                        "broker_submission_attempted": False,
+                        "symbols_examined": research.get("symbols", []),
+                        "batch_size": research.get("batch_size"),
+                        "next_cursor": research.get("next_cursor"),
+                        "broker_submission_attempted": production["broker_submission_attempted"],
+                        "proposal_created": (production["progress"]["proposals_generated"] > 0),
+                        "local_simulated_execution": local_simulated_execution,
+                        "local_position_monitoring": local_position_monitoring["status"],
+                        "candidate_scoring_completed": True,
+                        "strategy_id": production["strategy_id"],
+                        "strategy_version": production["strategy_version"],
+                        "shadow_mode": production["shadow_mode"],
+                        "leading_rejection_reasons": production["progress"][
+                            "leading_rejection_reasons"
+                        ],
                     },
                 },
             )
             return
+
+        proposal_id = f"PRP-PAPER-{sequence:06d}"
+        evidence_id = f"HERMES-PAPER-{sequence:06d}"
+        symbol, side, quantity, price, notional = _cycle_order(state, sequence)
+        authorization_id = state["paper_authorization"]["authorization_id"]
+        state["proposals"].insert(
+            0,
+            {
+                "id": proposal_id,
+                "symbol": symbol,
+                "side": side,
+                "quantity": float(quantity),
+                "estimated_notional": f"{notional:.2f}",
+                "strategy": "Monthly-authorized governed paper automation",
+                "status": "approved",
+                "approval": {
+                    "mode": "automatic-paper-only",
+                    "authorization_id": authorization_id,
+                    "approved_at": timestamp,
+                },
+                "evidence_references": [evidence_id],
+                "risk_results": [
+                    "Monthly paper authorization active",
+                    (
+                        "Dynamic allocation: at most 5% of available paper buying power"
+                        if side == "BUY"
+                        else "Dynamic allocation: at most 10% of simulated holdings"
+                    ),
+                    "Broker execution disabled",
+                ],
+            },
+        )
+        order_id = f"PAPER-ORD-{sequence:06d}"
+        state["audit"].insert(
+            0,
+            {
+                "id": f"AUD-APPROVAL-{sequence:06d}",
+                "timestamp": timestamp,
+                "status": "paper_auto_approved",
+                "proposal_id": proposal_id,
+                "order_id": order_id,
+                "evidence_reference": str(authorization_id),
+                "summary": "Paper proposal approved automatically under active monthly authorization",
+                "details": {
+                    "paper_only": True,
+                    "simulated": True,
+                    "side": side,
+                    "symbol": symbol,
+                    "quantity": str(quantity),
+                    "estimated_notional": f"{notional:.2f}",
+                    "authorization_id": authorization_id,
+                    "broker_submission_attempted": False,
+                },
+            },
+        )
+        order = _submit_order(
+            state,
+            {
+                "order_id": order_id,
+                "symbol": symbol,
+                "side": side,
+                "order_type": "MARKET",
+                "quantity": str(quantity),
+                "reference_price": str(price),
+                "environment": "paper",
+                "broker_submission": False,
+            },
+            timestamp=timestamp,
+        )
+        if order["status"] != "open":
+            raise RuntimeError(f"authorized paper order rejected: {order.get('reason')}")
+        _fill_order(
+            state,
+            order_id,
+            {symbol: str(price)},
+            timestamp=timestamp,
+        )
+        state["reconciliation"].insert(
+            0,
+            {
+                "order_id": order_id,
+                "status": "reconciled-local-paper",
+                "required": False,
+                "automatic_retry_allowed": False,
+                "timestamp": timestamp,
+                "evidence_reference": f"PAPER-RUNTIME:{order_id}",
+            },
+        )
+        state["audit"].insert(
+            0,
+            {
+                "id": f"AUD-PAPER-{sequence:06d}",
+                "timestamp": timestamp,
+                "status": "paper_executed",
+                "proposal_id": proposal_id,
+                "order_id": order_id,
+                "evidence_reference": evidence_id,
+                "summary": f"Governed paper {side.lower()} simulated and reconciled",
+                "details": {
+                    "paper_only": True,
+                    "approval_created": True,
+                    "approval_mode": "automatic-paper-only",
+                    "local_paper_fill": True,
+                    "side": side,
+                    "symbol": symbol,
+                    "quantity": str(quantity),
+                    "price": f"{price:.2f}",
+                    "notional": f"{notional:.2f}",
+                    "authorization_id": authorization_id,
+                    "cycle_execution_id": execution_id,
+                    "broker_submission_attempted": False,
+                },
+            },
+        )
         automation.update(
             {
                 "cycle_count": sequence,
@@ -1045,195 +1254,49 @@ def _run_due_cycle(
                 "next_cycle_at": _timestamp(
                     now.replace(microsecond=0) + timedelta(seconds=CYCLE_SECONDS)
                 ),
+                "pause_cause": None,
+                "pause_reason": None,
+                "cycle_execution_id": None,
+                "cycle_started_at": None,
+                "cycle_status": "idle",
+                "last_cycle_status": "completed",
             }
         )
-        from .production_research import run_production_batch
 
-        production = run_production_batch(
-            list(research.get("symbols", [])),
-            cursor=int(research.get("next_cursor", 0)),
-            batch_number=int(research.get("current_batch", 0)),
-            total_eligible=int(research.get("proposal_eligible", 0)),
-            next_cycle_at=automation["next_cycle_at"],
-            now=now,
+    except Exception as exc:
+        automation.update(
+            {
+                "state": "paused",
+                "next_cycle_at": None,
+                "pause_cause": "safety",
+                "pause_reason": (
+                    "Governed paper cycle failed; manual review and resume required"
+                ),
+            }
         )
-        local_simulated_execution = _admit_production_proposal_to_local_simulator(
-            state,
-            production,
-            sequence=sequence,
-            execution_id=execution_id,
-            now=now,
-        )
-        local_position_monitoring = _monitor_local_simulated_positions(
-            state,
-            sequence=sequence,
-            execution_id=execution_id,
-            now=now,
-        )
-        _clear_cycle_claim(automation, last_status="research_batch_completed")
+        _clear_cycle_claim(automation, last_status="failed")
         state["audit"].insert(
             0,
             {
-                "id": f"AUD-RESEARCH-{sequence:06d}",
+                "id": f"AUD-CYCLE-FAIL-{sequence:06d}",
                 "timestamp": timestamp,
-                "status": "catalog_research_batch_completed",
+                "status": "paper_cycle_failed",
                 "proposal_id": "—",
                 "order_id": "—",
-                "evidence_reference": str(research["revision"]),
-                "summary": (
-                    "Governed catalog batch completed production research "
-                    f"with state {production['progress']['state']}"
-                ),
+                "evidence_reference": execution_id,
+                "summary": "Governed paper cycle failed closed",
                 "details": {
                     "paper_only": True,
-                    "symbols_examined": research.get("symbols", []),
-                    "batch_size": research.get("batch_size"),
-                    "next_cursor": research.get("next_cursor"),
-                    "broker_submission_attempted": production["broker_submission_attempted"],
-                    "proposal_created": (production["progress"]["proposals_generated"] > 0),
-                    "local_simulated_execution": local_simulated_execution,
-                    "local_position_monitoring": local_position_monitoring["status"],
-                    "candidate_scoring_completed": True,
-                    "strategy_id": production["strategy_id"],
-                    "strategy_version": production["strategy_version"],
-                    "shadow_mode": production["shadow_mode"],
-                    "leading_rejection_reasons": production["progress"][
-                        "leading_rejection_reasons"
-                    ],
+                    "cycle_execution_id": execution_id,
+                    "exception_type": type(exc).__name__,
+                    "exception_message": str(exc),
+                    "requires_manual_resume": True,
+                    "broker_submission_attempted": False,
                 },
             },
         )
-        return
-
-    proposal_id = f"PRP-PAPER-{sequence:06d}"
-    evidence_id = f"HERMES-PAPER-{sequence:06d}"
-    symbol, side, quantity, price, notional = _cycle_order(state, sequence)
-    authorization_id = state["paper_authorization"]["authorization_id"]
-    state["proposals"].insert(
-        0,
-        {
-            "id": proposal_id,
-            "symbol": symbol,
-            "side": side,
-            "quantity": float(quantity),
-            "estimated_notional": f"{notional:.2f}",
-            "strategy": "Monthly-authorized governed paper automation",
-            "status": "approved",
-            "approval": {
-                "mode": "automatic-paper-only",
-                "authorization_id": authorization_id,
-                "approved_at": timestamp,
-            },
-            "evidence_references": [evidence_id],
-            "risk_results": [
-                "Monthly paper authorization active",
-                (
-                    "Dynamic allocation: at most 5% of available paper buying power"
-                    if side == "BUY"
-                    else "Dynamic allocation: at most 10% of simulated holdings"
-                ),
-                "Broker execution disabled",
-            ],
-        },
-    )
-    order_id = f"PAPER-ORD-{sequence:06d}"
-    state["audit"].insert(
-        0,
-        {
-            "id": f"AUD-APPROVAL-{sequence:06d}",
-            "timestamp": timestamp,
-            "status": "paper_auto_approved",
-            "proposal_id": proposal_id,
-            "order_id": order_id,
-            "evidence_reference": str(authorization_id),
-            "summary": "Paper proposal approved automatically under active monthly authorization",
-            "details": {
-                "paper_only": True,
-                "simulated": True,
-                "side": side,
-                "symbol": symbol,
-                "quantity": str(quantity),
-                "estimated_notional": f"{notional:.2f}",
-                "authorization_id": authorization_id,
-                "broker_submission_attempted": False,
-            },
-        },
-    )
-    order = _submit_order(
-        state,
-        {
-            "order_id": order_id,
-            "symbol": symbol,
-            "side": side,
-            "order_type": "MARKET",
-            "quantity": str(quantity),
-            "reference_price": str(price),
-            "environment": "paper",
-            "broker_submission": False,
-        },
-        timestamp=timestamp,
-    )
-    if order["status"] != "open":
-        raise RuntimeError(f"authorized paper order rejected: {order.get('reason')}")
-    _fill_order(
-        state,
-        order_id,
-        {symbol: str(price)},
-        timestamp=timestamp,
-    )
-    state["reconciliation"].insert(
-        0,
-        {
-            "order_id": order_id,
-            "status": "reconciled-local-paper",
-            "required": False,
-            "automatic_retry_allowed": False,
-            "timestamp": timestamp,
-            "evidence_reference": f"PAPER-RUNTIME:{order_id}",
-        },
-    )
-    state["audit"].insert(
-        0,
-        {
-            "id": f"AUD-PAPER-{sequence:06d}",
-            "timestamp": timestamp,
-            "status": "paper_executed",
-            "proposal_id": proposal_id,
-            "order_id": order_id,
-            "evidence_reference": evidence_id,
-            "summary": f"Governed paper {side.lower()} simulated and reconciled",
-            "details": {
-                "paper_only": True,
-                "approval_created": True,
-                "approval_mode": "automatic-paper-only",
-                "local_paper_fill": True,
-                "side": side,
-                "symbol": symbol,
-                "quantity": str(quantity),
-                "price": f"{price:.2f}",
-                "notional": f"{notional:.2f}",
-                "authorization_id": authorization_id,
-                "cycle_execution_id": execution_id,
-                "broker_submission_attempted": False,
-            },
-        },
-    )
-    automation.update(
-        {
-            "cycle_count": sequence,
-            "last_cycle_at": timestamp,
-            "next_cycle_at": _timestamp(
-                now.replace(microsecond=0) + timedelta(seconds=CYCLE_SECONDS)
-            ),
-            "pause_cause": None,
-            "pause_reason": None,
-            "cycle_execution_id": None,
-            "cycle_started_at": None,
-            "cycle_status": "idle",
-            "last_cycle_status": "completed",
-        }
-    )
-
+        _persist(state_path, state)
+        raise
 
 def _runtime_visibility(state: dict[str, Any], now: datetime) -> dict[str, Any]:
     """Project governed runtime state without creating execution authority."""

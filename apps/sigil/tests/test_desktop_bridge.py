@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 import pytest
 
@@ -144,6 +145,83 @@ def test_alpaca_market_data_projection_is_data_only(monkeypatch) -> None:
     assert result["safety"]["data_only_mode"] is True
     assert result["safety"]["execution_authorized"] is False
     assert result["safety"]["live_trading_enabled"] is False
+
+
+def test_alpaca_market_data_catalog_freshness_uses_durable_catalog_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    state_directory = tmp_path / "catalog-freshness-state"
+    monkeypatch.setenv("SIGIL_DESKTOP_STATE_DIR", str(state_directory))
+    observed_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    snapshot = build_snapshot(
+        [
+            {
+                "id": "asset-aapl",
+                "class": "us_equity",
+                "exchange": "NASDAQ",
+                "symbol": "AAPL",
+                "name": "Apple",
+                "status": "active",
+                "tradable": True,
+                "fractionable": True,
+            }
+        ],
+        discovered_at=observed_at,
+    )
+    AssetCatalogStore(state_directory).write(
+        snapshot,
+        fetched_at=observed_at,
+        validated_at=observed_at,
+        freshness_seconds=604_800,
+        stale_after_seconds=1_209_600,
+    )
+
+    response = handle_request({"command": "alpaca_market_data_status"})
+
+    assert response["ok"] is True
+    result = response["result"]
+    assert result["asset_catalog"]["refresh_state"] == "fresh"
+    assert result["asset_catalog"]["accepted_count"] == 1
+    assert result["asset_catalog"]["stale"] is False
+    assert result["live_iex"]["stale"] is True
+    assert result["live_iex"]["classification"] == "live partial-market IEX"
+    assert result["delayed_sip"]["classification"] == "15-minute delayed SIP"
+
+
+def test_alpaca_market_data_catalog_freshness_fails_closed_without_catalog(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    monkeypatch.setenv(
+        "SIGIL_DESKTOP_STATE_DIR", str(tmp_path / "missing-catalog-state")
+    )
+    for name in (
+        "APCA_API_KEY_ID",
+        "APCA_API_SECRET_KEY",
+        "ALPACA_API_KEY",
+        "ALPACA_SECRET_KEY",
+        "SIGIL_ALPACA_API_KEY_ID",
+        "SIGIL_ALPACA_API_SECRET_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    response = handle_request({"command": "alpaca_market_data_status"})
+
+    assert response["ok"] is True
+    catalog = response["result"]["asset_catalog"]
+    assert catalog["accepted_count"] == 0
+    assert catalog["stale"] is True
+    assert catalog["refresh_state"] != "fresh"
+
+    refresh = handle_request(
+        {
+            "command": "control_alpaca_market_data",
+            "payload": {"action": "refresh_assets"},
+        }
+    )
+    assert refresh["ok"] is True
+    refreshed_catalog = refresh["result"]["asset_catalog"]
+    assert refreshed_catalog["stale"] is True
+    assert refreshed_catalog["last_error"] == "trading_api_unauthorized"
 
 
 def test_explain_proposal_returns_governed_result() -> None:

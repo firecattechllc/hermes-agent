@@ -59,12 +59,12 @@ class ExecutionEnvironmentIdentity:
 
 @dataclass(frozen=True, slots=True)
 class PaperExecutionPolicy:
-    maximum_order_notional: Decimal = Decimal("25.00")
+    maximum_order_notional: Decimal = Decimal("1000.00")
     maximum_new_positions_per_cycle: int = 1
-    maximum_open_positions: int = 3
+    maximum_open_positions: int = 10
     maximum_pending_entry_orders: int = 1
-    maximum_deployed_capital: Decimal = Decimal("75.00")
-    maximum_symbol_exposure: Decimal = Decimal("25.00")
+    maximum_deployed_capital: Decimal = Decimal("10000.00")
+    maximum_symbol_exposure: Decimal = Decimal("1000.00")
     minimum_cash_buffer: Decimal = Decimal("100.00")
     minimum_confidence: Decimal = Decimal("0.75")
     maximum_spread_basis_points: Decimal = Decimal("50")
@@ -90,12 +90,12 @@ class PaperExecutionPolicy:
         )
         if any(getattr(self, name) <= 0 for name in positive_decimals):
             raise ValueError("paper policy decimal limits must be positive")
-        if self.maximum_order_notional > Decimal("25.00"):
-            raise ValueError("maximum order notional cannot exceed 25.00")
-        if self.maximum_open_positions > 3:
-            raise ValueError("maximum open positions cannot exceed 3")
-        if self.maximum_deployed_capital > Decimal("75.00"):
-            raise ValueError("maximum deployed capital cannot exceed 75.00")
+        if self.maximum_order_notional > Decimal("1000.00"):
+            raise ValueError("maximum order notional cannot exceed 1000.00")
+        if self.maximum_open_positions > 10:
+            raise ValueError("maximum open positions cannot exceed 10")
+        if self.maximum_deployed_capital > Decimal("10000.00"):
+            raise ValueError("maximum deployed capital cannot exceed 10000.00")
         if self.maximum_new_positions_per_cycle != 1:
             raise ValueError("exactly one new position per cycle is permitted")
         if self.maximum_pending_entry_orders != 1:

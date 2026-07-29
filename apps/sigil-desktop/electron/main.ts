@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron'
 
 import {
+  enableGovernedPaperExecutionByDefault,
+  type PaperExecutionStartupStatus
+} from './paper-execution-startup'
+import {
   GovernedUpdater,
   UnavailableUpdater,
   type UpdaterClient,
@@ -150,6 +154,14 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 
 function repositoryRoot(): string {
   return path.resolve(currentDirectory, '../../..')
+}
+
+function shouldEnableGovernedPaperExecution(): boolean {
+  const releaseCertification = process.argv.some(argument =>
+    argument.startsWith('--sigil-release-certification=')
+  )
+
+  return !releaseCertification && process.env.SIGIL_ADAPTER !== 'mock'
 }
 
 function pythonExecutable(): string {
@@ -569,6 +581,13 @@ app.whenReady().then(async () => {
   }
 
   registerSigilIpc()
+
+  if (shouldEnableGovernedPaperExecution()) {
+    await enableGovernedPaperExecutionByDefault(request =>
+      runBridgeRequest<PaperExecutionStartupStatus>(request)
+    )
+  }
+
   createSigilWindow()
 
   if (app.isPackaged && updater instanceof GovernedUpdater) {
