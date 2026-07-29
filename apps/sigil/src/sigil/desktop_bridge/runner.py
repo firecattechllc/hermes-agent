@@ -16,6 +16,16 @@ from typing import Any, Final
 from sigil.market_universe import UniverseValidationError
 
 from .alpaca_market_data import alpaca_market_data_status, control_alpaca_market_data
+from .autonomous_paper import (
+    paper_execution_activate,
+    paper_execution_collection,
+    paper_execution_deactivate,
+    paper_execution_emergency_stop,
+    paper_execution_pause,
+    paper_execution_resume,
+    paper_execution_status,
+    reconcile_paper_orders,
+)
 from .asset_catalog import (
     asset_catalog_exclusions,
     asset_catalog_refresh,
@@ -55,6 +65,21 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "asset_catalog_exclusions",
     "research_universe_status",
     "research_universe_advance",
+    "paper_execution_status",
+    "paper_execution_activate",
+    "paper_execution_deactivate",
+    "paper_execution_pause",
+    "paper_execution_resume",
+    "paper_policy_status",
+    "recent_candidates",
+    "recent_proposals",
+    "recent_rejections",
+    "paper_order_intents",
+    "paper_orders",
+    "paper_positions",
+    "paper_fills",
+    "reconcile_paper_orders",
+    "emergency_paper_stop",
 )
 
 
@@ -322,6 +347,44 @@ def handle_request(request: object) -> dict[str, Any]:
 
     if command == "research_universe_advance":
         return {"ok": True, "result": research_universe_status(advance=True)}
+
+    if command in {"paper_execution_status", "paper_policy_status"}:
+        return {"ok": True, "result": paper_execution_status()}
+
+    if command == "paper_execution_activate":
+        return {"ok": True, "result": paper_execution_activate()}
+
+    if command == "paper_execution_deactivate":
+        return {"ok": True, "result": paper_execution_deactivate()}
+
+    if command == "paper_execution_pause":
+        return {"ok": True, "result": paper_execution_pause()}
+
+    if command == "paper_execution_resume":
+        return {"ok": True, "result": paper_execution_resume()}
+
+    if command == "reconcile_paper_orders":
+        return {"ok": True, "result": reconcile_paper_orders()}
+
+    if command == "emergency_paper_stop":
+        return {"ok": True, "result": paper_execution_emergency_stop()}
+
+    collection_commands = {
+        "recent_candidates": "candidates",
+        "recent_proposals": "proposals",
+        "recent_rejections": "rejections",
+        "paper_order_intents": "intents",
+        "paper_orders": "orders",
+        "paper_positions": "positions",
+        "paper_fills": "fills",
+    }
+    if command in collection_commands:
+        return {
+            "ok": True,
+            "result": paper_execution_collection(
+                collection_commands[command], request.get("payload")
+            ),
+        }
 
     return error_response(
         "unsupported_command",

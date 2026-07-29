@@ -236,6 +236,25 @@
       "ipc_channels": ["sigil:get-backend-status", "sigil:explain-proposal", "sigil:get-runtime-snapshot", "sigil:control-paper-cycle"]
     },
     {
+      "id": "paper-execution.governed-autonomy",
+      "name": "Governed autonomous Alpaca paper execution",
+      "description": "A durable activation gate permits bounded long-only Alpaca paper entries while live execution remains unavailable.",
+      "criticality": "critical",
+      "source_files": ["electron/main.ts", "electron/preload.ts", "src/mission-control/index.tsx", "../sigil/src/sigil/autonomous_paper/service.py", "../sigil/src/sigil/autonomous_paper/alpaca.py"],
+      "expected_user_behavior": "Mission Control shows bounded research progress and exact rejection reasons; explicit activation discloses the $25 order, three-position, $75 deployment, and paper-only limits.",
+      "automated_test_references": ["src/mission-control/standalone.test.tsx", "electron/main.test.ts", "../sigil/tests/test_autonomous_alpaca_paper_execution.py", "../sigil/tests/test_desktop_bridge.py"],
+      "development_build_test_method": "Use mocked Alpaca responses to validate activation, deterministic ranking, persisted-before-submit intents, reconciliation, pause, and restart recovery.",
+      "packaged_build_test_method": "Verify the installed app starts disabled, reports paper-api.alpaca.markets, retains the kill switch, and performs no order mutation.",
+      "required_backend_or_dependency": "Authenticated Alpaca paper account for activation; ordinary certification remains mocked and mutation-free.",
+      "safe_fallback_behavior": "Missing credentials, stale evidence, broker ambiguity, or degraded runtime leaves submission disabled or reconciliation-required.",
+      "prohibited_side_effects": ["live endpoint", "live execution", "short sale", "option trade", "crypto trade", "OTC trade", "extended-hours entry", "unconfirmed certification order"],
+      "current_certification_status": "NOT_TESTED",
+      "ipc_channels": ["sigil:paper-execution"],
+      "ui": {
+        "controls": ["Activate governed paper execution", "Pause paper execution", "Deactivate", "Emergency paper stop"]
+      }
+    },
+    {
       "id": "electron.ipc-and-preload",
       "name": "Electron IPC and preload contract",
       "description": "A sandboxed, context-isolated preload exposes only the bounded Sigil desktop API.",

@@ -28,6 +28,7 @@ export const SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL = 'sigil:control-alpaca-ma
 export const SIGIL_ASSET_CATALOG_STATUS_CHANNEL = 'sigil:get-asset-catalog-status'
 export const SIGIL_ASSET_CATALOG_REFRESH_CHANNEL = 'sigil:refresh-asset-catalog'
 export const SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL = 'sigil:get-research-universe-status'
+export const SIGIL_PAPER_EXECUTION_CHANNEL = 'sigil:paper-execution'
 export const SIGIL_UPDATER_SNAPSHOT_CHANNEL = 'sigil:get-updater-snapshot'
 export const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
 export const SIGIL_UPDATE_DOWNLOAD_CHANNEL = 'sigil:approve-update-download'
@@ -355,6 +356,7 @@ export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_ASSET_CATALOG_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_ASSET_CATALOG_REFRESH_CHANNEL)
   ipcMain.removeHandler(SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL)
+  ipcMain.removeHandler(SIGIL_PAPER_EXECUTION_CHANNEL)
   ipcMain.removeHandler(SIGIL_UPDATE_CHECK_CHANNEL)
   ipcMain.removeHandler(SIGIL_UPDATER_SNAPSHOT_CHANNEL)
   ipcMain.removeHandler(SIGIL_UPDATE_DOWNLOAD_CHANNEL)
@@ -422,6 +424,37 @@ export function registerSigilIpc(): void {
   )
   ipcMain.handle(SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL, () =>
     runBridgeRequest({ command: 'research_universe_status' })
+  )
+  ipcMain.handle(
+    SIGIL_PAPER_EXECUTION_CHANNEL,
+    (_event, operation: string, payload?: Readonly<Record<string, unknown>>) => {
+      const commands: Readonly<Record<string, string>> = {
+        status: 'paper_execution_status',
+        activate: 'paper_execution_activate',
+        deactivate: 'paper_execution_deactivate',
+        pause: 'paper_execution_pause',
+        resume: 'paper_execution_resume',
+        emergency_stop: 'emergency_paper_stop',
+        reconcile: 'reconcile_paper_orders',
+        candidates: 'recent_candidates',
+        proposals: 'recent_proposals',
+        rejections: 'recent_rejections',
+        intents: 'paper_order_intents',
+        orders: 'paper_orders',
+        positions: 'paper_positions',
+        fills: 'paper_fills'
+      }
+
+      const command = commands[operation]
+
+      return command
+        ? runBridgeRequest({ command, payload })
+        : Promise.resolve({
+            ok: false as const,
+            error: 'unsupported_paper_execution_operation',
+            message: 'Only allow-listed paper execution operations are available.'
+          })
+    }
   )
   ipcMain.handle(SIGIL_UPDATER_SNAPSHOT_CHANNEL, () => governedUpdater?.getSnapshot())
   ipcMain.handle(SIGIL_UPDATE_CHECK_CHANNEL, () => governedUpdater?.check())

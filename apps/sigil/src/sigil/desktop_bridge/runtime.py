@@ -693,6 +693,15 @@ def _run_due_cycle(
                 ),
             }
         )
+        from .autonomous_paper import _service as _paper_execution_service
+
+        _paper_execution_service().record_batch_progress(
+            list(research.get("symbols", [])),
+            cursor=int(research.get("next_cursor", 0)),
+            batch_number=int(research.get("current_batch", 0)),
+            total_eligible=int(research.get("proposal_eligible", 0)),
+            next_cycle_at=automation["next_cycle_at"],
+        )
         _clear_cycle_claim(automation, last_status="research_batch_completed")
         state["audit"].insert(
             0,
@@ -704,8 +713,8 @@ def _run_due_cycle(
                 "order_id": "—",
                 "evidence_reference": str(research["revision"]),
                 "summary": (
-                    "Governed catalog research batch traversed without "
-                    "broker execution"
+                    "Governed catalog batch advanced; complete validated "
+                    "market research was unavailable"
                 ),
                 "details": {
                     "paper_only": True,
@@ -714,6 +723,10 @@ def _run_due_cycle(
                     "next_cursor": research.get("next_cursor"),
                     "broker_submission_attempted": False,
                     "proposal_created": False,
+                    "candidate_scoring_completed": False,
+                    "rejection_reason": (
+                        "validated_market_research_unavailable"
+                    ),
                 },
             },
         )

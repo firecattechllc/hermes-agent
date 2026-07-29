@@ -2,7 +2,7 @@
   "name": "@firecattechnology/sigil-desktop",
   "productName": "Sigil",
   "private": true,
-  "version": "1.9.0",
+  "version": "2.0.0",
   "description": "Standalone governance-first Sigil desktop product.",
   "type": "module",
   "main": "dist/electron-main.mjs",

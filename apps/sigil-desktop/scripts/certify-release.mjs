@@ -768,7 +768,7 @@ function featureResultsFromEvidence({ devUi, packagedUi, packageEvidence, regist
     ui.updater_fixture.current.updateAvailable === false &&
     ui.updater_fixture.current.updateVersion === packageJson.version &&
     ui.updater_fixture.newer.updateAvailable === true &&
-    ui.updater_fixture.newer.updateVersion === '1.9.1' &&
+    ui.updater_fixture.newer.updateVersion === '2.0.1' &&
     ui.updater_fixture.malformed.bounded === true &&
     ui.updater_fixture.missing.bounded === true &&
     [ui.updater_fixture.current, ui.updater_fixture.newer, ui.updater_fixture.malformed, ui.updater_fixture.missing]

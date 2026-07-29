@@ -61,6 +61,21 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "asset_catalog_exclusions",
         "research_universe_status",
         "research_universe_advance",
+        "paper_execution_status",
+        "paper_execution_activate",
+        "paper_execution_deactivate",
+        "paper_execution_pause",
+        "paper_execution_resume",
+        "paper_policy_status",
+        "recent_candidates",
+        "recent_proposals",
+        "recent_rejections",
+        "paper_order_intents",
+        "paper_orders",
+        "paper_positions",
+        "paper_fills",
+        "reconcile_paper_orders",
+        "emergency_paper_stop",
     ]
 
 
@@ -69,6 +84,34 @@ def test_health_request_returns_status() -> None:
 
     assert response["ok"] is True
     assert response["result"]["mode"] == "local-read-only"
+
+
+def test_autonomous_paper_bridge_defaults_disabled_with_structured_identity() -> None:
+    response = handle_request({"command": "paper_execution_status"})
+    assert response["ok"] is True
+    result = response["result"]
+    assert result["environment"] == "paper"
+    assert result["broker"] == "alpaca_paper"
+    assert result["live_execution"] is False
+    assert result["broker_submission"] is False
+    assert result["activated"] is False
+    assert result["kill_switch"] is True
+    assert isinstance(result["revision"], int)
+    assert result["evidence_identity"] == "SIGIL-V2-PAPER-DISABLED"
+    assert result["audit_identity"] == "SIGIL-V2-INSTALL"
+
+
+def test_autonomous_paper_collection_bridge_is_bounded() -> None:
+    response = handle_request(
+        {
+            "command": "recent_candidates",
+            "payload": {"offset": -5, "limit": 1_000_000},
+        }
+    )
+    assert response["ok"] is True
+    assert response["result"]["offset"] == 0
+    assert response["result"]["limit"] == 100
+    assert response["result"]["items"] == []
 
 
 def test_alpaca_market_data_projection_is_data_only(monkeypatch) -> None:

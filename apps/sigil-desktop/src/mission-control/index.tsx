@@ -26,6 +26,7 @@ import type {
   AuditEvent,
   MarketUniverseSearchResult,
   MarketUniverseStatus,
+  PaperExecutionStatus,
   PipelineStage,
   Proposal,
   SigilOperatorAdapter,
@@ -35,7 +36,7 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const RELEASE_STAGE = 'V1.9'
+const RELEASE_STAGE = 'V2.0'
 
 const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
@@ -1147,6 +1148,88 @@ function MarketUniversePanel({
   )
 }
 
+function AutonomousPaperPanel({
+  onAction,
+  status
+}: {
+  onAction: (action: 'activate' | 'deactivate' | 'pause' | 'resume' | 'emergency_stop') => void
+  status: PaperExecutionStatus | null
+}) {
+  if (!status) {
+    return (
+      <section className={cn('border-b border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}>
+        <h2 className="text-xs font-semibold uppercase tracking-[0.1em]">Autonomous paper execution</h2>
+        <p className="mt-2 text-xs text-(--ui-text-tertiary)">Execution status unavailable. No submission authority is assumed.</p>
+      </section>
+    )
+  }
+
+  const progress = status.progress
+  const reasons = Object.entries(progress.leading_rejection_reasons)
+
+  return (
+    <section
+      aria-labelledby="autonomous-paper-title"
+      className={cn('border-b border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}
+      data-testid="autonomous-paper-execution"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="autonomous-paper-title">
+            Governed autonomous Alpaca paper execution
+          </h2>
+          <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+            Long-only · $25/order · 3 positions · $75 deployed cap · $100 cash buffer
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusLabel tone={status.activated && !status.paused ? 'success' : 'muted'}>
+            {status.activated ? (status.paused ? 'PAUSED' : 'ENABLED') : 'DISABLED'}
+          </StatusLabel>
+          <StatusLabel tone={status.broker_submission ? 'warning' : 'muted'}>
+            SUBMISSION {status.broker_submission ? 'ENABLED' : 'DISABLED'}
+          </StatusLabel>
+          <StatusLabel tone="success">LIVE EXECUTION DISABLED</StatusLabel>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-px bg-(--ui-stroke-tertiary) sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ['Research state', progress.state.replaceAll('_', ' '), progress.scheduler_state],
+          ['Catalog progress', `${progress.current_cursor} / ${progress.total_eligible_symbols}`, `${progress.coverage_percent}% · batch ${progress.current_batch}`],
+          ['Current batch', `${progress.symbols_in_batch.length} symbols`, progress.symbols_in_batch.join(', ') || 'Awaiting batch'],
+          ['Last researched', progress.last_completed_symbol ?? '—', progress.last_successful_research_at ?? 'Never'],
+          ['Candidates', String(progress.candidates_produced), `${progress.proposals_produced} proposals`],
+          ['Rejected', String(progress.proposals_rejected), reasons.map(([reason, count]) => `${reason}: ${count}`).join(' · ') || 'None'],
+          ['Paper exposure', `$${status.deployed_paper_capital}`, `$${status.remaining_governed_allocation} governed allocation remains`],
+          ['Broker state', status.broker_submission ? 'Paper mutations enabled' : 'No mutation authority', `${status.open_positions} positions · ${status.open_orders} open orders`]
+        ].map(([label, value, detail]) => (
+          <div className="min-w-0 bg-(--ui-bg-secondary) p-3" key={label}>
+            <div className="text-[0.625rem] uppercase text-(--ui-text-tertiary)">{label}</div>
+            <div className="mt-1 break-words font-mono text-xs">{value}</div>
+            <div className="mt-1 truncate text-[0.625rem] text-(--ui-text-tertiary)" title={detail}>{detail}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {!status.activated ? (
+          <Button onClick={() => onAction('activate')} size="xs">Activate governed paper execution</Button>
+        ) : (
+          <>
+            <Button onClick={() => onAction(status.paused ? 'resume' : 'pause')} size="xs" variant="outline">
+              {status.paused ? 'Resume paper execution' : 'Pause paper execution'}
+            </Button>
+            <Button onClick={() => onAction('deactivate')} size="xs" variant="outline">Deactivate</Button>
+            <Button onClick={() => onAction('emergency_stop')} size="xs" variant="destructive">Emergency paper stop</Button>
+          </>
+        )}
+      </div>
+      <p className="mt-3 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+        Environment: paper · broker: Alpaca paper · endpoint: paper-api.alpaca.markets · live activation unavailable
+      </p>
+    </section>
+  )
+}
+
 const localHermesEngine = new LocalHermesEngine()
 
 type ProviderResponse =
@@ -1175,6 +1258,12 @@ interface MissionControlDesktopApi {
   >
   refreshAssetCatalog?: () => Promise<
     { ok: true; result: AssetCatalogStatus } | { ok: false; error: string; message: string }
+  >
+  paperExecution?: (
+    operation: string,
+    payload?: Readonly<Record<string, unknown>>
+  ) => Promise<
+    { ok: true; result: PaperExecutionStatus } | { ok: false; error: string; message: string }
   >
   buildInfo?: {
     version: string
@@ -1242,6 +1331,12 @@ export function SigilOperatorView({
   const [universeLoading, setUniverseLoading] = useState(false)
   const [universeError, setUniverseError] = useState<string | null>(null)
   const [catalogRefreshing, setCatalogRefreshing] = useState(false)
+  const [paperExecution, setPaperExecution] = useState<PaperExecutionStatus | null>(null)
+
+  const [pendingPaperExecutionAction, setPendingPaperExecutionAction] = useState<
+    'activate' | 'deactivate' | 'pause' | 'resume' | 'emergency_stop' | null
+  >(null)
+
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [pendingAuthorizationAction, setPendingAuthorizationAction] = useState<'grant' | 'revoke' | null>(null)
   const [pendingPaperReset, setPendingPaperReset] = useState(false)
@@ -1346,6 +1441,32 @@ export function SigilOperatorView({
       .catch(reason => setUniverseError(reason instanceof Error ? reason.message : String(reason)))
       .finally(() => setCatalogRefreshing(false))
   }, [searchUniverse])
+
+  useEffect(() => {
+    const api = desktopApi()?.paperExecution
+
+    if (!api) {
+      return
+    }
+
+    let cancelled = false
+
+    const refresh = (): void => {
+      void api('status').then(response => {
+        if (!cancelled && response.ok) {
+          setPaperExecution(response.result)
+        }
+      })
+    }
+
+    refresh()
+    const timer = window.setInterval(refresh, 5_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [reloadGeneration])
 
   useEffect(() => {
     let cancelled = false
@@ -1737,6 +1858,10 @@ export function SigilOperatorView({
                 onRefresh={refreshProviders}
                 snapshot={providerSnapshot}
               />
+              <AutonomousPaperPanel
+                onAction={setPendingPaperExecutionAction}
+                status={paperExecution}
+              />
               <MarketUniversePanel
                 error={universeError}
                 loading={universeLoading}
@@ -2009,7 +2134,7 @@ export function SigilOperatorView({
           PAGE_INSET_X
         )}
       >
-        <span>No broker submission available · no live submit control · account identity masked</span>
+        <span>Alpaca paper submission is activation-gated · live execution permanently disabled · account identity masked</span>
         <span>
           Adapter: governed local paper runtime · provider reads isolated in backend · {RELEASE_STAGE}
           {desktopApi()?.buildInfo
@@ -2017,6 +2142,42 @@ export function SigilOperatorView({
             : ''}
         </span>
       </footer>
+      <ConfirmDialog
+        confirmLabel={
+          pendingPaperExecutionAction === 'activate'
+            ? 'Activate paper-only execution'
+            : pendingPaperExecutionAction === 'emergency_stop'
+              ? 'Stop paper execution'
+              : 'Confirm paper execution change'
+        }
+        description={
+          pendingPaperExecutionAction === 'activate'
+            ? 'Activate autonomous Alpaca paper submissions with a $25 maximum order, three-position maximum, $75 deployed-capital cap, $100 cash buffer, long-only restrictions, and live execution permanently disabled?'
+            : pendingPaperExecutionAction
+              ? `Confirm ${pendingPaperExecutionAction.replaceAll('_', ' ')} for governed paper execution. Live execution remains unavailable.`
+              : undefined
+        }
+        destructive={pendingPaperExecutionAction === 'emergency_stop' || pendingPaperExecutionAction === 'deactivate'}
+        onClose={() => setPendingPaperExecutionAction(null)}
+        onConfirm={async () => {
+          const action = pendingPaperExecutionAction
+          const api = desktopApi()?.paperExecution
+
+          if (action && api) {
+            const response = await api(action)
+
+            if (response.ok) {
+              setPaperExecution(response.result)
+            } else {
+              setControlError(response.message)
+            }
+          }
+
+          setPendingPaperExecutionAction(null)
+        }}
+        open={Boolean(pendingPaperExecutionAction)}
+        title={pendingPaperExecutionAction === 'activate' ? 'Governed autonomous paper activation' : 'Paper execution control'}
+      />
       <ConfirmDialog
         confirmLabel={confirmation?.label}
         description={confirmation?.description}

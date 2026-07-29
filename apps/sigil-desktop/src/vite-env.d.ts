@@ -109,6 +109,10 @@ interface SigilDesktopApi {
   refreshAssetCatalog?: () => Promise<
     SigilBackendResponse<AssetCatalogStatus>
   >
+  paperExecution?: (
+    operation: string,
+    payload?: Readonly<Record<string, unknown>>
+  ) => Promise<SigilBackendResponse<Record<string, unknown>>>
   explainProposal: (
     payload: SigilProposalExplanationPayload
   ) => Promise<SigilBackendResponse<SigilBackendProposalExplanation>>

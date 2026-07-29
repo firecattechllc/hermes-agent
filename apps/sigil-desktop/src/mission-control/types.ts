@@ -210,6 +210,59 @@ export interface AssetCatalogStatus {
   }
 }
 
+export interface PaperExecutionStatus {
+  environment: 'paper'
+  live_execution: false
+  broker: 'alpaca_paper'
+  broker_base_url: 'https://paper-api.alpaca.markets'
+  broker_submission: boolean
+  activated: boolean
+  paused: boolean
+  kill_switch: boolean
+  revision: number
+  evidence_identity: string | null
+  audit_identity: string | null
+  degraded_conditions: string[]
+  policy: {
+    maximum_order_notional: string
+    maximum_new_positions_per_cycle: number
+    maximum_open_positions: number
+    maximum_pending_entry_orders: number
+    maximum_deployed_capital: string
+    maximum_symbol_exposure: string
+    minimum_cash_buffer: string
+    minimum_confidence: string
+    maximum_spread_basis_points: string
+    minimum_average_dollar_volume: string
+  }
+  progress: {
+    scheduler_state: string
+    current_cursor: number
+    current_batch: number
+    symbols_in_batch: string[]
+    symbols_completed_cycle: number
+    total_eligible_symbols: number
+    coverage_percent: number
+    last_completed_symbol: string | null
+    last_successful_research_at: string | null
+    candidates_produced: number
+    proposals_produced: number
+    proposals_rejected: number
+    leading_rejection_reasons: Readonly<Record<string, number>>
+    next_cycle_at: string | null
+    state: string
+  }
+  open_positions: number
+  open_orders: number
+  deployed_paper_capital: string
+  remaining_governed_allocation: string
+  last_order_intent: Readonly<Record<string, unknown>> | null
+  last_submitted_order: Readonly<Record<string, unknown>> | null
+  last_fill: Readonly<Record<string, unknown>> | null
+  last_rejection: Readonly<Record<string, unknown>> | null
+  last_reconciliation: string | null
+}
+
 export interface MarketUniverseInstrument {
   instrument_id: string
   symbol: string

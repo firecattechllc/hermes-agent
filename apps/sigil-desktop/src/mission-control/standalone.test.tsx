@@ -195,6 +195,63 @@ describe('standalone Sigil Mission Control', () => {
           broker_submission_available: false,
           execution_authorized: false
         }
+      }),
+      paperExecution: async operation => ({
+        ok: true,
+        result: {
+          environment: 'paper',
+          live_execution: false,
+          broker: 'alpaca_paper',
+          broker_base_url: 'https://paper-api.alpaca.markets',
+          broker_submission: false,
+          activated: false,
+          paused: false,
+          kill_switch: true,
+          revision: 7,
+          evidence_identity: 'SIGIL-V2-BATCH-2-50',
+          audit_identity: 'SIGIL-V2-AUD-00000007',
+          degraded_conditions: [],
+          policy: {
+            maximum_order_notional: '25.00',
+            maximum_new_positions_per_cycle: 1,
+            maximum_open_positions: 3,
+            maximum_pending_entry_orders: 1,
+            maximum_deployed_capital: '75.00',
+            maximum_symbol_exposure: '25.00',
+            minimum_cash_buffer: '100.00',
+            minimum_confidence: '0.75',
+            maximum_spread_basis_points: '50',
+            minimum_average_dollar_volume: '1000000'
+          },
+          progress: {
+            scheduler_state: 'scanning',
+            current_cursor: 50,
+            current_batch: 2,
+            symbols_in_batch: ['AAPL', 'MSFT'],
+            symbols_completed_cycle: 50,
+            total_eligible_symbols: 12984,
+            coverage_percent: 0.39,
+            last_completed_symbol: 'MSFT',
+            last_successful_research_at: '2026-07-29T16:00:00Z',
+            candidates_produced: 0,
+            proposals_produced: 0,
+            proposals_rejected: 0,
+            leading_rejection_reasons: {
+              validated_market_research_unavailable: 2
+            },
+            next_cycle_at: '2026-07-29T16:00:05Z',
+            state: operation === 'status' ? 'awaiting_fresh_data' : 'execution_disabled'
+          },
+          open_positions: 0,
+          open_orders: 0,
+          deployed_paper_capital: '0',
+          remaining_governed_allocation: '75.00',
+          last_order_intent: null,
+          last_submitted_order: null,
+          last_fill: null,
+          last_rejection: null,
+          last_reconciliation: null
+        }
       })
     }
 
@@ -215,6 +272,12 @@ describe('standalone Sigil Mission Control', () => {
       expect(screen.getByText('Full Alpaca asset catalog discovered')).toBeTruthy()
       expect(screen.getByText(/Source: Alpaca Paper Trading Assets API/)).toBeTruthy()
       expect(screen.getByText(/Market-data coverage is partial under IEX/)).toBeTruthy()
+      const execution = await screen.findByTestId('autonomous-paper-execution')
+      expect(execution.textContent).toContain('50 / 12984')
+      expect(execution.textContent).toContain('awaiting fresh data')
+      expect(execution.textContent).toContain('validated_market_research_unavailable: 2')
+      expect(execution.textContent).toContain('LIVE EXECUTION DISABLED')
+      expect(screen.queryByText(/loading autonomous paper execution/i)).toBeNull()
       expect(screen.queryByText(/alpaca-secret|public-secret/i)).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: /Refresh providers/i }))
       await waitFor(() => expect(screen.getByText('Read-only market data is current.')).toBeTruthy())
