@@ -79,6 +79,103 @@ def test_mission_control_status_is_paper_only() -> None:
     assert len(status["open_orders"]) == 1
 
 
+def test_validated_production_proposal_fills_only_in_local_simulator() -> None:
+    state = runtime._initial_state(NOW)
+    state["positions"] = []
+    state["balances"].update(
+        {
+            "cash": "10000.00",
+            "portfolio_value": "10000.00",
+            "reserved_cash": "0.00",
+            "buying_power": "10000.00",
+            "equity": "10000.00",
+            "realized_pnl": "0.00",
+            "unrealized_pnl": "0.00",
+            "total_account_value": "10000.00",
+        }
+    )
+    state["automation"]["state"] = "running"
+    production = {
+        "broker_submission": False,
+        "last_proposal": {
+            "proposal_id": "SIGIL-V21-PRP-VALIDATED",
+            "strategy_id": "sigil-liquid-trend",
+            "strategy_version": "2.1.0",
+            "symbol": "PEN",
+            "side": "buy",
+            "proposed_notional": "25.00",
+            "reference_price": "12.50",
+            "expires_at": (NOW + timedelta(minutes=2)).isoformat(),
+            "status": "admitted_in_shadow",
+            "evidence_identity": "evidence-checksum",
+        },
+    }
+
+    executed = runtime._admit_production_proposal_to_local_simulator(
+        state,
+        production,
+        sequence=1,
+        execution_id="cycle-production-1",
+        now=NOW,
+    )
+
+    assert executed is True
+    assert state["positions"][0]["symbol"] == "PEN"
+    assert state["positions"][0]["market_value"] == "25.00"
+    assert state["last_execution"]["broker_submission_attempted"] is False
+    assert state["broker_submission_available"] is False
+    assert state["execution_authorized"] is False
+    assert any(
+        event["status"] == "production_paper_simulated"
+        and event["details"]["notional"] == "25.00"
+        and event["details"]["broker_submission_attempted"] is False
+        for event in state["audit"]
+    )
+
+
+def test_production_local_simulator_fails_closed_on_expired_or_duplicate_proposal() -> None:
+    state = runtime._initial_state(NOW)
+    state["positions"] = []
+    state["balances"].update(
+        {
+            "cash": "10000.00",
+            "reserved_cash": "0.00",
+            "buying_power": "10000.00",
+            "equity": "10000.00",
+            "realized_pnl": "0.00",
+            "unrealized_pnl": "0.00",
+            "total_account_value": "10000.00",
+        }
+    )
+    state["automation"]["state"] = "running"
+    proposal = {
+        "proposal_id": "SIGIL-V21-PRP-EXPIRED",
+        "strategy_id": "sigil-liquid-trend",
+        "strategy_version": "2.1.0",
+        "symbol": "PEN",
+        "side": "buy",
+        "proposed_notional": "25.00",
+        "reference_price": "12.50",
+        "expires_at": (NOW - timedelta(seconds=1)).isoformat(),
+        "status": "admitted_in_shadow",
+        "evidence_identity": "evidence-checksum",
+    }
+
+    assert (
+        runtime._admit_production_proposal_to_local_simulator(
+            state,
+            {"broker_submission": False, "last_proposal": proposal},
+            sequence=2,
+            execution_id="cycle-production-2",
+            now=NOW,
+        )
+        is False
+    )
+    assert state["positions"] == []
+    assert state["executions"] == []
+    assert state["audit"][0]["details"]["reason"] == "production_proposal_expired"
+
+
 def test_paper_automation_state_survives_runtime_restart(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,

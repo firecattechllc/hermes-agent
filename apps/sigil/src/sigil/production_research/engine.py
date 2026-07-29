@@ -419,7 +419,9 @@ class ProductionResearchService:
                 },
             )
             self.store.save(state)
-            return self._projection(state)
+            projection = self._projection(state)
+            projection["last_proposal"] = dict(proposal) if proposal else None
+            return projection
 
     @staticmethod
     def unavailable_evidence(

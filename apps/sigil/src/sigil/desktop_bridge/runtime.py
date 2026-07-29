@@ -10,7 +10,7 @@ import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 from typing import Any
 
@@ -503,6 +503,197 @@ def _authorization_active(state: dict[str, Any], now: datetime) -> bool:
     return True
 
 
+def _admit_production_proposal_to_local_simulator(
+    state: dict[str, Any],
+    production: dict[str, Any],
+    *,
+    sequence: int,
+    execution_id: str,
+    now: datetime,
+) -> bool:
+    """Execute one validated production proposal in the local simulator.
+
+    This is intentionally separate from the Alpaca execution service. The
+    paper_execution primitives have no network dependency and reject requests
+    carrying broker submission authority.
+    """
+    proposal = production.get("last_proposal")
+    timestamp = _timestamp(now)
+    rejection: str | None = None
+    if not isinstance(proposal, dict):
+        return False
+    symbol = str(proposal.get("symbol", "")).strip().upper()
+    side = str(proposal.get("side", "")).strip().upper()
+    try:
+        notional = Decimal(str(proposal.get("proposed_notional")))
+        price = Decimal(str(proposal.get("reference_price")))
+        expires_at = datetime.fromisoformat(
+            str(proposal.get("expires_at", "")).replace("Z", "+00:00")
+        )
+    except (ArithmeticError, ValueError):
+        rejection = "invalid_production_proposal"
+        notional = Decimal(0)
+        price = Decimal(0)
+        expires_at = now
+
+    open_positions = {
+        str(item.get("symbol", "")).upper()
+        for item in state.get("positions", [])
+        if Decimal(str(item.get("quantity", "0"))) > 0
+    }
+    open_order_symbols = {
+        str(item.get("symbol", "")).upper()
+        for item in state.get("orders", {}).values()
+        if item.get("status") in {"open", "partially_filled"}
+    }
+    deployed = sum(
+        Decimal(str(item.get("market_value", "0")))
+        for item in state.get("positions", [])
+    )
+    cash = Decimal(str(state.get("balances", {}).get("cash", "0")))
+    if rejection is None and proposal.get("status") != "admitted_in_shadow":
+        rejection = "production_proposal_not_shadow_admitted"
+    elif rejection is None and side != "BUY":
+        rejection = "local_production_execution_is_long_only"
+    elif rejection is None and (not symbol or notional <= 0 or price <= 0):
+        rejection = "invalid_production_proposal"
+    elif rejection is None and expires_at <= now:
+        rejection = "production_proposal_expired"
+    elif rejection is None and (
+        production.get("broker_submission") is not False
+        or state.get("broker_submission_available") is not False
+        or state.get("execution_authorized") is not False
+    ):
+        rejection = "broker_or_live_execution_authority_present"
+    elif rejection is None and not _authorization_active(state, now):
+        rejection = "monthly_paper_authorization_inactive"
+    elif rejection is None and evaluate_runtime_health(state) != "healthy":
+        rejection = "local_runtime_unhealthy"
+    elif rejection is None and state["automation"].get("state") != "running":
+        rejection = "local_simulation_not_running"
+    elif rejection is None and symbol in open_positions:
+        rejection = "duplicate_local_position"
+    elif rejection is None and symbol in open_order_symbols:
+        rejection = "duplicate_local_entry_order"
+    elif rejection is None and len(open_positions) >= 3:
+        rejection = "maximum_local_positions_reached"
+    elif rejection is None and notional > Decimal("25.00"):
+        rejection = "maximum_local_order_notional_exceeded"
+    elif rejection is None and deployed + notional > Decimal("75.00"):
+        rejection = "maximum_local_deployed_capital_exceeded"
+    elif rejection is None and cash - notional < Decimal("100.00"):
+        rejection = "minimum_local_cash_buffer_breached"
+
+    if rejection is not None:
+        state["audit"].insert(
+            0,
+            {
+                "id": f"AUD-PROD-REJECT-{sequence:06d}",
+                "timestamp": timestamp,
+                "status": "production_local_simulation_rejected",
+                "proposal_id": str(proposal.get("proposal_id", "—")),
+                "order_id": "—",
+                "evidence_reference": str(proposal.get("evidence_identity", "—")),
+                "summary": f"Production proposal was not admitted locally: {rejection}",
+                "details": {
+                    "paper_only": True,
+                    "local_simulation": True,
+                    "reason": rejection,
+                    "broker_submission_attempted": False,
+                },
+            },
+        )
+        return False
+
+    quantity = (notional / price).quantize(Decimal("0.0001"), rounding=ROUND_DOWN)
+    if quantity <= 0:
+        return False
+    local_proposal_id = str(proposal["proposal_id"])
+    authorization_id = state["paper_authorization"]["authorization_id"]
+    order_id = f"PAPER-PROD-ORD-{sequence:06d}"
+    state["proposals"].insert(
+        0,
+        {
+            "id": local_proposal_id,
+            "symbol": symbol,
+            "side": side,
+            "quantity": str(quantity),
+            "estimated_notional": f"{notional:.2f}",
+            "strategy": (
+                f"{proposal.get('strategy_id')}@{proposal.get('strategy_version')}"
+            ),
+            "status": "approved",
+            "approval": {
+                "mode": "automatic-paper-only",
+                "authorization_id": authorization_id,
+                "approved_at": timestamp,
+            },
+            "evidence_references": [str(proposal["evidence_identity"])],
+            "risk_results": [
+                "Validated production proposal admitted in shadow",
+                "Maximum local simulated order notional: $25",
+                "Maximum three local simulated positions",
+                "Maximum local simulated deployed capital: $75",
+                "Broker submission disabled",
+            ],
+        },
+    )
+    order = _submit_order(
+        state,
+        {
+            "order_id": order_id,
+            "symbol": symbol,
+            "side": side,
+            "order_type": "MARKET",
+            "quantity": str(quantity),
+            "reference_price": str(price),
+            "environment": "paper",
+            "broker_submission": False,
+        },
+        timestamp=timestamp,
+    )
+    if order["status"] != "open":
+        raise RuntimeError(f"governed local simulated order rejected: {order.get('reason')}")
+    _fill_order(state, order_id, {symbol: str(price)}, timestamp=timestamp)
+    state["reconciliation"].insert(
+        0,
+        {
+            "order_id": order_id,
+            "status": "reconciled-local-paper",
+            "required": False,
+            "automatic_retry_allowed": False,
+            "timestamp": timestamp,
+            "evidence_reference": str(proposal["evidence_identity"]),
+        },
+    )
+    state["audit"].insert(
+        0,
+        {
+            "id": f"AUD-PROD-PAPER-{sequence:06d}",
+            "timestamp": timestamp,
+            "status": "production_paper_simulated",
+            "proposal_id": local_proposal_id,
+            "order_id": order_id,
+            "evidence_reference": str(proposal["evidence_identity"]),
+            "summary": "Validated production proposal filled in the local paper simulator",
+            "details": {
+                "paper_only": True,
+                "local_simulation": True,
+                "symbol": symbol,
+                "quantity": str(quantity),
+                "price": str(price),
+                "notional": f"{quantity * price:.2f}",
+                "strategy_id": proposal.get("strategy_id"),
+                "strategy_version": proposal.get("strategy_version"),
+                "authorization_id": authorization_id,
+                "cycle_execution_id": execution_id,
+                "broker_submission_attempted": False,
+            },
+        },
+    )
+    return True
+
+
 def _cycle_order(
     state: dict[str, Any], sequence: int
 ) -> tuple[str, str, Decimal, Decimal, Decimal]:
@@ -662,6 +853,13 @@ def _run_due_cycle(
             next_cycle_at=automation["next_cycle_at"],
             now=now,
         )
+        local_simulated_execution = _admit_production_proposal_to_local_simulator(
+            state,
+            production,
+            sequence=sequence,
+            execution_id=execution_id,
+            now=now,
+        )
         _clear_cycle_claim(automation, last_status="research_batch_completed")
         state["audit"].insert(
             0,
@@ -683,6 +881,7 @@ def _run_due_cycle(
                     "next_cursor": research.get("next_cursor"),
                     "broker_submission_attempted": production["broker_submission_attempted"],
                     "proposal_created": (production["progress"]["proposals_generated"] > 0),
+                    "local_simulated_execution": local_simulated_execution,
                     "candidate_scoring_completed": True,
                     "strategy_id": production["strategy_id"],
                     "strategy_version": production["strategy_version"],
