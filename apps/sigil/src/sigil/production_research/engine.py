@@ -326,6 +326,8 @@ class ProductionResearchService:
         kill_switch: bool,
         audit_available: bool,
         reconciliation_complete: bool,
+        provider_status: str = "available",
+        market_data_freshness: str = "fresh",
     ) -> dict[str, Any]:
         if len(assets) > 25 or len(evidence) > 25:
             raise ValueError("production research batches are bounded to 25 symbols")
@@ -380,8 +382,8 @@ class ProductionResearchService:
                     "proposals_generated": 1 if ranked else 0,
                     "leading_rejection_reasons": dict(failures.most_common(8)),
                     "last_completed_research": now.isoformat().replace("+00:00", "Z"),
-                    "provider_status": "available",
-                    "market_data_freshness": "fresh",
+                    "provider_status": provider_status,
+                    "market_data_freshness": market_data_freshness,
                     "next_cycle_at": next_cycle_at,
                 }
             )

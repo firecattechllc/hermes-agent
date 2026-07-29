@@ -144,6 +144,8 @@ def run_production_batch(
         reconciliation_complete=(
             "reconciliation_required" not in execution_status["degraded_conditions"]
         ),
+        provider_status=provider_failure or "available",
+        market_data_freshness=("unavailable" if provider_failure else "fresh"),
     )
     result["broker_submission_attempted"] = False
     # Forward monitoring is independent from whether the current batch produced
@@ -235,8 +237,6 @@ def run_production_batch(
                 }
                 execution.monitor_positions(position_prices, now=now)
     if not provider_available:
-        result["progress"]["provider_status"] = provider_failure
-        result["progress"]["market_data_freshness"] = "unavailable"
         result["degraded_conditions"] = sorted(
             {
                 *result["degraded_conditions"],
