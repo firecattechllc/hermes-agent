@@ -5,10 +5,11 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
+import { discoverPackagedPython } from './packaged-python.mjs'
 
 const appDirectory = path.resolve(import.meta.dirname, '..')
 const stagingRoot = path.join(appDirectory, 'packaged-backend/staged')
-const python = '/opt/homebrew/opt/python@3.11/bin/python3.11'
+const python = discoverPackagedPython()
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -23,10 +24,6 @@ function run(command, args, options = {}) {
     )
   }
   return result.stdout
-}
-
-if (!fs.existsSync(python)) {
-  throw new Error(`Certified packaged Python runtime not found: ${python}`)
 }
 
 run(process.execPath, ['scripts/prepare-packaged-backend.mjs'])
