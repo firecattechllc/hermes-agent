@@ -409,7 +409,7 @@ def test_alpha_1_3_persisted_state_upgrades_safely(tmp_path) -> None:
 
     upgraded = runtime.runtime_snapshot(now=NOW + timedelta(seconds=1))
 
-    assert upgraded["schema_version"] == 4
+    assert upgraded["schema_version"] == runtime.SCHEMA_VERSION
     assert upgraded["automation"]["pause_cause"] is None
     assert upgraded["runtime_visibility"]["health"] == "healthy"
     assert upgraded["broker_submission_available"] is False

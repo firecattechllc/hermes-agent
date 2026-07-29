@@ -33,7 +33,7 @@ from .paper_execution import (
 )
 from .universe import PAPER_SIMULATION_PRICES, US_LISTED_SCREENING_UNIVERSE
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 CYCLE_SECONDS = 5
 CONTROL_ACTIONS = frozenset({"start", "pause", "stop"})
 AUTHORIZATION_ACTIONS = frozenset({"grant", "revoke"})
@@ -134,6 +134,10 @@ def _initial_state(now: datetime) -> dict[str, Any]:
             "mode": "monthly-authorized-paper-execution",
             "pause_cause": None,
             "pause_reason": None,
+            "cycle_execution_id": None,
+            "cycle_started_at": None,
+            "cycle_status": "idle",
+            "last_cycle_status": None,
         },
         "paper_authorization": authorization,
         "proposals": [],
@@ -270,6 +274,10 @@ def _upgrade_runtime_state(state: dict[str, Any]) -> None:
     automation.setdefault("mode", "monthly-authorized-paper-execution")
     automation.setdefault("pause_cause", None)
     automation.setdefault("pause_reason", None)
+    automation.setdefault("cycle_execution_id", None)
+    automation.setdefault("cycle_started_at", None)
+    automation.setdefault("cycle_status", "idle")
+    automation.setdefault("last_cycle_status", None)
     state.setdefault(
         "paper_authorization",
         {
@@ -381,7 +389,7 @@ def _locked_state() -> Iterator[tuple[Path, dict[str, Any]]]:
                     isinstance(payload, dict)
                     and envelope.get("sha256") == _digest(payload)
                     and payload.get("schema_version")
-                    in {1, 2, 3, SCHEMA_VERSION}
+                    in {1, 2, 3, 4, SCHEMA_VERSION}
                 )
             except (json.JSONDecodeError, UnicodeDecodeError, OSError):
                 payload = None
@@ -419,6 +427,75 @@ def _persist(state_path: Path, payload: dict[str, Any]) -> None:
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def _clear_cycle_claim(
+    automation: dict[str, Any],
+    *,
+    last_status: str | None = None,
+) -> None:
+    automation["cycle_execution_id"] = None
+    automation["cycle_started_at"] = None
+    automation["cycle_status"] = "idle"
+    if last_status is not None:
+        automation["last_cycle_status"] = last_status
+
+
+def _recover_interrupted_cycle(
+    state: dict[str, Any],
+    now: datetime,
+) -> bool:
+    """Recover a persisted unfinished cycle and pause fail-closed."""
+
+    automation = state["automation"]
+    execution_id = automation.get("cycle_execution_id")
+    if not execution_id:
+        return False
+
+    started_at = automation.get("cycle_started_at")
+
+    automation.update(
+        {
+            "state": "paused",
+            "next_cycle_at": None,
+            "pause_cause": "safety",
+            "pause_reason": (
+                "An interrupted paper cycle was recovered; "
+                "manual resume is required"
+            ),
+        }
+    )
+    _clear_cycle_claim(
+        automation,
+        last_status="interrupted_recovered",
+    )
+
+    state["audit"].insert(
+        0,
+        {
+            "id": (
+                f"AUD-CYCLE-RECOVERY-"
+                f"{int(state['revision']) + 1:06d}"
+            ),
+            "timestamp": _timestamp(now),
+            "status": "paper_cycle_interrupted_recovered",
+            "proposal_id": "—",
+            "order_id": "—",
+            "evidence_reference": str(execution_id),
+            "summary": (
+                "Interrupted paper cycle recovered; "
+                "automation paused fail-closed"
+            ),
+            "details": {
+                "paper_only": True,
+                "execution_id": str(execution_id),
+                "cycle_started_at": started_at,
+                "requires_manual_resume": True,
+                "broker_submission_attempted": False,
+            },
+        },
+    )
+    return True
 
 
 def _authorization_active(state: dict[str, Any], now: datetime) -> bool:
@@ -500,7 +577,11 @@ def _cycle_order(
     return symbol, side, quantity, price, quantity * price
 
 
-def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
+def _run_due_cycle(
+    state_path: Path,
+    state: dict[str, Any],
+    now: datetime,
+) -> None:
     automation = state["automation"]
     health = evaluate_runtime_health(state)
     if health != "healthy":
@@ -537,8 +618,27 @@ def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
     if next_cycle and datetime.fromisoformat(next_cycle.replace("Z", "+00:00")) > now:
         return
 
+    if automation.get("cycle_execution_id"):
+        return
+
     sequence = int(automation["cycle_count"]) + 1
     timestamp = _timestamp(now)
+    execution_id = (
+        f"PAPER-CYCLE-{sequence:06d}-"
+        f"{now.strftime('%Y%m%dT%H%M%SZ')}"
+    )
+
+    automation.update(
+        {
+            "cycle_execution_id": execution_id,
+            "cycle_started_at": timestamp,
+            "cycle_status": "running",
+        }
+    )
+
+    # Persist the claim before proposals, orders, or fills are created.
+    _persist(state_path, state)
+
     proposal_id = f"PRP-PAPER-{sequence:06d}"
     evidence_id = f"HERMES-PAPER-{sequence:06d}"
     symbol, side, quantity, price, notional = _cycle_order(state, sequence)
@@ -647,6 +747,7 @@ def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
                 "price": f"{price:.2f}",
                 "notional": f"{notional:.2f}",
                 "authorization_id": authorization_id,
+                "cycle_execution_id": execution_id,
                 "broker_submission_attempted": False,
             },
         },
@@ -660,6 +761,10 @@ def _run_due_cycle(state: dict[str, Any], now: datetime) -> None:
             ),
             "pause_cause": None,
             "pause_reason": None,
+            "cycle_execution_id": None,
+            "cycle_started_at": None,
+            "cycle_status": "idle",
+            "last_cycle_status": "completed",
         }
     )
 
@@ -819,8 +924,9 @@ def runtime_snapshot(*, now: datetime | None = None) -> dict[str, Any]:
     observed_at = now or _now()
     with _locked_state() as (state_path, state):
         _ensure_month_authorization(state, observed_at)
+        _recover_interrupted_cycle(state, observed_at)
         evaluate_runtime_health(state)
-        _run_due_cycle(state, observed_at)
+        _run_due_cycle(state_path, state, observed_at)
         evaluate_runtime_health(state)
         state["runtime_visibility"] = _runtime_visibility(state, observed_at)
         state["revision"] = int(state["revision"]) + 1
@@ -891,6 +997,11 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
     observed_at = now or _now()
     with _locked_state() as (state_path, state):
         automation = state["automation"]
+        _recover_interrupted_cycle(state, observed_at)
+
+        control_status = str(action)
+        control_summary = f"Paper automation {action} recorded"
+
         if action == "start":
             health = evaluate_runtime_health(state)
             if health != "healthy":
@@ -901,15 +1012,26 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
                 raise ValueError(
                     "an active monthly paper authorization is required"
                 )
-            automation["state"] = "running"
-            automation["next_cycle_at"] = _timestamp(observed_at)
-            automation["pause_cause"] = None
-            automation["pause_reason"] = None
+            if automation.get("state") == "running":
+                control_status = "start_ignored_already_running"
+                control_summary = (
+                    "Paper automation start ignored because it is "
+                    "already running"
+                )
+            else:
+                automation["state"] = "running"
+                automation["next_cycle_at"] = _timestamp(observed_at)
+                automation["pause_cause"] = None
+                automation["pause_reason"] = None
         elif action == "pause":
             automation["state"] = "paused"
             automation["next_cycle_at"] = None
             automation["pause_cause"] = "manual"
             automation["pause_reason"] = "Paused by owner control"
+            _clear_cycle_claim(
+                automation,
+                last_status="paused",
+            )
         else:
             automation.update(
                 {
@@ -919,6 +1041,10 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
                     "pause_reason": None,
                 }
             )
+            _clear_cycle_claim(
+                automation,
+                last_status="stopped",
+            )
         state["revision"] = int(state["revision"]) + 1
         state["generated_at"] = _timestamp(observed_at)
         state["audit"].insert(
@@ -926,11 +1052,11 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
             {
                 "id": f"AUD-CONTROL-{state['revision']:06d}",
                 "timestamp": _timestamp(observed_at),
-                "status": str(action),
+                "status": control_status,
                 "proposal_id": "—",
                 "order_id": "—",
                 "evidence_reference": "PAPER-AUTOMATION",
-                "summary": f"Paper automation {action} recorded",
+                "summary": control_summary,
                 "details": {
                     "broker_submission_attempted": False,
                     "paper_only": True,

@@ -437,7 +437,7 @@ def test_complete_report_identity_material_changes_and_audit() -> None:
         )
         == 4
     )
-    assert not original.pre_trade_eligible is False
+    assert original.pre_trade_eligible is not False
     assert all(
         "approve" in item.lower() or "estimate" in item.lower() or "correlation" in item.lower()
         for item in original.limitations

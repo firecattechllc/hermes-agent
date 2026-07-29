@@ -16,7 +16,7 @@ from .engine import (
     verify_dossier_identity,
 )
 from .financials import cagr, classify_trend, growth, ratio, subtract
-from .models import *
+from .models import *  # noqa: F403
 from .policy import ResearchDossierPolicy
 
 __all__ = [
