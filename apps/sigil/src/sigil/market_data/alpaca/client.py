@@ -29,8 +29,8 @@ class AlpacaConfig:
     @classmethod
     def from_environment(cls) -> AlpacaConfig:
         config = cls(
-            os.environ.get("APCA_API_KEY_ID"),
-            os.environ.get("APCA_API_SECRET_KEY"),
+            os.environ.get("APCA_API_KEY_ID") or os.environ.get("ALPACA_API_KEY"),
+            os.environ.get("APCA_API_SECRET_KEY") or os.environ.get("ALPACA_SECRET_KEY"),
             os.environ.get("APCA_API_BASE_URL", "https://paper-api.alpaca.markets").rstrip("/"),
             os.environ.get("APCA_DATA_BASE_URL", "https://data.alpaca.markets").rstrip("/"),
         )

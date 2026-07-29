@@ -815,6 +815,8 @@ function AuditTable({ events }: { events: AuditEvent[] }) {
 
 function ProviderPanel({
   alpacaMarketData,
+  alpacaControlAction,
+  alpacaControlMessage,
   onAlpacaControl,
   error,
   loading,
@@ -822,6 +824,8 @@ function ProviderPanel({
   snapshot
 }: {
   alpacaMarketData: AlpacaMarketDataStatus | null
+  alpacaControlAction: string | null
+  alpacaControlMessage: string | null
   onAlpacaControl: (action: string) => void
   error: string | null
   loading: boolean
@@ -891,13 +895,24 @@ function ProviderPanel({
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => onAlpacaControl('refresh_assets')} size="xs" variant="outline">Refresh Alpaca assets</Button>
-              <Button onClick={() => onAlpacaControl('start_delayed_sip')} size="xs" variant="outline">Start delayed-SIP scan</Button>
-              <Button onClick={() => onAlpacaControl('stop_delayed_sip')} size="xs" variant="outline">Stop delayed-SIP scan</Button>
-              <Button onClick={() => onAlpacaControl('connect_live_iex')} size="xs" variant="outline">Connect live IEX</Button>
-              <Button onClick={() => onAlpacaControl('disconnect_live_iex')} size="xs" variant="outline">Disconnect live IEX</Button>
+              <Button
+                disabled={alpacaControlAction !== null}
+                onClick={() => onAlpacaControl('refresh_assets')}
+                size="xs"
+                variant="outline"
+              >
+                {alpacaControlAction === 'refresh_assets' ? 'Refreshing Alpaca assets…' : 'Refresh Alpaca assets'}
+              </Button>
+              <Button disabled size="xs" title="Delayed-SIP scanning is not available in this build." variant="outline">Start delayed-SIP scan</Button>
+              <Button disabled size="xs" title="No delayed-SIP scan is running in this build." variant="outline">Stop delayed-SIP scan</Button>
+              <Button disabled size="xs" title="Streaming IEX connections are not available in this build." variant="outline">Connect live IEX</Button>
+              <Button disabled size="xs" title="No streaming IEX connection is active in this build." variant="outline">Disconnect live IEX</Button>
             </div>
           </div>
+          <p className="mt-3 text-[0.6875rem] text-(--ui-text-tertiary)" role="status">
+            {alpacaControlMessage ??
+              'Asset refresh is read-only. Delayed-SIP and streaming IEX controls are unavailable in this build.'}
+          </p>
           <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
             <div><dt className="text-(--ui-text-tertiary)">Asset catalog</dt><dd>{alpacaMarketData.asset_catalog.accepted_count} accepted · {alpacaMarketData.asset_catalog.excluded_count} excluded · {alpacaMarketData.asset_catalog.conflict_count} conflicts</dd></div>
             <div><dt className="text-(--ui-text-tertiary)">Catalog freshness</dt><dd>{alpacaMarketData.asset_catalog.stale ? 'Cached / stale' : `${alpacaMarketData.asset_catalog.age_seconds ?? 0}s old`}</dd></div>
@@ -1396,6 +1411,8 @@ export function SigilOperatorView({
   const [providerLoading, setProviderLoading] = useState(false)
   const [providerError, setProviderError] = useState<string | null>(null)
   const [alpacaMarketData, setAlpacaMarketData] = useState<AlpacaMarketDataStatus | null>(null)
+  const [alpacaControlAction, setAlpacaControlAction] = useState<string | null>(null)
+  const [alpacaControlMessage, setAlpacaControlMessage] = useState<string | null>(null)
   const [universeStatus, setUniverseStatus] = useState<MarketUniverseStatus | null>(null)
   const [universeResults, setUniverseResults] = useState<MarketUniverseSearchResult | null>(null)
   const [universeLoading, setUniverseLoading] = useState(false)
@@ -1451,16 +1468,33 @@ export function SigilOperatorView({
       : desktopApi()?.controlAlpacaMarketData?.(action)
 
     if (!request) {
+      setAlpacaControlMessage('Alpaca market-data controls are unavailable in this application context.')
+
       return
     }
 
-    void request.then(response => {
-      if (response.ok) {
+    setAlpacaControlAction(action)
+    setAlpacaControlMessage(null)
+    setProviderError(null)
+    void request
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(response.message)
+        }
+
         setAlpacaMarketData(response.result)
-      } else {
-        setProviderError(response.message)
-      }
-    })
+        setAlpacaControlMessage(
+          action === 'refresh_assets'
+            ? `Read-only Alpaca asset refresh completed: ${response.result.asset_catalog.accepted_count} accepted, ${response.result.asset_catalog.excluded_count} excluded.`
+            : `Alpaca market-data status refreshed: ${response.result.provider_state}.`
+        )
+      })
+      .catch(reason => {
+        const message = reason instanceof Error ? reason.message : String(reason)
+        setProviderError(message)
+        setAlpacaControlMessage(`Alpaca market-data action failed safely: ${message}`)
+      })
+      .finally(() => setAlpacaControlAction(null))
   }, [])
 
   const searchUniverse = useCallback((query: string, universe: string): void => {
@@ -1948,6 +1982,8 @@ export function SigilOperatorView({
               <MetricStrip snapshot={snapshot} />
               <RuntimeVisibilityCard onOpenAudit={() => setSection('audit')} snapshot={snapshot} />
               <ProviderPanel
+                alpacaControlAction={alpacaControlAction}
+                alpacaControlMessage={alpacaControlMessage}
                 alpacaMarketData={alpacaMarketData}
                 error={providerError}
                 loading={providerLoading}
@@ -2414,7 +2450,7 @@ export function SigilOperatorView({
               {updater?.releaseNotes ? <p className="mt-3 whitespace-pre-wrap text-xs">{updater.releaseNotes}</p> : null}
               <div className="mt-4 flex flex-wrap gap-2">
                 {['idle', 'up-to-date', 'failed', 'disabled'].includes(updater?.status ?? 'idle') ? (
-                  <Button disabled={updater?.status === 'checking' || updater?.status === 'disabled'} onClick={() => void desktopApi()?.checkForUpdates?.().then(setUpdater)} size="sm" variant="outline">Check for Updates</Button>
+                  <Button disabled={updater?.status === 'checking' || updater?.status === 'disabled' || updater?.status === 'failed'} onClick={() => void desktopApi()?.checkForUpdates?.().then(setUpdater)} size="sm" variant="outline">Check for Updates</Button>
                 ) : null}
                 {updater?.status === 'update-available' ? (
                   <Button onClick={() => void desktopApi()?.approveUpdateDownload?.().then(setUpdater)} size="sm">Download Update</Button>

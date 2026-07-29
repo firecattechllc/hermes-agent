@@ -97,6 +97,12 @@ interface SigilDesktopApi {
   getProviderSnapshot?: () => Promise<
     SigilBackendResponse<SigilProviderSnapshot>
   >
+  getAlpacaMarketDataStatus?: () => Promise<
+    SigilBackendResponse<Record<string, unknown>>
+  >
+  controlAlpacaMarketData?: (
+    action: string
+  ) => Promise<SigilBackendResponse<Record<string, unknown>>>
   getMarketUniverseStatus?: () => Promise<
     SigilBackendResponse<MarketUniverseStatus>
   >

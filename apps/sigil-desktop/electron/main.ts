@@ -8,6 +8,7 @@ import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron'
 import {
   GovernedUpdater,
   UnavailableUpdater,
+  type UpdaterClient,
   type UpdaterController
 } from './updater'
 
@@ -329,7 +330,25 @@ async function installReadiness(): Promise<Readonly<{ ready: boolean; reason?: s
 }
 
 async function initializeUpdater(): Promise<GovernedUpdater> {
-  const { autoUpdater } = await import('electron-updater')
+  if (
+    app.isPackaged &&
+    !existsSync(path.join(process.resourcesPath, 'app-update.yml'))
+  ) {
+    throw new Error(
+      'Update metadata is not bundled with this unsigned development build.'
+    )
+  }
+
+  const updaterModule = await import('electron-updater')
+
+  const autoUpdater =
+    updaterModule.autoUpdater ??
+    (updaterModule.default as { autoUpdater?: UpdaterClient } | undefined)?.autoUpdater
+
+  if (!autoUpdater) {
+    throw new Error('The packaged update service is unavailable.')
+  }
+
   const developmentEnabled = process.env.SIGIL_ENABLE_DEV_UPDATES === '1'
   const internalTest = process.env.SIGIL_INTERNAL_UPDATE_CHANNEL === '1'
 

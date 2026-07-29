@@ -43,6 +43,7 @@ describe('Sigil Electron startup', () => {
 
   it('exposes only data controls for Alpaca free market data', () => {
     const source = fs.readFileSync(path.resolve('src/mission-control/index.tsx'), 'utf8')
+    const mainSource = fs.readFileSync(path.resolve('electron/main.ts'), 'utf8')
 
     expect(source).toContain("RELEASE_STAGE = 'V2.1'")
     expect(source).toContain('15-minute delayed SIP')
@@ -51,9 +52,14 @@ describe('Sigil Electron startup', () => {
     expect(source).toContain('Data-only mode')
     expect(source).toContain('Live trading disabled')
     expect(source).toContain('Refresh Alpaca assets')
+    expect(source).toContain('Delayed-SIP scanning is not available in this build.')
+    expect(source).toContain('Alpaca market-data action failed safely:')
     expect(source).toContain("['Discovered', status.source_record_count]")
     expect(source).toContain("['Proposal eligible', status.proposal_eligible_count]")
     expect(source).toContain('Refresh catalog')
     expect(source).not.toContain('Submit Alpaca order')
+    expect(mainSource).toContain(
+      'Update metadata is not bundled with this unsigned development build.'
+    )
   })
 })

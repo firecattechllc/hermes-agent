@@ -70,6 +70,61 @@ describe('standalone Sigil Mission Control', () => {
 
   it('renders refreshable read-only provider data without credential fields', async () => {
     const original = window.sigilDesktop
+
+    const alpacaStatus = {
+      configured: true,
+      authenticated: true,
+      provider_state: 'ready',
+      generated_at: '2026-07-29T16:00:00Z',
+      asset_catalog: {
+        refresh_state: 'ready',
+        source_count: 14148,
+        accepted_count: 12984,
+        excluded_count: 1164,
+        conflict_count: 0,
+        generated_at: '2026-07-29T16:00:00Z',
+        age_seconds: 0,
+        stale: false,
+        last_error: null
+      },
+      delayed_sip: {
+        enabled: false,
+        classification: '15-minute delayed SIP',
+        expected_delay_minutes: 15,
+        latest_scan_started_at: null,
+        latest_scan_completed_at: null,
+        universe_total: 0,
+        scanned_count: 0,
+        successful_count: 0,
+        missing_count: 0,
+        rejected_count: 0,
+        stale_count: 0,
+        current_batch: 0,
+        total_batches: 0,
+        next_scan_at: null,
+        provider_state: 'idle'
+      },
+      live_iex: {
+        enabled: false,
+        classification: 'live partial-market IEX',
+        partial_market: true,
+        connected: false,
+        active_symbol_count: 0,
+        maximum_symbol_count: 30,
+        subscribed_symbols: [],
+        last_message_at: null,
+        reconnect_attempts: 0,
+        stale: true,
+        provider_state: 'idle'
+      },
+      safety: {
+        broker_submission_available: false,
+        execution_authorized: false,
+        live_trading_enabled: false,
+        data_only_mode: true
+      }
+    }
+
     window.sigilDesktop = {
       productName: 'Sigil',
       persistenceNamespace: 'test',
@@ -135,6 +190,8 @@ describe('standalone Sigil Mission Control', () => {
           }
         }
       }),
+      getAlpacaMarketDataStatus: async () => ({ ok: true, result: alpacaStatus }),
+      controlAlpacaMarketData: async () => ({ ok: true, result: alpacaStatus }),
       getMarketUniverseStatus: async () => ({
         ok: true,
         result: {
@@ -268,6 +325,19 @@ describe('standalone Sigil Mission Control', () => {
       expect(screen.getAllByText('MSFT').length).toBeGreaterThan(0)
       expect(screen.getByText('•••• 1234')).toBeTruthy()
       expect(screen.getByText(/secrets exposed: no/i)).toBeTruthy()
+      expect(await screen.findByText('Authenticated')).toBeTruthy()
+      expect(
+        screen.getByRole('button', { name: 'Start delayed-SIP scan' }).hasAttribute('disabled')
+      ).toBe(true)
+      expect(
+        screen.getByRole('button', { name: 'Connect live IEX' }).hasAttribute('disabled')
+      ).toBe(true)
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh Alpaca assets' }))
+      expect(
+        await screen.findByText(
+          'Read-only Alpaca asset refresh completed: 12984 accepted, 1164 excluded.'
+        )
+      ).toBeTruthy()
       expect(screen.getByText('Governed market universe')).toBeTruthy()
       expect(screen.getByText('Full Alpaca asset catalog discovered')).toBeTruthy()
       expect(screen.getByText(/Source: Alpaca Paper Trading Assets API/)).toBeTruthy()

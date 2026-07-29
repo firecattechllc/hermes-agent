@@ -52,6 +52,21 @@ def test_configuration_secret_redaction_and_authentication_failures() -> None:
         client.assets()
 
 
+def test_configuration_accepts_current_paper_credential_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("APCA_API_KEY_ID", raising=False)
+    monkeypatch.delenv("APCA_API_SECRET_KEY", raising=False)
+    monkeypatch.setenv("ALPACA_API_KEY", "paper-key")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "paper-secret")
+
+    config = AlpacaConfig.from_environment()
+
+    assert config.configured is True
+    assert config.api_base_url == "https://paper-api.alpaca.markets"
+    assert config.data_base_url == "https://data.alpaca.markets"
+
+
 def test_urllib_transport_requests_and_decodes_gzip(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
