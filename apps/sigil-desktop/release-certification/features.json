@@ -249,7 +249,7 @@
       "safe_fallback_behavior": "Failed bridge/update calls return bounded error state.",
       "prohibited_side_effects": ["Node integration", "arbitrary IPC", "credential exposure"],
       "current_certification_status": "NOT_TESTED",
-      "ipc_channels": ["sigil:get-backend-status", "sigil:explain-proposal", "sigil:get-runtime-snapshot", "sigil:control-paper-cycle", "sigil:control-paper-authorization", "sigil:reset-paper-runtime", "sigil:get-provider-snapshot", "sigil:check-for-updates"]
+      "ipc_channels": ["sigil:get-backend-status", "sigil:explain-proposal", "sigil:get-runtime-snapshot", "sigil:control-paper-cycle", "sigil:control-paper-authorization", "sigil:reset-paper-runtime", "sigil:get-provider-snapshot", "sigil:get-market-universe-status", "sigil:search-market-universe", "sigil:get-alpaca-market-data-status", "sigil:control-alpaca-market-data", "sigil:check-for-updates"]
     },
     {
       "id": "identity.about-center",
@@ -274,18 +274,18 @@
       "name": "Updater status and failure handling",
       "description": "The updater checks the unchanged production release feed, requires user confirmation before downloading, and parses isolated current, newer, malformed, and missing local metadata safely.",
       "criticality": "important",
-      "source_files": ["electron/main.ts", "electron/preload.ts", "package.json"],
-      "expected_user_behavior": "Development mode reports updates disabled; packaged mode reports missing release infrastructure cleanly and remains usable.",
-      "automated_test_references": ["electron/main.test.ts", "scripts/release-guardian.test.mjs", "release-certification/updater-fixtures/current/latest-mac.yml", "release-certification/updater-fixtures/newer/latest-mac.yml", "release-certification/updater-fixtures/malformed/latest-mac.yml"],
-      "development_build_test_method": "Invoke Check for Updates and verify the disabled development message.",
-      "packaged_build_test_method": "Leave the production feed untouched, then drive electron-updater's metadata parser and semantic-version decision path against local latest-mac.yml fixtures for same-version, newer-version, malformed, and missing metadata without download or install.",
+      "source_files": ["electron/main.ts", "electron/preload.ts", "electron/updater.ts", "package.json"],
+      "expected_user_behavior": "Development mode reports updates disabled; operators explicitly approve download and restart; protected paper work blocks installation.",
+      "automated_test_references": ["electron/main.test.ts", "electron/preload.test.ts", "electron/updater.test.ts", "scripts/release-guardian.test.mjs", "release-certification/updater-fixtures/current/latest-mac.yml", "release-certification/updater-fixtures/newer/latest-mac.yml", "release-certification/updater-fixtures/malformed/latest-mac.yml"],
+      "development_build_test_method": "Exercise the dependency-injected updater state machine and explicit internal test channel without network access.",
+      "packaged_build_test_method": "Verify ZIP, latest-mac.yml, explicit download approval, defer, double install gate, and bounded update failures.",
       "required_backend_or_dependency": "Local-file deterministic updater fixtures; a published update is not required for isolated updater-logic PASS.",
       "safe_fallback_behavior": "Display 'The update check could not be completed' and keep the app usable.",
       "prohibited_side_effects": ["automatic download without confirmation", "trade authorization", "broker submission"],
       "current_certification_status": "NOT_TESTED",
-      "ipc_channels": ["sigil:check-for-updates"],
+      "ipc_channels": ["sigil:get-updater-snapshot", "sigil:check-for-updates", "sigil:approve-update-download", "sigil:defer-update", "sigil:restart-and-install-update"],
       "ui": {
-        "controls": ["Check for Updates"]
+        "controls": ["Check for Updates", "Download Update", "Later", "Restart and Install"]
       }
     },
     {

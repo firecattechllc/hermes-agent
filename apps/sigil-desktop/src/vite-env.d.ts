@@ -73,8 +73,14 @@ interface SigilDesktopApi {
     channel: 'dev' | 'release'
     applicationMode: 'Live development' | 'Packaged release'
   }
-  checkForUpdates?: () => Promise<{ status: string; message: string }>
-  onUpdateStatus?: () => () => void
+  getUpdaterSnapshot?: () => Promise<Record<string, unknown>>
+  checkForUpdates?: () => Promise<Record<string, unknown>>
+  approveUpdateDownload?: () => Promise<Record<string, unknown>>
+  deferUpdate?: () => Promise<Record<string, unknown>>
+  restartAndInstallUpdate?: () => Promise<Record<string, unknown>>
+  subscribeToUpdaterState?: (
+    listener: (snapshot: Record<string, unknown>) => void
+  ) => () => void
   releaseCertification?: (
     payload: Readonly<Record<string, unknown>>
   ) => Promise<Record<string, unknown>>

@@ -17,6 +17,11 @@ const SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL = 'sigil:search-market-universe'
 const SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL = 'sigil:get-alpaca-market-data-status'
 const SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL = 'sigil:control-alpaca-market-data'
 const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
+const SIGIL_UPDATER_SNAPSHOT_CHANNEL = 'sigil:get-updater-snapshot'
+const SIGIL_UPDATE_DOWNLOAD_CHANNEL = 'sigil:approve-update-download'
+const SIGIL_UPDATE_DEFER_CHANNEL = 'sigil:defer-update'
+const SIGIL_UPDATE_INSTALL_CHANNEL = 'sigil:restart-and-install-update'
+const SIGIL_UPDATER_STATE_EVENT = 'sigil:updater-state'
 const SIGIL_RELEASE_CERTIFICATION_CHANNEL = 'sigil:release-certification'
 
 contextBridge.exposeInMainWorld('sigilDesktop', {
@@ -31,8 +36,17 @@ contextBridge.exposeInMainWorld('sigilDesktop', {
     channel: process.env.SIGIL_DEV_SERVER ? 'dev' : 'release',
     applicationMode: process.env.SIGIL_DEV_SERVER ? 'Live development' : 'Packaged release'
   },
+  getUpdaterSnapshot: () => ipcRenderer.invoke(SIGIL_UPDATER_SNAPSHOT_CHANNEL),
   checkForUpdates: () => ipcRenderer.invoke(SIGIL_UPDATE_CHECK_CHANNEL),
-  onUpdateStatus: () => () => undefined,
+  approveUpdateDownload: () => ipcRenderer.invoke(SIGIL_UPDATE_DOWNLOAD_CHANNEL),
+  deferUpdate: () => ipcRenderer.invoke(SIGIL_UPDATE_DEFER_CHANNEL),
+  restartAndInstallUpdate: () => ipcRenderer.invoke(SIGIL_UPDATE_INSTALL_CHANNEL),
+  subscribeToUpdaterState: (listener: (snapshot: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, snapshot: unknown) => listener(snapshot)
+    ipcRenderer.on(SIGIL_UPDATER_STATE_EVENT, handler)
+
+    return () => ipcRenderer.removeListener(SIGIL_UPDATER_STATE_EVENT, handler)
+  },
   releaseCertification: (payload: Readonly<Record<string, unknown>>) =>
     ipcRenderer.invoke(SIGIL_RELEASE_CERTIFICATION_CHANNEL, payload),
   getBackendStatus: () => ipcRenderer.invoke(SIGIL_BACKEND_STATUS_CHANNEL),

@@ -2,7 +2,7 @@
   "name": "@firecattechnology/sigil-desktop",
   "productName": "Sigil",
   "private": true,
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Standalone governance-first Sigil desktop product.",
   "type": "module",
   "main": "dist/electron-main.mjs",
@@ -17,6 +17,13 @@
     "build": "vite build && node scripts/bundle-electron.mjs",
     "dist:mac:zip": "npm run build && electron-builder --mac zip",
     "dist:mac:dmg": "npm run build && electron-builder --mac dmg",
+    "update:check-config": "node scripts/release-config.mjs check",
+    "update:test": "vitest run electron/updater.test.ts electron/preload.test.ts",
+    "release:unsigned-test": "node scripts/release-config.mjs unsigned-test",
+    "release:mac": "npm run update:check-config && npm run build && electron-builder --mac --arm64 --publish never",
+    "release:mac:notarized": "node scripts/release-config.mjs notarized",
+    "release:verify": "node scripts/release-certify.mjs verify",
+    "release:certify": "node scripts/release-certify.mjs certify",
     "check": "npm run typecheck && npm run test && npm run lint",
     "fix": "eslint src electron scripts --fix"
   },
@@ -24,6 +31,7 @@
     "@tabler/icons-react": "^3.41.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.9",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "tailwind-merge": "^3.5.0"
@@ -77,8 +85,20 @@
     ],
     "asar": true,
     "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["arm64"]
+        }
+      ],
       "category": "public.app-category.finance",
       "icon": "assets/icon.svg",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "extendInfo": {
         "CFBundleDisplayName": "Sigil",
         "CFBundleExecutable": "Sigil",
@@ -89,6 +109,12 @@
     },
     "dmg": {
       "title": "Install Sigil"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "firecattechllc",
+      "repo": "hermes-agent",
+      "releaseType": "prerelease"
     }
   }
 }
