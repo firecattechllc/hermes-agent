@@ -12,9 +12,11 @@
     "dev:renderer": "vite --host 127.0.0.1 --port 5175",
     "dev:electron": "wait-on http://127.0.0.1:5175 && node scripts/bundle-electron.mjs && cross-env SIGIL_DEV_SERVER=http://127.0.0.1:5175 electron .",
     "test": "vitest run",
+    "prepare:packaged-backend": "node scripts/prepare-packaged-backend.mjs",
+    "test:packaged-backend": "node scripts/test-packaged-backend.mjs",
     "typecheck": "tsc -p . --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "lint": "eslint src electron scripts",
-    "build": "vite build && node scripts/bundle-electron.mjs",
+    "build": "npm run test:packaged-backend && vite build && node scripts/bundle-electron.mjs",
     "dist:mac:zip": "npm run build && electron-builder --mac zip",
     "dist:mac:dmg": "npm run build && electron-builder --mac dmg",
     "update:check-config": "node scripts/release-config.mjs check",
@@ -71,17 +73,13 @@
     ],
     "extraResources": [
       {
-        "from": "../sigil/src/sigil",
+        "from": "packaged-backend/staged/sigil",
         "to": "sigil-backend/sigil",
         "filter": [
           "**/*.py",
           "!**/__pycache__/**",
           "!**/*.pyc"
         ]
-      },
-      {
-        "from": "packaged-backend/sigil/__init__.py",
-        "to": "sigil-backend/sigil/__init__.py"
       }
     ],
     "asar": true,
