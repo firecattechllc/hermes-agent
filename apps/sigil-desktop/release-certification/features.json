@@ -249,7 +249,7 @@
       "safe_fallback_behavior": "Failed bridge/update calls return bounded error state.",
       "prohibited_side_effects": ["Node integration", "arbitrary IPC", "credential exposure"],
       "current_certification_status": "NOT_TESTED",
-      "ipc_channels": ["sigil:get-backend-status", "sigil:explain-proposal", "sigil:get-runtime-snapshot", "sigil:control-paper-cycle", "sigil:control-paper-authorization", "sigil:reset-paper-runtime", "sigil:get-provider-snapshot", "sigil:get-market-universe-status", "sigil:search-market-universe", "sigil:get-alpaca-market-data-status", "sigil:control-alpaca-market-data", "sigil:check-for-updates"]
+      "ipc_channels": ["sigil:get-backend-status", "sigil:explain-proposal", "sigil:get-runtime-snapshot", "sigil:control-paper-cycle", "sigil:control-paper-authorization", "sigil:reset-paper-runtime", "sigil:get-provider-snapshot", "sigil:get-market-universe-status", "sigil:search-market-universe", "sigil:get-alpaca-market-data-status", "sigil:control-alpaca-market-data", "sigil:get-asset-catalog-status", "sigil:refresh-asset-catalog", "sigil:get-research-universe-status", "sigil:check-for-updates"]
     },
     {
       "id": "identity.about-center",

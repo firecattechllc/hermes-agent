@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import type {
+  AssetCatalogStatus,
   MarketUniverseSearchResult,
   MarketUniverseStatus,
   SigilProviderSnapshot
@@ -102,6 +103,12 @@ interface SigilDesktopApi {
   searchMarketUniverse?: (
     payload: Readonly<Record<string, unknown>>
   ) => Promise<SigilBackendResponse<MarketUniverseSearchResult>>
+  getAssetCatalogStatus?: () => Promise<
+    SigilBackendResponse<AssetCatalogStatus>
+  >
+  refreshAssetCatalog?: () => Promise<
+    SigilBackendResponse<AssetCatalogStatus>
+  >
   explainProposal: (
     payload: SigilProposalExplanationPayload
   ) => Promise<SigilBackendResponse<SigilBackendProposalExplanation>>

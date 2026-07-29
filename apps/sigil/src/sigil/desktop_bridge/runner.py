@@ -13,10 +13,20 @@ import sys
 from datetime import datetime, timezone
 from typing import Any, Final
 
-from .providers import provider_snapshot
-from .alpaca_market_data import alpaca_market_data_status, control_alpaca_market_data
-from .market_universe import market_universe_search, market_universe_status
 from sigil.market_universe import UniverseValidationError
+
+from .alpaca_market_data import alpaca_market_data_status, control_alpaca_market_data
+from .asset_catalog import (
+    asset_catalog_exclusions,
+    asset_catalog_refresh,
+    asset_catalog_sample,
+    asset_catalog_snapshot,
+    asset_catalog_statistics,
+    asset_catalog_status,
+    research_universe_status,
+)
+from .market_universe import market_universe_search, market_universe_status
+from .providers import provider_snapshot
 from .runtime import (
     control_paper_authorization,
     control_paper_cycle,
@@ -37,6 +47,14 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "market_universe_search",
     "alpaca_market_data_status",
     "control_alpaca_market_data",
+    "asset_catalog_status",
+    "asset_catalog_refresh",
+    "asset_catalog_snapshot",
+    "asset_catalog_statistics",
+    "asset_catalog_sample",
+    "asset_catalog_exclusions",
+    "research_universe_status",
+    "research_universe_advance",
 )
 
 
@@ -277,6 +295,33 @@ def handle_request(request: object) -> dict[str, Any]:
             return {"ok": True, "result": control_alpaca_market_data(request.get("payload"))}
         except ValueError as error:
             return error_response("alpaca_market_data_control_denied", str(error))
+
+    if command == "asset_catalog_status":
+        return {"ok": True, "result": asset_catalog_status()}
+
+    if command == "asset_catalog_refresh":
+        return {"ok": True, "result": asset_catalog_refresh()}
+
+    if command == "asset_catalog_snapshot":
+        return {
+            "ok": True,
+            "result": asset_catalog_snapshot(request.get("payload")),
+        }
+
+    if command == "asset_catalog_statistics":
+        return {"ok": True, "result": asset_catalog_statistics()}
+
+    if command == "asset_catalog_sample":
+        return {"ok": True, "result": asset_catalog_sample()}
+
+    if command == "asset_catalog_exclusions":
+        return {"ok": True, "result": asset_catalog_exclusions()}
+
+    if command == "research_universe_status":
+        return {"ok": True, "result": research_universe_status()}
+
+    if command == "research_universe_advance":
+        return {"ok": True, "result": research_universe_status(advance=True)}
 
     return error_response(
         "unsupported_command",

@@ -16,6 +16,9 @@ const SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL = 'sigil:get-market-universe-status'
 const SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL = 'sigil:search-market-universe'
 const SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL = 'sigil:get-alpaca-market-data-status'
 const SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL = 'sigil:control-alpaca-market-data'
+const SIGIL_ASSET_CATALOG_STATUS_CHANNEL = 'sigil:get-asset-catalog-status'
+const SIGIL_ASSET_CATALOG_REFRESH_CHANNEL = 'sigil:refresh-asset-catalog'
+const SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL = 'sigil:get-research-universe-status'
 const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
 const SIGIL_UPDATER_SNAPSHOT_CHANNEL = 'sigil:get-updater-snapshot'
 const SIGIL_UPDATE_DOWNLOAD_CHANNEL = 'sigil:approve-update-download'
@@ -64,6 +67,12 @@ contextBridge.exposeInMainWorld('sigilDesktop', {
     ipcRenderer.invoke(SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL),
   controlAlpacaMarketData: (action: string) =>
     ipcRenderer.invoke(SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL, action),
+  getAssetCatalogStatus: () =>
+    ipcRenderer.invoke(SIGIL_ASSET_CATALOG_STATUS_CHANNEL),
+  refreshAssetCatalog: () =>
+    ipcRenderer.invoke(SIGIL_ASSET_CATALOG_REFRESH_CHANNEL),
+  getResearchUniverseStatus: () =>
+    ipcRenderer.invoke(SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL),
   explainProposal: (payload: Readonly<Record<string, unknown>>) =>
     ipcRenderer.invoke(SIGIL_EXPLAIN_PROPOSAL_CHANNEL, payload)
 })

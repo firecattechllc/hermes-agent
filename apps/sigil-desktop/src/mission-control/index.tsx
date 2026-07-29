@@ -22,6 +22,7 @@ import { desktopSigilOperatorAdapter } from './desktop-adapter'
 import { sigilOperatorAdapter as mockSigilOperatorAdapter } from './mock-adapter'
 import type {
   AlpacaMarketDataStatus,
+  AssetCatalogStatus,
   AuditEvent,
   MarketUniverseSearchResult,
   MarketUniverseStatus,
@@ -34,7 +35,7 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const RELEASE_STAGE = 'V1.8'
+const RELEASE_STAGE = 'V1.9'
 
 const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
@@ -916,7 +917,7 @@ function ProviderPanel({
           <div className="bg-(--ui-bg-primary) py-4 lg:pr-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="text-xs font-semibold">U.S.-listed paper screening universe</h3>
+                <h3 className="text-xs font-semibold">Alpaca catalog provider status</h3>
                 <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">{snapshot.alpaca.message}</p>
                 {snapshot.alpaca.universe ? (
                   <>
@@ -932,7 +933,7 @@ function ProviderPanel({
                       Coverage {snapshot.alpaca.universe.available}/{snapshot.alpaca.universe.total} symbols · source: {snapshot.alpaca.universe.catalog_source ?? snapshot.alpaca.universe.scope} · freshness: {snapshot.alpaca.universe.catalog_freshness ?? 'unverified'}
                     </p>
                     <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
-                      IEX quotes are real-time. Broader U.S. historical data is delayed by 15 minutes. Every active U.S. stock is not claimed as watched because provider asset-catalog access is not verified.
+                      The full Alpaca asset catalog and the governed proposal universe are separate. IEX market data is partial-market, and broader SIP history remains delayed by 15 minutes.
                     </p>
                     {snapshot.alpaca.universe.coverage_limitation ? (
                       <p className="mt-1 max-w-3xl text-[0.6875rem] text-amber-700 dark:text-amber-300">
@@ -1034,13 +1035,17 @@ function ProviderPanel({
 function MarketUniversePanel({
   error,
   loading,
+  onRefresh,
   onSearch,
+  refreshing,
   results,
   status
 }: {
   error: string | null
   loading: boolean
+  onRefresh: () => void
   onSearch: (query: string, universe: string) => void
+  refreshing: boolean
   results: MarketUniverseSearchResult | null
   status: MarketUniverseStatus | null
 }) {
@@ -1064,15 +1069,21 @@ function MarketUniversePanel({
         <StatusLabel tone={status?.target_capacity_validated ? 'success' : 'warning'}>
           {status?.catalog_scope ?? 'Catalog unavailable'}
         </StatusLabel>
+        <Button disabled={refreshing} onClick={onRefresh} size="xs" variant="outline">
+          <Codicon name="refresh" />
+          {refreshing ? 'Refreshing catalog…' : 'Refresh catalog'}
+        </Button>
       </div>
       {status ? (
         <>
-          <div className="mt-3 grid gap-px bg-(--ui-stroke-tertiary) sm:grid-cols-4">
+          <div className="mt-3 grid gap-px bg-(--ui-stroke-tertiary) sm:grid-cols-3 xl:grid-cols-6">
             {[
-              ['Master', status.master_count],
-              ['Broker tradable', status.broker_tradable_count],
-              ['Actively researched', status.actively_researched_count],
-              ['Proposal eligible', status.proposal_eligible_count]
+              ['Discovered', status.source_record_count],
+              ['Active', status.active_count],
+              ['Tradable', status.broker_tradable_count],
+              ['Fractionable', status.fractionable_count],
+              ['Proposal eligible', status.proposal_eligible_count],
+              ['Excluded', status.excluded_count]
             ].map(([label, value]) => (
               <div className="bg-(--ui-bg-secondary) p-3" key={label}>
                 <div className="text-[0.625rem] uppercase text-(--ui-text-tertiary)">{label}</div>
@@ -1084,7 +1095,7 @@ function MarketUniversePanel({
             Coverage boundary: {status.coverage_limitation}
           </p>
           <p className="mt-1 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
-            Target {status.target_minimum.toLocaleString()}–{status.target_maximum.toLocaleString()} · {status.capacity_certification} · broker submission unavailable
+            Source: {status.catalog_source} · catalog: {status.cache_state} · age: {status.cache_age_seconds ?? 'unavailable'}s · integrity: {status.integrity} · execution: paper only · broker submission disabled
           </p>
         </>
       ) : null}
@@ -1159,6 +1170,12 @@ interface MissionControlDesktopApi {
   ) => Promise<
     { ok: true; result: MarketUniverseSearchResult } | { ok: false; error: string; message: string }
   >
+  getAssetCatalogStatus?: () => Promise<
+    { ok: true; result: AssetCatalogStatus } | { ok: false; error: string; message: string }
+  >
+  refreshAssetCatalog?: () => Promise<
+    { ok: true; result: AssetCatalogStatus } | { ok: false; error: string; message: string }
+  >
   buildInfo?: {
     version: string
     build: string
@@ -1224,6 +1241,7 @@ export function SigilOperatorView({
   const [universeResults, setUniverseResults] = useState<MarketUniverseSearchResult | null>(null)
   const [universeLoading, setUniverseLoading] = useState(false)
   const [universeError, setUniverseError] = useState<string | null>(null)
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false)
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [pendingAuthorizationAction, setPendingAuthorizationAction] = useState<'grant' | 'revoke' | null>(null)
   const [pendingPaperReset, setPendingPaperReset] = useState(false)
@@ -1299,6 +1317,35 @@ export function SigilOperatorView({
       .catch(reason => setUniverseError(reason instanceof Error ? reason.message : String(reason)))
       .finally(() => setUniverseLoading(false))
   }, [])
+
+  const refreshCatalog = useCallback((): void => {
+    const api = desktopApi()
+
+    if (!api?.refreshAssetCatalog) {
+      return
+    }
+
+    setCatalogRefreshing(true)
+    setUniverseError(null)
+    void api.refreshAssetCatalog()
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(response.message)
+        }
+
+        return api.getMarketUniverseStatus?.()
+      })
+      .then(response => {
+        if (response?.ok) {
+          setUniverseStatus(response.result)
+          searchUniverse('', 'master')
+        } else if (response && !response.ok) {
+          throw new Error(response.message)
+        }
+      })
+      .catch(reason => setUniverseError(reason instanceof Error ? reason.message : String(reason)))
+      .finally(() => setCatalogRefreshing(false))
+  }, [searchUniverse])
 
   useEffect(() => {
     let cancelled = false
@@ -1693,7 +1740,9 @@ export function SigilOperatorView({
               <MarketUniversePanel
                 error={universeError}
                 loading={universeLoading}
+                onRefresh={refreshCatalog}
                 onSearch={searchUniverse}
+                refreshing={catalogRefreshing}
                 results={universeResults}
                 status={universeStatus}
               />

@@ -17,6 +17,7 @@ def isolated_runtime(
         "SIGIL_DESKTOP_STATE_DIR",
         str(tmp_path / "paper-state"),
     )
+    monkeypatch.setenv("SIGIL_ASSET_CATALOG_MODE", "demo")
 
 
 def test_pause_blocks_future_cycles_proposals_and_executions() -> None:

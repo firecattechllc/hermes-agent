@@ -20,6 +20,7 @@ def isolated_runtime(
         "SIGIL_DESKTOP_STATE_DIR",
         str(tmp_path / "paper-state"),
     )
+    monkeypatch.setenv("SIGIL_ASSET_CATALOG_MODE", "demo")
 
 
 def test_repeated_start_preserves_existing_schedule() -> None:

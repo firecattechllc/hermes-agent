@@ -25,6 +25,9 @@ export const SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL = 'sigil:get-market-universe-s
 export const SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL = 'sigil:search-market-universe'
 export const SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL = 'sigil:get-alpaca-market-data-status'
 export const SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL = 'sigil:control-alpaca-market-data'
+export const SIGIL_ASSET_CATALOG_STATUS_CHANNEL = 'sigil:get-asset-catalog-status'
+export const SIGIL_ASSET_CATALOG_REFRESH_CHANNEL = 'sigil:refresh-asset-catalog'
+export const SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL = 'sigil:get-research-universe-status'
 export const SIGIL_UPDATER_SNAPSHOT_CHANNEL = 'sigil:get-updater-snapshot'
 export const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
 export const SIGIL_UPDATE_DOWNLOAD_CHANNEL = 'sigil:approve-update-download'
@@ -239,7 +242,7 @@ export function runBridgeRequest<T>(
         error: 'backend_timeout',
         message: 'The local Sigil backend did not respond in time.'
       })
-    }, request.command === 'provider_snapshot' ? 30_000 : 5_000)
+    }, ['provider_snapshot', 'asset_catalog_refresh'].includes(request.command) ? 45_000 : 5_000)
 
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
@@ -349,6 +352,9 @@ export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_PROVIDER_SNAPSHOT_CHANNEL)
   ipcMain.removeHandler(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL)
+  ipcMain.removeHandler(SIGIL_ASSET_CATALOG_STATUS_CHANNEL)
+  ipcMain.removeHandler(SIGIL_ASSET_CATALOG_REFRESH_CHANNEL)
+  ipcMain.removeHandler(SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_UPDATE_CHECK_CHANNEL)
   ipcMain.removeHandler(SIGIL_UPDATER_SNAPSHOT_CHANNEL)
   ipcMain.removeHandler(SIGIL_UPDATE_DOWNLOAD_CHANNEL)
@@ -407,6 +413,15 @@ export function registerSigilIpc(): void {
     SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL,
     (_event, action: string) =>
       runBridgeRequest({ command: 'control_alpaca_market_data', payload: { action } })
+  )
+  ipcMain.handle(SIGIL_ASSET_CATALOG_STATUS_CHANNEL, () =>
+    runBridgeRequest({ command: 'asset_catalog_status' })
+  )
+  ipcMain.handle(SIGIL_ASSET_CATALOG_REFRESH_CHANNEL, () =>
+    runBridgeRequest({ command: 'asset_catalog_refresh' })
+  )
+  ipcMain.handle(SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL, () =>
+    runBridgeRequest({ command: 'research_universe_status' })
   )
   ipcMain.handle(SIGIL_UPDATER_SNAPSHOT_CHANNEL, () => governedUpdater?.getSnapshot())
   ipcMain.handle(SIGIL_UPDATE_CHECK_CHANNEL, () => governedUpdater?.check())

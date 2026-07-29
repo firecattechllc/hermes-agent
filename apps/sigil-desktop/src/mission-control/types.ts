@@ -156,10 +156,12 @@ export interface MarketUniverseStatus {
   snapshot_id: string
   generated_at: string
   source_record_count: number
+  active_count: number
   master_count: number
   broker_tradable_count: number
   actively_researched_count: number
   proposal_eligible_count: number
+  fractionable_count: number
   conflicted_count: number
   excluded_count: number
   target_minimum: number
@@ -169,8 +171,43 @@ export interface MarketUniverseStatus {
   catalog_scope: string
   capacity_certification: string
   coverage_limitation: string
+  cache_state: string
+  cache_age_seconds: number | null
+  integrity: string
+  exchange_counts: Readonly<Record<string, number>>
+  exclusion_reason_counts: Readonly<Record<string, number>>
   broker_submission_available: false
   execution_authorized: false
+}
+
+export interface AssetCatalogStatus {
+  provider: 'alpaca'
+  environment: 'paper'
+  broker_submission: false
+  revision: string
+  source: string
+  endpoint: string
+  status: string
+  cache_state: string
+  failure_code: string | null
+  freshness: {
+    fetched_at?: string
+    validated_at?: string
+    age_seconds?: number
+    freshness_seconds?: number
+    stale_after_seconds?: number
+  }
+  integrity: string
+  statistics: {
+    total_assets_discovered: number
+    active_assets: number
+    tradable_assets: number
+    fractionable_assets: number
+    proposal_eligible_assets: number
+    excluded_assets: number
+    exchange_counts: Readonly<Record<string, number>>
+    exclusion_reason_counts: Readonly<Record<string, number>>
+  }
 }
 
 export interface MarketUniverseInstrument {

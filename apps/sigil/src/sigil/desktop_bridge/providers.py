@@ -17,12 +17,9 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from .universe import US_LISTED_SCREENING_UNIVERSE
-
 MAX_CREDENTIAL_BYTES = 32_768
 MAX_RESPONSE_BYTES = 2_000_000
 TIMEOUT_SECONDS = 10.0
-SYMBOLS = tuple(item["symbol"] for item in US_LISTED_SCREENING_UNIVERSE)
 ALLOWED_KEYS = frozenset(
     {
         "SIGIL_ALPACA_API_KEY_ID",
@@ -112,112 +109,50 @@ def _json_request(
 
 
 def _alpaca(credentials: dict[str, str], opener: Callable[[Request, float], object] | None) -> dict[str, Any]:
+    del opener
     key = credentials.get("SIGIL_ALPACA_API_KEY_ID")
     secret = credentials.get("SIGIL_ALPACA_API_SECRET_KEY")
     if not key or not secret:
         return {"status": "not_configured", "message": "Local credentials are not configured.", "symbols": []}
-    symbols: list[dict[str, str]] = []
-    universe_by_symbol = {
-        item["symbol"]: item for item in US_LISTED_SCREENING_UNIVERSE
-    }
     try:
-        payload = _json_request(
-            "https://data.alpaca.markets/v2/stocks/snapshots"
-            f"?symbols={','.join(SYMBOLS)}&feed=iex",
-            method="GET",
-            headers={
-                "Accept": "application/json",
-                "APCA-API-KEY-ID": key,
-                "APCA-API-SECRET-KEY": secret,
-            },
-            opener=opener,
-        )
-        if not isinstance(payload, dict):
-            raise RuntimeError("Alpaca response shape is invalid")
-        snapshots = payload.get("snapshots", payload)
-        if not isinstance(snapshots, dict):
-            raise RuntimeError("Alpaca response shape is invalid")
-        for symbol in SYMBOLS:
-            snapshot = snapshots.get(symbol)
-            if not isinstance(snapshot, dict):
-                continue
-            trade = snapshot.get("latestTrade")
-            daily = snapshot.get("dailyBar")
-            previous = snapshot.get("prevDailyBar")
-            if not isinstance(trade, dict):
-                continue
-            price = trade.get("p")
-            observed_at = trade.get("t")
-            if isinstance(price, bool) or not isinstance(price, (int, float)):
-                continue
-            daily_close = daily.get("c") if isinstance(daily, dict) else None
-            previous_close = (
-                previous.get("c") if isinstance(previous, dict) else None
-            )
-            change = None
-            if (
-                isinstance(daily_close, (int, float))
-                and not isinstance(daily_close, bool)
-                and isinstance(previous_close, (int, float))
-                and not isinstance(previous_close, bool)
-                and previous_close != 0
-            ):
-                change = ((float(daily_close) / float(previous_close)) - 1) * 100
-            symbols.append(
-                {
-                    "symbol": symbol,
-                    "name": str(universe_by_symbol[symbol]["name"]),
-                    "sector": str(universe_by_symbol[symbol]["sector"]),
-                    "price": f"{float(price):.2f}",
-                    "observed_at": str(observed_at or "unavailable"),
-                    "daily_change_percent": (
-                        f"{change:.2f}" if change is not None else "unavailable"
-                    ),
-                    "screen_status": (
-                        "available" if change is not None else "quote-only"
-                    ),
-                    "source": "Alpaca IEX snapshot",
-                }
-            )
-        symbols.sort(
-            key=lambda item: (
-                item["daily_change_percent"] == "unavailable",
-                -float(item["daily_change_percent"])
-                if item["daily_change_percent"] != "unavailable"
-                else 0,
-                item["symbol"],
-            )
-        )
-        available = len(symbols)
-        status = "connected" if available == len(SYMBOLS) else "degraded"
+        from sigil.asset_catalog import AssetCatalogService
+
+        from .runtime import _state_directory
+
+        catalog = AssetCatalogService(_state_directory()).status()
+        statistics = catalog["statistics"]
+        cache_state = catalog["cache_state"]
+        total = statistics["total_assets_discovered"]
         return {
-            "status": status,
-            "message": (
-                "Bounded U.S.-listed screen refreshed from read-only IEX snapshots."
-                if available
-                else "No current screening rows were available."
+            "status": (
+                "connected"
+                if cache_state == "fresh"
+                else "degraded"
             ),
-            "symbols": symbols,
+            "message": (
+                "Governed Alpaca paper asset catalog is available."
+                if total
+                else "Governed Alpaca paper asset catalog is unavailable."
+            ),
+            "symbols": [],
             "universe": {
-                "scope": "12 explicitly defined U.S.-listed demonstration equities",
-                "total": len(SYMBOLS),
-                "available": available,
-                "unavailable": len(SYMBOLS) - available,
-                "catalog_source": "Sigil bounded demonstration universe",
-                "catalog_freshness": "Static local definition; provider catalog unverified",
-                "iex_status": "real-time",
-                "broader_us_status": "15-minute delayed historical data available; catalog unverified",
-                "criteria": "Latest IEX quote availability; ranked by daily close change when available",
+                "scope": "Full Alpaca asset catalog discovered" if total else "Catalog unavailable",
+                "total": total,
+                "available": statistics["proposal_eligible_assets"],
+                "unavailable": statistics["excluded_assets"],
+                "catalog_source": "Alpaca Paper Trading Assets API",
+                "catalog_freshness": cache_state,
+                "iex_status": "live partial-market IEX",
+                "broader_us_status": "15-minute delayed SIP",
+                "criteria": "Governed proposal eligibility with explicit exclusions",
                 "whole_market_coverage": False,
-                "catalog_access": "unavailable_current_credentials",
+                "catalog_access": cache_state,
                 "coverage_limitation": (
-                    "Current Alpaca credentials authorize IEX market data but "
-                    "not the Alpaca trading asset catalog; full U.S. listing "
-                    "enumeration is unavailable."
+                    "Full catalog discovery does not imply full market-data coverage; "
+                    "IEX is partial-market and OTC data is unavailable."
                 ),
                 "refresh_policy": (
-                    "One batched read-only snapshot request every 30 seconds; "
-                    "errors retain explicit unavailable coverage."
+                    "Governed read-only refresh with a 24-hour freshness policy."
                 ),
             },
         }
@@ -225,26 +160,24 @@ def _alpaca(credentials: dict[str, str], opener: Callable[[Request, float], obje
         return {
             "status": "degraded",
             "message": str(error),
-            "symbols": symbols,
+            "symbols": [],
             "universe": {
-                "scope": "12 explicitly defined U.S.-listed demonstration equities",
-                "total": len(SYMBOLS),
-                "available": len(symbols),
-                "unavailable": len(SYMBOLS) - len(symbols),
-                "catalog_source": "Sigil bounded demonstration universe",
-                "catalog_freshness": "Static local definition; provider catalog unverified",
-                "iex_status": "real-time when provider is available",
-                "broader_us_status": "15-minute delayed historical data available; catalog unverified",
-                "criteria": "Provider data unavailable; no values invented",
+                "scope": "Catalog unavailable",
+                "total": 0,
+                "available": 0,
+                "unavailable": 0,
+                "catalog_source": "Alpaca Paper Trading Assets API",
+                "catalog_freshness": "unavailable",
+                "iex_status": "live partial-market IEX",
+                "broader_us_status": "15-minute delayed SIP",
+                "criteria": "Catalog-dependent research suspended safely",
                 "whole_market_coverage": False,
-                "catalog_access": "unavailable_current_credentials",
+                "catalog_access": "unavailable",
                 "coverage_limitation": (
-                    "Current Alpaca credentials do not expose an enumerable "
-                    "full U.S. asset catalog."
+                    "No validated catalog or usable cache is available."
                 ),
                 "refresh_policy": (
-                    "One batched read-only snapshot request every 30 seconds; "
-                    "no automatic mutation or broker fallback."
+                    "No demonstration fallback; refresh is explicit and read-only."
                 ),
             },
         }

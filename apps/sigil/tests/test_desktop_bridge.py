@@ -1,7 +1,15 @@
 import json
 
+import pytest
+
+from sigil.asset_catalog import AssetCatalogStore, build_snapshot
 from sigil.desktop_bridge.providers import load_credentials, provider_snapshot
 from sigil.desktop_bridge.runner import backend_status, handle_request
+
+
+@pytest.fixture(autouse=True)
+def isolated_state(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setenv("SIGIL_DESKTOP_STATE_DIR", str(tmp_path / "paper-state"))
 
 
 def proposal_request() -> dict[str, object]:
@@ -45,6 +53,14 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "market_universe_search",
         "alpaca_market_data_status",
         "control_alpaca_market_data",
+        "asset_catalog_status",
+        "asset_catalog_refresh",
+        "asset_catalog_snapshot",
+        "asset_catalog_statistics",
+        "asset_catalog_sample",
+        "asset_catalog_exclusions",
+        "research_universe_status",
+        "research_universe_advance",
     ]
 
 
@@ -121,12 +137,38 @@ def test_unknown_command_fails_closed() -> None:
     }
 
 
-def test_market_universe_projection_and_bounded_search_are_read_only() -> None:
+def test_market_universe_projection_and_bounded_search_are_read_only(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_directory = tmp_path / "universe-state"
+    monkeypatch.setenv("SIGIL_DESKTOP_STATE_DIR", str(state_directory))
+    snapshot = build_snapshot(
+        [
+            {
+                "id": "asset-aapl",
+                "class": "us_equity",
+                "exchange": "NASDAQ",
+                "symbol": "AAPL",
+                "name": "Apple",
+                "status": "active",
+                "tradable": True,
+                "fractionable": True,
+            }
+        ],
+        discovered_at="2026-07-28T18:00:00Z",
+    )
+    AssetCatalogStore(state_directory).write(
+        snapshot,
+        fetched_at="2026-07-28T18:00:00Z",
+        validated_at="2026-07-28T18:00:00Z",
+        freshness_seconds=604_800,
+        stale_after_seconds=1_209_600,
+    )
     status = handle_request({"command": "market_universe_status"})
     assert status["ok"] is True
-    assert status["result"]["master_count"] == 12
-    assert status["result"]["target_minimum"] == 8000
-    assert status["result"]["target_capacity_validated"] is False
+    assert status["result"]["master_count"] == 1
+    assert status["result"]["catalog_source"] == "Alpaca Paper Trading Assets API"
+    assert status["result"]["target_capacity_validated"] is True
     assert status["result"]["broker_submission_available"] is False
 
     search = handle_request(
@@ -228,17 +270,15 @@ def test_provider_snapshot_is_read_only_masked_and_secret_free(tmp_path) -> None
     result = provider_snapshot(opener=opener, path=credential_path)
     serialized = json.dumps(result)
 
-    assert result["alpaca"]["status"] == "connected"
+    assert result["alpaca"]["status"] == "degraded"
     universe = result["alpaca"]["universe"]
-    assert universe["scope"] == (
-        "12 explicitly defined U.S.-listed demonstration equities"
-    )
-    assert universe["total"] == 12
-    assert universe["available"] == 12
+    assert universe["scope"] == "Catalog unavailable"
+    assert universe["total"] == 0
+    assert universe["available"] == 0
     assert universe["unavailable"] == 0
     assert universe["whole_market_coverage"] is False
-    assert universe["catalog_access"] == "unavailable_current_credentials"
-    assert len(result["alpaca"]["symbols"]) == 12
+    assert universe["catalog_access"] == "missing"
+    assert result["alpaca"]["symbols"] == []
     assert result["public"]["status"] == "connected"
     assert result["public"]["accounts"][0]["masked_account_id"] == "•••• 1234"
     assert result["broker_submission_available"] is False
@@ -246,6 +286,7 @@ def test_provider_snapshot_is_read_only_masked_and_secret_free(tmp_path) -> None
     assert "alpaca-secret" not in serialized
     assert "public-secret" not in serialized
     assert all(request.method in {"GET", "POST"} for request in requests)
+    assert not any("data.alpaca.markets" in request.full_url for request in requests)
     assert not any("/order" in request.full_url for request in requests)
     assert not any("transfer" in request.full_url for request in requests)
 

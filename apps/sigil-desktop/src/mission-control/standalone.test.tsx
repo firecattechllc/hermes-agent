@@ -142,20 +142,27 @@ describe('standalone Sigil Mission Control', () => {
           policy_version: 'sigil-market-universe-v1',
           snapshot_id: 'abc123',
           generated_at: '2026-07-27T00:00:00Z',
-          source_record_count: 12,
-          master_count: 12,
-          broker_tradable_count: 12,
-          actively_researched_count: 12,
-          proposal_eligible_count: 12,
+          source_record_count: 3,
+          active_count: 3,
+          master_count: 3,
+          broker_tradable_count: 2,
+          actively_researched_count: 1,
+          proposal_eligible_count: 2,
+          fractionable_count: 1,
           conflicted_count: 0,
-          excluded_count: 0,
-          target_minimum: 8000,
-          target_maximum: 12000,
-          target_capacity_validated: false,
-          catalog_source: 'Sigil bounded Alpha 1.4 seed catalog',
-          catalog_scope: '12 validated demonstration equities',
-          capacity_certification: 'deterministic synthetic suite validates 10,000 source records',
-          coverage_limitation: 'Real catalog coverage requires provider credentials.',
+          excluded_count: 1,
+          target_minimum: 0,
+          target_maximum: 0,
+          target_capacity_validated: true,
+          catalog_source: 'Alpaca Paper Trading Assets API',
+          catalog_scope: 'Full Alpaca asset catalog discovered',
+          capacity_certification: 'actual provider counts; no expected total',
+          coverage_limitation: 'Market-data coverage is partial under IEX.',
+          cache_state: 'fresh',
+          cache_age_seconds: 12,
+          integrity: 'verified',
+          exchange_counts: { NASDAQ: 3 },
+          exclusion_reason_counts: { not_tradable: 1 },
           broker_submission_available: false,
           execution_authorized: false
         }
@@ -195,19 +202,19 @@ describe('standalone Sigil Mission Control', () => {
       render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
 
       expect(await screen.findByText('Read-only provider health')).toBeTruthy()
-      expect(screen.getByText('U.S.-listed paper screening universe')).toBeTruthy()
+      expect(screen.getByText('Alpaca catalog provider status')).toBeTruthy()
       expect(screen.getByText(/Alpaca IEX · real-time/)).toBeTruthy()
       expect(screen.getByText(/Broader U.S. data · 15-minute delayed/)).toBeTruthy()
       expect(screen.getByText(/Coverage 1\/12 symbols/)).toBeTruthy()
-      expect(screen.getByText(/Every active U.S. stock is not claimed as watched/)).toBeTruthy()
+      expect(screen.getByText(/full Alpaca asset catalog and the governed proposal universe are separate/i)).toBeTruthy()
       expect(screen.getByText(/Full U.S. listing enumeration is unavailable/)).toBeTruthy()
       expect(screen.getAllByText('MSFT').length).toBeGreaterThan(0)
       expect(screen.getByText('•••• 1234')).toBeTruthy()
       expect(screen.getByText(/secrets exposed: no/i)).toBeTruthy()
       expect(screen.getByText('Governed market universe')).toBeTruthy()
-      expect(screen.getByText('12 validated demonstration equities')).toBeTruthy()
-      expect(screen.getByText(/Target 8,000–12,000/)).toBeTruthy()
-      expect(screen.getByText(/Real catalog coverage requires provider credentials/)).toBeTruthy()
+      expect(screen.getByText('Full Alpaca asset catalog discovered')).toBeTruthy()
+      expect(screen.getByText(/Source: Alpaca Paper Trading Assets API/)).toBeTruthy()
+      expect(screen.getByText(/Market-data coverage is partial under IEX/)).toBeTruthy()
       expect(screen.queryByText(/alpaca-secret|public-secret/i)).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: /Refresh providers/i }))
       await waitFor(() => expect(screen.getByText('Read-only market data is current.')).toBeTruthy())

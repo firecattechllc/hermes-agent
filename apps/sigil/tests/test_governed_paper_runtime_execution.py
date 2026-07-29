@@ -13,6 +13,7 @@ NOW = datetime(2026, 7, 26, 12, tzinfo=timezone.utc)
 @pytest.fixture(autouse=True)
 def isolated_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("SIGIL_DESKTOP_STATE_DIR", str(tmp_path / "paper-state"))
+    monkeypatch.setenv("SIGIL_ASSET_CATALOG_MODE", "demo")
 
 
 def buy(order_id: str = "ORD-1") -> dict[str, object]:

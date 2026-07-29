@@ -21,6 +21,7 @@ def isolated_runtime(
         "SIGIL_DESKTOP_STATE_DIR",
         str(tmp_path / "step40-paper-state"),
     )
+    monkeypatch.setenv("SIGIL_ASSET_CATALOG_MODE", "demo")
 
 
 def paper_buy(order_id: str) -> dict[str, object]:

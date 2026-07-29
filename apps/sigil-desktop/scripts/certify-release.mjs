@@ -443,6 +443,7 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
     const started = await api?.controlPaperCycle?.('start')
     const firstCycle = await api?.getRuntimeSnapshot?.()
     const secondStarted = await api?.controlPaperCycle?.('start')
+    await new Promise(resolve => setTimeout(resolve, 5200))
     const refreshed = await api?.getRuntimeSnapshot?.()
     const stopped = await api?.controlPaperCycle?.('stop')
     return {
@@ -609,7 +610,7 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
 
   if (mode === 'development') {
     await clickButton(session, 'Check for Updates')
-    await session.waitFor(`document.body.textContent.includes('Development mode')`)
+    await session.waitFor(`document.body.textContent.includes('Live development')`)
     result.updater = { status: 'disabled', clean_failure: true }
   } else {
     result.updater = {
@@ -750,7 +751,7 @@ function featureResultsFromEvidence({ devUi, packagedUi, packageEvidence, regist
   add('electron.ipc-and-preload', testEvidence.electron === 'PASS' && both(ui =>
     ui.preload.present &&
     ui.preload.broker_submission_available === false &&
-    ['buildInfo', 'checkForUpdates', 'explainProposal', 'getBackendStatus', 'onUpdateStatus']
+    ['buildInfo', 'checkForUpdates', 'explainProposal', 'getBackendStatus', 'subscribeToUpdaterState']
       .every(key => ui.preload.api_keys.includes(key))
   ) ? 'PASS' : 'FAIL', {
     evidence: ['test-output.log', 'development-ui.json#preload', 'packaged-ui.json#preload', 'coverage-enforcement.json'],
@@ -767,7 +768,7 @@ function featureResultsFromEvidence({ devUi, packagedUi, packageEvidence, regist
     ui.updater_fixture.current.updateAvailable === false &&
     ui.updater_fixture.current.updateVersion === packageJson.version &&
     ui.updater_fixture.newer.updateAvailable === true &&
-    ui.updater_fixture.newer.updateVersion === '1.1.1' &&
+    ui.updater_fixture.newer.updateVersion === '1.9.1' &&
     ui.updater_fixture.malformed.bounded === true &&
     ui.updater_fixture.missing.bounded === true &&
     [ui.updater_fixture.current, ui.updater_fixture.newer, ui.updater_fixture.malformed, ui.updater_fixture.missing]
@@ -1016,6 +1017,7 @@ async function main() {
           ...process.env,
           SIGIL_DEV_SERVER: 'http://127.0.0.1:5175',
           SIGIL_ADAPTER: 'mock',
+          SIGIL_ASSET_CATALOG_MODE: 'demo',
           SIGIL_RELEASE_CERTIFICATION_TOKEN: certificationToken
         },
         stdio: ['ignore', devOut, devErr]
@@ -1199,7 +1201,11 @@ async function main() {
       {
         cwd: stagedApplicationPath,
         detached: true,
-        env: { ...process.env, SIGIL_RELEASE_CERTIFICATION_TOKEN: certificationToken },
+        env: {
+          ...process.env,
+          SIGIL_ASSET_CATALOG_MODE: 'demo',
+          SIGIL_RELEASE_CERTIFICATION_TOKEN: certificationToken
+        },
         stdio: ['ignore', outFd, errFd]
       }
     )

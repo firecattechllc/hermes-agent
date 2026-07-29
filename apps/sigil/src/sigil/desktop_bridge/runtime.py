@@ -31,15 +31,10 @@ from .paper_execution import (
 from .paper_execution import (
     submit as _submit_order,
 )
-from .universe import PAPER_SIMULATION_PRICES, US_LISTED_SCREENING_UNIVERSE
-
 SCHEMA_VERSION = 5
 CYCLE_SECONDS = 5
 CONTROL_ACTIONS = frozenset({"start", "pause", "stop"})
 AUTHORIZATION_ACTIONS = frozenset({"grant", "revoke"})
-MARKET_PRICES = {
-    symbol: Decimal(price) for symbol, price in PAPER_SIMULATION_PRICES.items()
-}
 
 
 def _now() -> datetime:
@@ -537,10 +532,23 @@ def _authorization_active(state: dict[str, Any], now: datetime) -> bool:
 def _cycle_order(
     state: dict[str, Any], sequence: int
 ) -> tuple[str, str, Decimal, Decimal, Decimal]:
+    if os.environ.get("SIGIL_ASSET_CATALOG_MODE") != "demo":
+        raise ValueError(
+            "catalog research completed without validated proposal market data"
+        )
+    from .universe import (
+        PAPER_SIMULATION_PRICES,
+        US_LISTED_SCREENING_UNIVERSE,
+    )
+
+    market_prices = {
+        symbol: Decimal(price)
+        for symbol, price in PAPER_SIMULATION_PRICES.items()
+    }
     side = "BUY" if sequence % 2 else "SELL"
     symbols = tuple(item["symbol"] for item in US_LISTED_SCREENING_UNIVERSE)
     symbol = symbols[(sequence - 1) % len(symbols)]
-    price = MARKET_PRICES[symbol]
+    price = market_prices[symbol]
     if side == "BUY":
         buying_power = Decimal(state["balances"]["buying_power"])
         notional_budget = min(buying_power * Decimal("0.05"), buying_power)
@@ -568,7 +576,7 @@ def _cycle_order(
         if position is None:
             raise ValueError("no simulated position is available to sell")
         symbol = str(position["symbol"])
-        price = MARKET_PRICES[symbol]
+        price = market_prices[symbol]
         held = Decimal(position["quantity"])
         quantity = max(
             min(held * Decimal("0.10"), held).quantize(Decimal("0.0001")),
@@ -638,6 +646,78 @@ def _run_due_cycle(
 
     # Persist the claim before proposals, orders, or fills are created.
     _persist(state_path, state)
+
+    if os.environ.get("SIGIL_ASSET_CATALOG_MODE") != "demo":
+        from .asset_catalog import research_universe_status
+
+        research = research_universe_status(advance=True)
+        if research.get("revision") == "catalog-unavailable":
+            automation.update(
+                {
+                    "state": "paused",
+                    "next_cycle_at": None,
+                    "pause_cause": "safety",
+                    "pause_reason": (
+                        "Governed Alpaca asset catalog is unavailable; "
+                        "catalog-dependent research suspended"
+                    ),
+                }
+            )
+            _clear_cycle_claim(automation, last_status="catalog_unavailable")
+            state["audit"].insert(
+                0,
+                {
+                    "id": f"AUD-CATALOG-{sequence:06d}",
+                    "timestamp": timestamp,
+                    "status": "catalog_research_suspended",
+                    "proposal_id": "—",
+                    "order_id": "—",
+                    "evidence_reference": "CATALOG-UNAVAILABLE",
+                    "summary": (
+                        "Catalog-dependent research suspended fail-closed"
+                    ),
+                    "details": {
+                        "paper_only": True,
+                        "broker_submission_attempted": False,
+                    },
+                },
+            )
+            return
+        automation.update(
+            {
+                "cycle_count": sequence,
+                "last_cycle_at": timestamp,
+                "next_cycle_at": _timestamp(
+                    now.replace(microsecond=0)
+                    + timedelta(seconds=CYCLE_SECONDS)
+                ),
+            }
+        )
+        _clear_cycle_claim(automation, last_status="research_batch_completed")
+        state["audit"].insert(
+            0,
+            {
+                "id": f"AUD-RESEARCH-{sequence:06d}",
+                "timestamp": timestamp,
+                "status": "catalog_research_batch_completed",
+                "proposal_id": "—",
+                "order_id": "—",
+                "evidence_reference": str(research["revision"]),
+                "summary": (
+                    "Governed catalog research batch traversed without "
+                    "broker execution"
+                ),
+                "details": {
+                    "paper_only": True,
+                    "symbols_examined": research.get("symbols", []),
+                    "batch_size": research.get("batch_size"),
+                    "next_cursor": research.get("next_cursor"),
+                    "broker_submission_attempted": False,
+                    "proposal_created": False,
+                },
+            },
+        )
+        return
 
     proposal_id = f"PRP-PAPER-{sequence:06d}"
     evidence_id = f"HERMES-PAPER-{sequence:06d}"

@@ -41,13 +41,16 @@ describe('Sigil Electron startup', () => {
   it('exposes only data controls for Alpaca free market data', () => {
     const source = fs.readFileSync(path.resolve('src/mission-control/index.tsx'), 'utf8')
 
-    expect(source).toContain("RELEASE_STAGE = 'V1.8'")
+    expect(source).toContain("RELEASE_STAGE = 'V1.9'")
     expect(source).toContain('15-minute delayed SIP')
     expect(source).toContain('live partial-market IEX')
     expect(source).toContain('Live IEX capacity')
     expect(source).toContain('Data-only mode')
     expect(source).toContain('Live trading disabled')
     expect(source).toContain('Refresh Alpaca assets')
+    expect(source).toContain("['Discovered', status.source_record_count]")
+    expect(source).toContain("['Proposal eligible', status.proposal_eligible_count]")
+    expect(source).toContain('Refresh catalog')
     expect(source).not.toContain('Submit Alpaca order')
   })
 })
