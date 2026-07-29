@@ -408,6 +408,7 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
     page: {},
     navigation: {},
     overview: {},
+    paper_execution: {},
     proposal_selection: {},
     proposal_guard: {},
     proposal_certification: {},
@@ -487,7 +488,20 @@ async function safeUiSmoke(session, { mode, identity, screenshotDirectory, updat
     refreshed: document.body.textContent.includes('cycles · refreshed'),
     masked: document.body.textContent.includes('Masked account'),
     dynamic_sizing: document.body.textContent.includes('5% buying power / 10% position'),
-    broker_unavailable: document.body.textContent.includes('No broker submission available')
+    broker_unavailable:
+      document.body.textContent.includes('SUBMISSION DISABLED') &&
+      document.body.textContent.includes('live activation unavailable')
+  })`)
+  result.paper_execution = await session.evaluate(`({
+    panel_present: document.querySelector('[data-testid="autonomous-paper-execution"]') !== null,
+    disabled_by_default: document.body.textContent.includes('SUBMISSION DISABLED'),
+    activation_available: document.body.textContent.includes('Activate governed paper execution'),
+    paper_endpoint: document.body.textContent.includes('paper-api.alpaca.markets'),
+    live_disabled: document.body.textContent.includes('LIVE EXECUTION DISABLED'),
+    order_cap: document.body.textContent.includes('$25/order'),
+    position_cap: document.body.textContent.includes('3 positions'),
+    allocation_cap: document.body.textContent.includes('$75 deployed cap'),
+    cash_buffer: document.body.textContent.includes('$100 cash buffer')
   })`)
   await clickButton(session, 'Proposals')
   result.proposal_selection = await session.evaluate(`(() => {
@@ -756,6 +770,26 @@ function featureResultsFromEvidence({ devUi, packagedUi, packageEvidence, regist
   ) ? 'PASS' : 'FAIL', {
     evidence: ['test-output.log', 'development-ui.json#preload', 'packaged-ui.json#preload', 'coverage-enforcement.json'],
     testPerformed: 'Validated registered IPC coverage and inspected the bounded preload API in both builds.'
+  })
+  add('paper-execution.governed-autonomy', both(ui => allTrue(ui.paper_execution, [
+    'panel_present',
+    'disabled_by_default',
+    'activation_available',
+    'paper_endpoint',
+    'live_disabled',
+    'order_cap',
+    'position_cap',
+    'allocation_cap',
+    'cash_buffer'
+  ])) ? 'PASS' : 'FAIL', {
+    evidence: [
+      'development-ui.json#paper_execution',
+      'packaged-ui.json#paper_execution',
+      'test-output.log'
+    ],
+    testPerformed: 'Verified the governed paper panel, explicit activation gate, paper-only endpoint, permanent live disablement, and conservative allocation limits without activating submission.',
+    limitations: ['Certification did not activate broker submission or place an order.'],
+    dependencyState: 'Mocked execution tests plus mutation-free packaged UI verification.'
   })
   add('identity.about-center', both(ui => ui.identity_match && allTrue(ui.about, [
     'version', 'channel', 'build_id', 'commit', 'build_time', 'application_mode'
