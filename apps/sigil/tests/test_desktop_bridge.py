@@ -76,6 +76,24 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "paper_fills",
         "reconcile_paper_orders",
         "emergency_paper_stop",
+        "production_research_status",
+        "strategy_status",
+        "current_batch_research",
+        "recent_research_results",
+        "candidate_detail",
+        "proposal_detail",
+        "shadow_mode_status",
+        "shadow_mode_enable",
+        "shadow_mode_disable",
+        "shadow_positions",
+        "shadow_outcomes",
+        "shadow_performance",
+        "promotion_readiness",
+        "request_paper_promotion",
+        "position_detail",
+        "paper_exit_status",
+        "reconcile_positions",
+        "emergency_paper_liquidation",
     ]
 
 
@@ -135,7 +153,7 @@ def test_explain_proposal_returns_governed_result() -> None:
 
     result = response["result"]
     assert result["kind"] == "proposal-explanation"
-    assert result["model_route"] == "python-bridge-v1"
+    assert result["model_route"] == "python-bridge-v2.1"
     assert result["source"] == "local"
     assert result["execution_authorized"] is False
     assert result["broker_submission_available"] is False
@@ -223,9 +241,7 @@ def test_market_universe_projection_and_bounded_search_are_read_only(
     assert search["ok"] is True
     assert search["result"]["total"] == 1
     assert search["result"]["results"][0]["symbol"] == "AAPL"
-    denied = handle_request(
-        {"command": "market_universe_search", "payload": {"limit": 101}}
-    )
+    denied = handle_request({"command": "market_universe_search", "payload": {"limit": 101}})
     assert denied["error"] == "invalid_universe_query"
 
 
@@ -274,9 +290,7 @@ def test_provider_snapshot_is_read_only_masked_and_secret_free(tmp_path) -> None
                 {
                     "buyingPower": {"cashOnlyBuyingPower": "1250.00"},
                     "equity": "1500.00",
-                    "positions": [
-                        {"instrument": {"symbol": "AAPL"}, "quantity": "2"}
-                    ],
+                    "positions": [{"instrument": {"symbol": "AAPL"}, "quantity": "2"}],
                 }
             )
         if "/stocks/snapshots" in request.full_url:

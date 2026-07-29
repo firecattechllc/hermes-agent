@@ -7,22 +7,21 @@ import hashlib
 import json
 import os
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 SCHEMA_VERSION = 1
 
 
 def timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def canonical(value: object) -> bytes:
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode()
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
 
 def digest(value: object) -> str:
@@ -69,6 +68,8 @@ def initial_state() -> dict[str, Any]:
         "orders": [],
         "fills": [],
         "positions": [],
+        "exit_plans": [],
+        "exit_intents": [],
         "audit": [
             {
                 "audit_id": "SIGIL-V2-INSTALL",
@@ -117,9 +118,7 @@ class PaperExecutionStore:
             "payload": state,
         }
         envelope = {**envelope_core, "sha256": digest(envelope_core)}
-        descriptor, temporary = tempfile.mkstemp(
-            prefix=".paper-v2.", dir=self.directory
-        )
+        descriptor, temporary = tempfile.mkstemp(prefix=".paper-v2.", dir=self.directory)
         try:
             with os.fdopen(descriptor, "wb") as output:
                 os.fchmod(output.fileno(), 0o600)
@@ -155,8 +154,9 @@ class PaperExecutionStore:
                 or core["payload"].get("live_execution") is not False
             ):
                 raise RuntimeError("paper execution state integrity validation failed")
-            return core["payload"]
+            payload = core["payload"]
+            payload.setdefault("exit_plans", [])
+            payload.setdefault("exit_intents", [])
+            return payload
         except (KeyError, TypeError, ValueError, json.JSONDecodeError, OSError):
-            raise RuntimeError(
-                "paper execution state integrity validation failed"
-            ) from None
+            raise RuntimeError("paper execution state integrity validation failed") from None

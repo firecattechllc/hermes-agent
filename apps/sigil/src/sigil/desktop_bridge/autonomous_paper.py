@@ -30,6 +30,17 @@ def paper_execution_status() -> dict[str, Any]:
 
 
 def paper_execution_activate() -> dict[str, Any]:
+    from .production_research import _service as _research_service
+
+    research = _research_service().status()
+    if (
+        research["shadow_mode"]
+        or not research["paper_promotion_approved"]
+        or not research["promotion"]["ready"]
+    ):
+        raise ValueError(
+            "paper execution activation requires completed shadow promotion readiness"
+        )
     return _service().activate()
 
 

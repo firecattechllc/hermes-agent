@@ -113,6 +113,10 @@ interface SigilDesktopApi {
     operation: string,
     payload?: Readonly<Record<string, unknown>>
   ) => Promise<SigilBackendResponse<Record<string, unknown>>>
+  productionResearch?: (
+    operation: string,
+    payload?: Readonly<Record<string, unknown>>
+  ) => Promise<SigilBackendResponse<Record<string, unknown>>>
   explainProposal: (
     payload: SigilProposalExplanationPayload
   ) => Promise<SigilBackendResponse<SigilBackendProposalExplanation>>

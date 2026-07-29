@@ -9,8 +9,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 
 class AlpacaProviderError(RuntimeError):
@@ -27,13 +27,18 @@ class AlpacaConfig:
     data_base_url: str = "https://data.alpaca.markets"
 
     @classmethod
-    def from_environment(cls) -> "AlpacaConfig":
-        return cls(
+    def from_environment(cls) -> AlpacaConfig:
+        config = cls(
             os.environ.get("APCA_API_KEY_ID"),
             os.environ.get("APCA_API_SECRET_KEY"),
             os.environ.get("APCA_API_BASE_URL", "https://paper-api.alpaca.markets").rstrip("/"),
             os.environ.get("APCA_DATA_BASE_URL", "https://data.alpaca.markets").rstrip("/"),
         )
+        if config.api_base_url != "https://paper-api.alpaca.markets":
+            raise AlpacaProviderError("unexpected_trading_environment")
+        if config.data_base_url != "https://data.alpaca.markets":
+            raise AlpacaProviderError("unexpected_market_data_environment")
+        return config
 
     @property
     def configured(self) -> bool:

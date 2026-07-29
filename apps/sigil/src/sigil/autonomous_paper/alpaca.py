@@ -13,9 +13,7 @@ from .models import ALPACA_PAPER_BASE_URL
 
 ALLOWED_METHODS = frozenset({"GET", "POST", "DELETE"})
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-Transport = Callable[
-    [str, str, dict[str, str], object | None, float], tuple[int, object]
-]
+Transport = Callable[[str, str, dict[str, str], object | None, float], tuple[int, object]]
 
 
 class AlpacaPaperError(RuntimeError):
@@ -38,11 +36,7 @@ def _transport(
     body: object | None,
     timeout: float,
 ) -> tuple[int, object]:
-    payload = (
-        json.dumps(body, separators=(",", ":")).encode()
-        if body is not None
-        else None
-    )
+    payload = json.dumps(body, separators=(",", ":")).encode() if body is not None else None
     request = urllib.request.Request(
         url,
         data=payload,
@@ -70,9 +64,7 @@ def _transport(
     except TimeoutError:
         raise AlpacaPaperTransportError("request_timeout", ambiguous=method != "GET")
     except (urllib.error.URLError, OSError):
-        raise AlpacaPaperTransportError(
-            "transport_unavailable", ambiguous=method != "GET"
-        )
+        raise AlpacaPaperTransportError("transport_unavailable", ambiguous=method != "GET")
 
 
 class AlpacaPaperClient:
@@ -117,9 +109,7 @@ class AlpacaPaperClient:
             url = f"{url}?{urllib.parse.urlencode(query)}"
         if not url.startswith(f"{ALPACA_PAPER_BASE_URL}/v2/"):
             raise AlpacaPaperError("paper_endpoint_invariant_failed")
-        status, payload = self._transport(
-            method, url, self._headers(), body, self._timeout
-        )
+        status, payload = self._transport(method, url, self._headers(), body, self._timeout)
         if status not in expected:
             if status in {401, 403}:
                 raise AlpacaPaperError("paper_authentication_failed")
@@ -155,9 +145,7 @@ class AlpacaPaperClient:
         return [item for item in payload if isinstance(item, dict)]
 
     def open_orders(self) -> list[dict[str, Any]]:
-        payload = self._request(
-            "GET", "/v2/orders", query={"status": "open", "direction": "asc"}
-        )
+        payload = self._request("GET", "/v2/orders", query={"status": "open", "direction": "asc"})
         if not isinstance(payload, list):
             raise AlpacaPaperError("malformed_orders")
         return [item for item in payload if isinstance(item, dict)]
@@ -197,9 +185,31 @@ class AlpacaPaperClient:
             or request.get("extended_hours") is not False
         ):
             raise AlpacaPaperError("unsafe_order_terms")
-        payload = self._request(
-            "POST", "/v2/orders", body=request, expected=frozenset({200, 201})
-        )
+        payload = self._request("POST", "/v2/orders", body=request, expected=frozenset({200, 201}))
+        if not isinstance(payload, dict):
+            raise AlpacaPaperError("malformed_order_acknowledgement")
+        return payload
+
+    def submit_exit_order(self, request: dict[str, Any]) -> dict[str, Any]:
+        allowed = {
+            "symbol",
+            "qty",
+            "side",
+            "type",
+            "time_in_force",
+            "extended_hours",
+            "client_order_id",
+        }
+        if (
+            set(request) - allowed
+            or request.get("side") != "sell"
+            or request.get("type") != "market"
+            or request.get("time_in_force") != "day"
+            or request.get("extended_hours") is not False
+            or not request.get("qty")
+        ):
+            raise AlpacaPaperError("unsafe_exit_order_terms")
+        payload = self._request("POST", "/v2/orders", body=request, expected=frozenset({200, 201}))
         if not isinstance(payload, dict):
             raise AlpacaPaperError("malformed_order_acknowledgement")
         return payload

@@ -263,6 +263,50 @@ export interface PaperExecutionStatus {
   last_reconciliation: string | null
 }
 
+export interface ProductionResearchStatus {
+  environment: 'paper'
+  live_execution: false
+  broker_submission: false
+  shadow_mode: boolean
+  paper_promotion_approved: boolean
+  strategy_id: string
+  strategy_version: string
+  revision: number
+  evidence_identity: string | null
+  audit_identity: string | null
+  degraded_conditions: string[]
+  strategy: Readonly<Record<string, string | number>>
+  progress: {
+    state: string
+    current_batch: number
+    current_cursor: number
+    total_eligible?: number
+    symbols_researched: number
+    research_successes: number
+    research_failures: number
+    evidence_completeness: string
+    candidates_produced: number
+    proposals_generated: number
+    leading_rejection_reasons: Readonly<Record<string, number>>
+    last_completed_research: string | null
+    provider_status: string
+    market_data_freshness: string
+    next_cycle_at: string | null
+  }
+  research_result_count: number
+  candidate_count: number
+  proposal_count: number
+  active_shadow_positions: number
+  completed_shadow_outcomes: number
+  shadow_simulated_return: string
+  shadow_win_rate: string
+  promotion: {
+    status: string
+    ready: boolean
+    failed_conditions: string[]
+  }
+}
+
 export interface MarketUniverseInstrument {
   instrument_id: string
   symbol: string

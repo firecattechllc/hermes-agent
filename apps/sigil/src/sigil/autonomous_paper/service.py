@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
@@ -28,9 +29,7 @@ LEVERAGED_INVERSE_TERMS = (
     "-2X",
     "-3X",
 )
-TERMINAL_ORDER_STATUSES = frozenset(
-    {"filled", "canceled", "cancelled", "expired", "rejected"}
-)
+TERMINAL_ORDER_STATUSES = frozenset({"filled", "canceled", "cancelled", "expired", "rejected"})
 
 
 def _safe_id(value: str) -> str:
@@ -109,9 +108,7 @@ class GovernedPaperExecutionService:
         positions = self._sanitize_positions(self.client.positions())
         orders = [self._sanitize_order(item) for item in self.client.open_orders()]
         with self.store.locked() as state:
-            self._identity(
-                submission=True, authenticated=account.get("status") == "ACTIVE"
-            )
+            self._identity(submission=True, authenticated=account.get("status") == "ACTIVE")
             state.update(
                 {
                     "activated": True,
@@ -194,11 +191,10 @@ class GovernedPaperExecutionService:
         account = self.client.account()
         with self.store.locked() as state:
             unresolved_count = self._reconcile_orders(state)
+            unresolved_count += self._reconcile_exit_orders(state)
             state["paper_cash"] = str(account.get("cash", "0"))
             state["positions"] = self._sanitize_positions(self.client.positions())
-            state["orders"] = [
-                self._sanitize_order(item) for item in self.client.open_orders()
-            ]
+            state["orders"] = [self._sanitize_order(item) for item in self.client.open_orders()]
             state["reconciliation_complete"] = True
             state["last_reconciled_at"] = timestamp()
             _audit(
@@ -239,9 +235,7 @@ class GovernedPaperExecutionService:
                     "symbols_completed_cycle": cursor,
                     "total_eligible_symbols": total_eligible,
                     "coverage_percent": (
-                        round((cursor / total_eligible) * 100, 2)
-                        if total_eligible
-                        else 0.0
+                        round((cursor / total_eligible) * 100, 2) if total_eligible else 0.0
                     ),
                     "last_completed_symbol": symbols[-1] if symbols else None,
                     "last_successful_research_at": timestamp(),
@@ -282,15 +276,11 @@ class GovernedPaperExecutionService:
             eligible = [item for item, reasons in ranked if not reasons]
             progress["candidates_produced"] = len(research)
             progress["proposals_rejected"] = sum(bool(reasons) for _, reasons in ranked)
-            progress["leading_rejection_reasons"] = dict(
-                rejection_counter.most_common(5)
-            )
+            progress["leading_rejection_reasons"] = dict(rejection_counter.most_common(5))
             _bounded(state["candidates"])
             _bounded(state["rejections"])
             if not eligible:
-                progress["state"] = (
-                    "no_qualified_candidate" if research else "awaiting_fresh_data"
-                )
+                progress["state"] = "no_qualified_candidate" if research else "awaiting_fresh_data"
                 _audit(
                     state,
                     "research_batch_no_candidate",
@@ -354,9 +344,7 @@ class GovernedPaperExecutionService:
                     "symbols_completed_cycle": cursor,
                     "total_eligible_symbols": total_eligible,
                     "coverage_percent": (
-                        round((cursor / total_eligible) * 100, 2)
-                        if total_eligible
-                        else 0.0
+                        round((cursor / total_eligible) * 100, 2) if total_eligible else 0.0
                     ),
                     "last_completed_symbol": symbols[-1] if symbols else None,
                     "last_successful_research_at": timestamp(),
@@ -456,7 +444,7 @@ class GovernedPaperExecutionService:
         body = {
             "symbol": candidate.symbol,
             "notional": str(notional),
-            "side": "buy",
+            "side": intent.get("side", "buy"),
             "type": "market",
             "time_in_force": "day",
             "extended_hours": False,
@@ -493,11 +481,13 @@ class GovernedPaperExecutionService:
         sanitized = self._sanitize_order(acknowledgement)
         state["orders"].insert(0, sanitized)
         _bounded(state["orders"])
+        if intent["status"] in {"partially_filled", "filled"}:
+            self._upsert_fill(state, acknowledgement, intent)
+            if intent["status"] == "filled":
+                self._ensure_exit_plan(state, acknowledgement, intent)
         proposal["status"] = "submitted"
         state["progress"]["state"] = (
-            "order_filled"
-            if sanitized.get("status") == "filled"
-            else "order_accepted"
+            "order_filled" if sanitized.get("status") == "filled" else "order_accepted"
         )
         _audit(
             state,
@@ -532,9 +522,7 @@ class GovernedPaperExecutionService:
             reasons.append("not_fractionable")
         if candidate.exchange.upper().startswith("OTC"):
             reasons.append("otc_forbidden")
-        if candidate.leveraged_or_inverse or any(
-            term in name for term in LEVERAGED_INVERSE_TERMS
-        ):
+        if candidate.leveraged_or_inverse or any(term in name for term in LEVERAGED_INVERSE_TERMS):
             reasons.append("leveraged_or_inverse_forbidden")
         if candidate.quote_age_seconds > self.policy.quote_freshness_seconds:
             reasons.append("stale_quote")
@@ -542,10 +530,7 @@ class GovernedPaperExecutionService:
             reasons.append("stale_bars")
         if candidate.spread_basis_points > self.policy.maximum_spread_basis_points:
             reasons.append("excess_spread")
-        if (
-            candidate.average_dollar_volume
-            < self.policy.minimum_average_dollar_volume
-        ):
+        if candidate.average_dollar_volume < self.policy.minimum_average_dollar_volume:
             reasons.append("insufficient_liquidity")
         if candidate.confidence < self.policy.minimum_confidence:
             reasons.append("insufficient_confidence")
@@ -572,25 +557,18 @@ class GovernedPaperExecutionService:
             reasons.append("duplicate_symbol")
         if len(state["positions"]) >= self.policy.maximum_open_positions:
             reasons.append("position_limit_reached")
-        pending = sum(
-            item.get("status") not in TERMINAL_ORDER_STATUSES
-            for item in state["orders"]
-        )
+        pending = sum(item.get("status") not in TERMINAL_ORDER_STATUSES for item in state["orders"])
         if pending >= self.policy.maximum_pending_entry_orders:
             reasons.append("pending_order_limit_reached")
         return tuple(sorted(set(reasons)))
 
-    def _order_notional(
-        self, state: dict[str, Any], candidate: CandidateResearch
-    ) -> Decimal:
+    def _order_notional(self, state: dict[str, Any], candidate: CandidateResearch) -> Decimal:
         deployed = sum(
             decimal_value(item.get("market_value", "0"), "market_value")
             for item in state["positions"]
         )
         remaining = self.policy.maximum_deployed_capital - deployed
-        cash = decimal_value(
-            state.get("paper_cash", "10000.00"), "paper_cash"
-        )
+        cash = decimal_value(state.get("paper_cash", "10000.00"), "paper_cash")
         cash_available = cash - self.policy.minimum_cash_buffer
         notional = min(
             self.policy.maximum_order_notional,
@@ -617,9 +595,7 @@ class GovernedPaperExecutionService:
         return f"sigil-v2-{hashlib.sha256(material).hexdigest()[:24]}"
 
     @staticmethod
-    def _sanitize_order(
-        order: dict[str, Any], client_id: str | None = None
-    ) -> dict[str, Any]:
+    def _sanitize_order(order: dict[str, Any], client_id: str | None = None) -> dict[str, Any]:
         return {
             "id": order.get("id"),
             "client_order_id": order.get("client_order_id") or client_id,
@@ -649,23 +625,17 @@ class GovernedPaperExecutionService:
             for item in positions
         ][:MAX_RECENT_ITEMS]
 
-    def _upsert_order(
-        self, state: dict[str, Any], order: dict[str, Any], client_id: str
-    ) -> None:
+    def _upsert_order(self, state: dict[str, Any], order: dict[str, Any], client_id: str) -> None:
         sanitized = self._sanitize_order(order, client_id)
         state["orders"] = [
-            item
-            for item in state["orders"]
-            if item.get("client_order_id") != client_id
+            item for item in state["orders"] if item.get("client_order_id") != client_id
         ]
         state["orders"].insert(0, sanitized)
         _bounded(state["orders"])
 
     def _reconcile_orders(self, state: dict[str, Any]) -> int:
         unresolved = [
-            item
-            for item in state["order_intents"]
-            if item["status"] not in TERMINAL_ORDER_STATUSES
+            item for item in state["order_intents"] if item["status"] not in TERMINAL_ORDER_STATUSES
         ]
         for intent in unresolved:
             order = self.client.order_by_client_id(intent["client_order_id"])
@@ -678,12 +648,12 @@ class GovernedPaperExecutionService:
                 self._upsert_order(state, order, intent["client_order_id"])
                 if intent["status"] in {"partially_filled", "filled"}:
                     self._upsert_fill(state, order, intent)
+                    if intent["status"] == "filled":
+                        self._ensure_exit_plan(state, order, intent)
         return len(unresolved)
 
     @staticmethod
-    def _upsert_fill(
-        state: dict[str, Any], order: dict[str, Any], intent: dict[str, Any]
-    ) -> None:
+    def _upsert_fill(state: dict[str, Any], order: dict[str, Any], intent: dict[str, Any]) -> None:
         filled_quantity = order.get("filled_qty")
         if not filled_quantity or decimal_value(filled_quantity, "filled_qty") <= 0:
             return
@@ -692,29 +662,198 @@ class GovernedPaperExecutionService:
             "provider_order_id": order.get("id"),
             "client_order_id": intent["client_order_id"],
             "symbol": intent.get("symbol") or order.get("symbol"),
-            "side": "buy",
+            "side": intent.get("side", "buy"),
             "filled_qty": str(filled_quantity),
             "filled_avg_price": order.get("filled_avg_price"),
             "status": order.get("status"),
             "entry_basis": order.get("filled_avg_price"),
             "updated_at": order.get("updated_at") or timestamp(),
         }
-        state["fills"] = [
-            item
-            for item in state["fills"]
-            if item.get("fill_id") != fill["fill_id"]
-        ]
+        state["fills"] = [item for item in state["fills"] if item.get("fill_id") != fill["fill_id"]]
         state["fills"].insert(0, fill)
         _bounded(state["fills"])
+
+    def _ensure_exit_plan(
+        self, state: dict[str, Any], order: dict[str, Any], intent: dict[str, Any]
+    ) -> None:
+        symbol = intent.get("symbol") or order.get("symbol")
+        if any(item.get("symbol") == symbol for item in state["exit_plans"]):
+            return
+        basis = decimal_value(order.get("filled_avg_price"), "filled_avg_price")
+        filled_at = order.get("filled_at") or order.get("updated_at") or timestamp()
+        state["exit_plans"].insert(
+            0,
+            {
+                "exit_plan_id": f"exit-plan-{intent['client_order_id']}",
+                "symbol": symbol,
+                "entry_client_order_id": intent["client_order_id"],
+                "entry_basis": str(basis),
+                "entry_quantity": str(order.get("filled_qty")),
+                "entered_at": filled_at,
+                "stop_price": str(
+                    (
+                        basis * (Decimal(1) - self.policy.exit_stop_loss_percent / Decimal(100))
+                    ).quantize(Decimal("0.0001"), rounding=ROUND_DOWN)
+                ),
+                "profit_price": str(
+                    (
+                        basis * (Decimal(1) + self.policy.exit_take_profit_percent / Decimal(100))
+                    ).quantize(Decimal("0.0001"), rounding=ROUND_DOWN)
+                ),
+                "maximum_holding_days": 10,
+                "status": "paper_position_monitoring",
+            },
+        )
+        _bounded(state["exit_plans"])
+
+    def monitor_positions(
+        self,
+        prices: dict[str, Decimal],
+        *,
+        now: datetime,
+        invalidated_symbols: frozenset[str] = frozenset(),
+        emergency: bool = False,
+    ) -> dict[str, Any]:
+        """Evaluate and submit exactly-once exits for Sigil-owned paper positions."""
+        preflight = self.store.load()
+        if (
+            not preflight["activated"]
+            or not preflight["broker_submission"]
+            or (preflight["paused"] and not emergency)
+        ):
+            return self._projection(preflight)
+        clock = self.client.clock()
+        with self.store.locked() as state:
+            if state["live_execution"] is not False:
+                raise ValueError("live execution is permanently disabled")
+            if state["paused"] and not emergency:
+                return self._projection(state)
+            if not state["activated"] or not state["broker_submission"]:
+                return self._projection(state)
+            if clock.get("is_open") is not True:
+                return self._projection(state)
+            positions = {item.get("symbol"): item for item in state["positions"]}
+            for plan in state["exit_plans"]:
+                if plan.get("status") != "paper_position_monitoring":
+                    continue
+                symbol = plan["symbol"]
+                position = positions.get(symbol)
+                current = prices.get(symbol)
+                if position is None or current is None:
+                    continue
+                if any(
+                    item.get("symbol") == symbol
+                    and item.get("status") not in TERMINAL_ORDER_STATUSES
+                    for item in state["exit_intents"]
+                ):
+                    continue
+                entered = datetime.fromisoformat(str(plan["entered_at"]))
+                trigger = None
+                if current <= decimal_value(plan["stop_price"], "stop_price"):
+                    trigger = "protective_stop"
+                elif current >= decimal_value(plan["profit_price"], "profit_price"):
+                    trigger = "profit_taking"
+                elif now.astimezone(UTC) - entered >= timedelta(
+                    days=int(plan["maximum_holding_days"])
+                ):
+                    trigger = "maximum_holding_period"
+                elif symbol in invalidated_symbols:
+                    trigger = "strategy_invalidation"
+                elif emergency:
+                    trigger = "emergency_exit"
+                if trigger is None:
+                    continue
+                exit_client_id = client_order_id(f"exit-{plan['exit_plan_id']}-{trigger}")
+                intent = {
+                    "intent_id": f"exit-intent-{exit_client_id}",
+                    "client_order_id": exit_client_id,
+                    "symbol": symbol,
+                    "qty": str(position.get("qty")),
+                    "side": "sell",
+                    "trigger": trigger,
+                    "status": "submission_pending",
+                    "created_at": timestamp(),
+                    "attempt_history": [],
+                }
+                state["exit_intents"].insert(0, intent)
+                plan["status"] = "paper_exit_submitting"
+                self.store.save(state)
+                body = {
+                    "symbol": symbol,
+                    "qty": intent["qty"],
+                    "side": "sell",
+                    "type": "market",
+                    "time_in_force": "day",
+                    "extended_hours": False,
+                    "client_order_id": exit_client_id,
+                }
+                try:
+                    acknowledgement = self.client.submit_exit_order(body)
+                except AlpacaPaperTransportError as error:
+                    intent["status"] = "reconciliation_required"
+                    intent["attempt_history"].append(
+                        {
+                            "attempt": 1,
+                            "result": error.code,
+                            "ambiguous": error.ambiguous,
+                        }
+                    )
+                    if error.ambiguous:
+                        existing = self.client.order_by_client_id(exit_client_id)
+                        if existing is not None:
+                            intent["status"] = str(existing.get("status", "submitted"))
+                            intent["provider_order_id"] = existing.get("id")
+                    continue
+                except AlpacaPaperError as error:
+                    intent["status"] = "rejected"
+                    intent["broker_response_classification"] = str(error)
+                    plan["status"] = "paper_exit_rejected"
+                    continue
+                intent["status"] = str(acknowledgement.get("status", "submitted"))
+                intent["provider_order_id"] = acknowledgement.get("id")
+                plan["status"] = "paper_exit_admitted"
+                _audit(
+                    state,
+                    "paper_exit_acknowledged",
+                    evidence_id=intent["intent_id"],
+                    details={"symbol": symbol, "trigger": trigger},
+                )
+            _bounded(state["exit_intents"])
+            self.store.save(state)
+            return self._projection(state)
+
+    def _reconcile_exit_orders(self, state: dict[str, Any]) -> int:
+        unresolved = [
+            item
+            for item in state["exit_intents"]
+            if item.get("status") not in TERMINAL_ORDER_STATUSES
+        ]
+        for intent in unresolved:
+            order = self.client.order_by_client_id(intent["client_order_id"])
+            if order is None:
+                intent["status"] = "proven_absent"
+                continue
+            intent["status"] = str(order.get("status", "submitted"))
+            intent["provider_order_id"] = order.get("id")
+            if intent["status"] in {"partially_filled", "filled"}:
+                self._upsert_fill(state, order, intent)
+            for plan in state["exit_plans"]:
+                if plan.get("symbol") == intent.get("symbol"):
+                    plan["status"] = (
+                        "closed"
+                        if intent["status"] == "filled"
+                        else "paper_exit_partial"
+                        if intent["status"] == "partially_filled"
+                        else f"paper_exit_{intent['status']}"
+                    )
+        return len(unresolved)
 
     def _projection(self, state: dict[str, Any]) -> dict[str, Any]:
         def last(name: str) -> dict[str, Any] | None:
             return state[name][0] if state[name] else None
 
         managed_symbols = {
-            item.get("symbol")
-            for item in state["fills"]
-            if item.get("side") == "buy"
+            item.get("symbol") for item in state["fills"] if item.get("side") == "buy"
         }
         unmanaged_symbols = sorted(
             str(item.get("symbol"))
@@ -736,20 +875,15 @@ class GovernedPaperExecutionService:
             "paused": bool(state["paused"]),
             "kill_switch": bool(state["kill_switch"]),
             "revision": state["revision"],
-            "evidence_identity": (
-                state["audit"][0]["evidence_id"] if state["audit"] else None
-            ),
-            "audit_identity": (
-                state["audit"][0]["audit_id"] if state["audit"] else None
-            ),
+            "evidence_identity": (state["audit"][0]["evidence_id"] if state["audit"] else None),
+            "audit_identity": (state["audit"][0]["audit_id"] if state["audit"] else None),
             "degraded_conditions": degraded_conditions,
             "unmanaged_position_symbols": unmanaged_symbols,
             "policy": state["policy"] or self.policy.to_dict(),
             "progress": state["progress"],
             "open_positions": len(state["positions"]),
             "open_orders": sum(
-                item.get("status") not in TERMINAL_ORDER_STATUSES
-                for item in state["orders"]
+                item.get("status") not in TERMINAL_ORDER_STATUSES for item in state["orders"]
             ),
             "deployed_paper_capital": str(
                 sum(
@@ -759,7 +893,7 @@ class GovernedPaperExecutionService:
             ),
             "remaining_governed_allocation": str(
                 max(
-                    Decimal("0"),
+                    Decimal(0),
                     self.policy.maximum_deployed_capital
                     - sum(
                         decimal_value(item.get("market_value", "0"), "market_value")
@@ -772,6 +906,11 @@ class GovernedPaperExecutionService:
             "last_fill": last("fills"),
             "last_rejection": last("rejections"),
             "last_reconciliation": state["last_reconciled_at"],
+            "exit_plan_count": len(state["exit_plans"]),
+            "pending_exit_count": sum(
+                item.get("status") not in TERMINAL_ORDER_STATUSES for item in state["exit_intents"]
+            ),
+            "last_exit_intent": last("exit_intents"),
         }
 
     def recent(self, kind: str, *, offset: int = 0, limit: int = 50) -> dict[str, Any]:
@@ -784,6 +923,8 @@ class GovernedPaperExecutionService:
             "fills": "fills",
             "intents": "order_intents",
             "audit": "audit",
+            "exit_plans": "exit_plans",
+            "exit_intents": "exit_intents",
         }
         key = mapping.get(kind)
         if key is None:
@@ -797,12 +938,8 @@ class GovernedPaperExecutionService:
             "live_execution": False,
             "broker_submission": bool(state["broker_submission"]),
             "revision": state["revision"],
-            "evidence_identity": (
-                state["audit"][0]["evidence_id"] if state["audit"] else None
-            ),
-            "audit_identity": (
-                state["audit"][0]["audit_id"] if state["audit"] else None
-            ),
+            "evidence_identity": (state["audit"][0]["evidence_id"] if state["audit"] else None),
+            "audit_identity": (state["audit"][0]["audit_id"] if state["audit"] else None),
             "degraded_conditions": [],
             "offset": bounded_offset,
             "limit": bounded_limit,

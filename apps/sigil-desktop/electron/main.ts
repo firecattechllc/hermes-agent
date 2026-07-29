@@ -29,6 +29,7 @@ export const SIGIL_ASSET_CATALOG_STATUS_CHANNEL = 'sigil:get-asset-catalog-statu
 export const SIGIL_ASSET_CATALOG_REFRESH_CHANNEL = 'sigil:refresh-asset-catalog'
 export const SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL = 'sigil:get-research-universe-status'
 export const SIGIL_PAPER_EXECUTION_CHANNEL = 'sigil:paper-execution'
+export const SIGIL_PRODUCTION_RESEARCH_CHANNEL = 'sigil:production-research'
 export const SIGIL_UPDATER_SNAPSHOT_CHANNEL = 'sigil:get-updater-snapshot'
 export const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
 export const SIGIL_UPDATE_DOWNLOAD_CHANNEL = 'sigil:approve-update-download'
@@ -357,6 +358,7 @@ export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_ASSET_CATALOG_REFRESH_CHANNEL)
   ipcMain.removeHandler(SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_PAPER_EXECUTION_CHANNEL)
+  ipcMain.removeHandler(SIGIL_PRODUCTION_RESEARCH_CHANNEL)
   ipcMain.removeHandler(SIGIL_UPDATE_CHECK_CHANNEL)
   ipcMain.removeHandler(SIGIL_UPDATER_SNAPSHOT_CHANNEL)
   ipcMain.removeHandler(SIGIL_UPDATE_DOWNLOAD_CHANNEL)
@@ -453,6 +455,39 @@ export function registerSigilIpc(): void {
             ok: false as const,
             error: 'unsupported_paper_execution_operation',
             message: 'Only allow-listed paper execution operations are available.'
+          })
+    }
+  )
+  ipcMain.handle(
+    SIGIL_PRODUCTION_RESEARCH_CHANNEL,
+    (_event, operation: string, payload?: Readonly<Record<string, unknown>>) => {
+      const commands: Readonly<Record<string, string>> = {
+        status: 'production_research_status',
+        strategy: 'strategy_status',
+        current_batch: 'current_batch_research',
+        research: 'recent_research_results',
+        candidates: 'recent_candidates',
+        candidate_detail: 'candidate_detail',
+        proposals: 'recent_proposals',
+        proposal_detail: 'proposal_detail',
+        shadow_status: 'shadow_mode_status',
+        shadow_enable: 'shadow_mode_enable',
+        shadow_disable: 'shadow_mode_disable',
+        shadow_positions: 'shadow_positions',
+        shadow_outcomes: 'shadow_outcomes',
+        shadow_performance: 'shadow_performance',
+        promotion: 'promotion_readiness',
+        request_promotion: 'request_paper_promotion'
+      }
+
+      const command = commands[operation]
+
+      return command
+        ? runBridgeRequest({ command, payload })
+        : Promise.resolve({
+            ok: false as const,
+            error: 'unsupported_production_research_operation',
+            message: 'Only allow-listed production research operations are available.'
           })
     }
   )

@@ -28,6 +28,7 @@ import type {
   MarketUniverseStatus,
   PaperExecutionStatus,
   PipelineStage,
+  ProductionResearchStatus,
   Proposal,
   SigilOperatorAdapter,
   SigilProviderSnapshot,
@@ -36,7 +37,7 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const RELEASE_STAGE = 'V2.0'
+const RELEASE_STAGE = 'V2.1'
 
 const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
@@ -1230,6 +1231,69 @@ function AutonomousPaperPanel({
   )
 }
 
+function ProductionResearchPanel({ status }: { status: ProductionResearchStatus | null }) {
+  if (!status) {
+    return (
+      <section className={cn('border-b border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}>
+        <h2 className="text-xs font-semibold uppercase tracking-[0.1em]">Production research and shadow validation</h2>
+        <p className="mt-2 text-xs text-(--ui-text-tertiary)">Research status unavailable. No proposal or execution authority is assumed.</p>
+      </section>
+    )
+  }
+
+  const progress = status.progress
+  const reasons = Object.entries(progress.leading_rejection_reasons)
+
+  return (
+    <section
+      aria-labelledby="production-research-title"
+      className={cn('border-b border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}
+      data-testid="production-research"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="production-research-title">
+            Validated production research and shadow mode
+          </h2>
+          <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+            {status.strategy_id} · v{status.strategy_version} · deterministic liquid-trend evidence
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusLabel tone={status.shadow_mode ? 'success' : 'warning'}>
+            SHADOW {status.shadow_mode ? 'ENABLED' : 'DISABLED'}
+          </StatusLabel>
+          <StatusLabel tone={status.promotion.ready ? 'success' : 'warning'}>
+            {status.promotion.status.replaceAll('_', ' ').toUpperCase()}
+          </StatusLabel>
+          <StatusLabel tone="success">LIVE EXECUTION DISABLED</StatusLabel>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-px bg-(--ui-stroke-tertiary) sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ['Research state', progress.state.replaceAll('_', ' '), `${progress.provider_status} · ${progress.market_data_freshness}`],
+          ['Batch and cursor', `${progress.current_batch} · ${progress.current_cursor}`, `${progress.symbols_researched} symbols researched`],
+          ['Evidence', `${progress.evidence_completeness} complete`, `${progress.research_successes} success · ${progress.research_failures} failure`],
+          ['Candidates', String(progress.candidates_produced), `${progress.proposals_generated} proposals generated`],
+          ['Shadow positions', String(status.active_shadow_positions), `${status.completed_shadow_outcomes} completed outcomes`],
+          ['Shadow performance', status.shadow_simulated_return, `${status.shadow_win_rate} simulated win rate`],
+          ['Promotion', status.promotion.status.replaceAll('_', ' '), status.promotion.failed_conditions.join(' · ') || 'All readiness checks satisfied'],
+          ['Leading rejections', reasons.length ? reasons.map(([reason, count]) => `${reason}: ${count}`).join(' · ') : 'None', progress.last_completed_research ?? 'No completed research']
+        ].map(([label, value, detail]) => (
+          <div className="min-w-0 bg-(--ui-bg-secondary) p-3" key={label}>
+            <div className="text-[0.625rem] uppercase text-(--ui-text-tertiary)">{label}</div>
+            <div className="mt-1 break-words font-mono text-xs">{value}</div>
+            <div className="mt-1 truncate text-[0.625rem] text-(--ui-text-tertiary)" title={detail}>{detail}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+        Production evidence only · simulated shadow outcomes · no profitability claim · no broker order in shadow mode
+      </p>
+    </section>
+  )
+}
+
 const localHermesEngine = new LocalHermesEngine()
 
 type ProviderResponse =
@@ -1264,6 +1328,12 @@ interface MissionControlDesktopApi {
     payload?: Readonly<Record<string, unknown>>
   ) => Promise<
     { ok: true; result: PaperExecutionStatus } | { ok: false; error: string; message: string }
+  >
+  productionResearch?: (
+    operation: string,
+    payload?: Readonly<Record<string, unknown>>
+  ) => Promise<
+    { ok: true; result: ProductionResearchStatus } | { ok: false; error: string; message: string }
   >
   buildInfo?: {
     version: string
@@ -1332,6 +1402,7 @@ export function SigilOperatorView({
   const [universeError, setUniverseError] = useState<string | null>(null)
   const [catalogRefreshing, setCatalogRefreshing] = useState(false)
   const [paperExecution, setPaperExecution] = useState<PaperExecutionStatus | null>(null)
+  const [productionResearch, setProductionResearch] = useState<ProductionResearchStatus | null>(null)
 
   const [pendingPaperExecutionAction, setPendingPaperExecutionAction] = useState<
     'activate' | 'deactivate' | 'pause' | 'resume' | 'emergency_stop' | null
@@ -1455,6 +1526,32 @@ export function SigilOperatorView({
       void api('status').then(response => {
         if (!cancelled && response.ok) {
           setPaperExecution(response.result)
+        }
+      })
+    }
+
+    refresh()
+    const timer = window.setInterval(refresh, 5_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [reloadGeneration])
+
+  useEffect(() => {
+    const api = desktopApi()?.productionResearch
+
+    if (!api) {
+      return
+    }
+
+    let cancelled = false
+
+    const refresh = (): void => {
+      void api('status').then(response => {
+        if (!cancelled && response.ok) {
+          setProductionResearch(response.result)
         }
       })
     }
@@ -1862,6 +1959,7 @@ export function SigilOperatorView({
                 onAction={setPendingPaperExecutionAction}
                 status={paperExecution}
               />
+              <ProductionResearchPanel status={productionResearch} />
               <MarketUniversePanel
                 error={universeError}
                 loading={universeLoading}

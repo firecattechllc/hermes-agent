@@ -10,12 +10,21 @@ from __future__ import annotations
 import json
 import math
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Final
 
 from sigil.market_universe import UniverseValidationError
 
 from .alpaca_market_data import alpaca_market_data_status, control_alpaca_market_data
+from .asset_catalog import (
+    asset_catalog_exclusions,
+    asset_catalog_refresh,
+    asset_catalog_sample,
+    asset_catalog_snapshot,
+    asset_catalog_statistics,
+    asset_catalog_status,
+    research_universe_status,
+)
 from .autonomous_paper import (
     paper_execution_activate,
     paper_execution_collection,
@@ -26,16 +35,18 @@ from .autonomous_paper import (
     paper_execution_status,
     reconcile_paper_orders,
 )
-from .asset_catalog import (
-    asset_catalog_exclusions,
-    asset_catalog_refresh,
-    asset_catalog_sample,
-    asset_catalog_snapshot,
-    asset_catalog_statistics,
-    asset_catalog_status,
-    research_universe_status,
-)
 from .market_universe import market_universe_search, market_universe_status
+from .production_research import (
+    emergency_paper_liquidation,
+    production_research_collection,
+    production_research_detail,
+    production_research_status,
+    promotion_readiness,
+    reconcile_positions,
+    request_paper_promotion,
+    shadow_mode_disable,
+    shadow_mode_enable,
+)
 from .providers import provider_snapshot
 from .runtime import (
     control_paper_authorization,
@@ -44,7 +55,7 @@ from .runtime import (
     runtime_snapshot,
 )
 
-BRIDGE_VERSION: Final[str] = "1"
+BRIDGE_VERSION: Final[str] = "2.1"
 SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "health",
     "explain_proposal",
@@ -80,13 +91,31 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "paper_fills",
     "reconcile_paper_orders",
     "emergency_paper_stop",
+    "production_research_status",
+    "strategy_status",
+    "current_batch_research",
+    "recent_research_results",
+    "candidate_detail",
+    "proposal_detail",
+    "shadow_mode_status",
+    "shadow_mode_enable",
+    "shadow_mode_disable",
+    "shadow_positions",
+    "shadow_outcomes",
+    "shadow_performance",
+    "promotion_readiness",
+    "request_paper_promotion",
+    "position_detail",
+    "paper_exit_status",
+    "reconcile_positions",
+    "emergency_paper_liquidation",
 )
 
 
 def generated_at() -> str:
     """Return a UTC ISO-8601 timestamp."""
 
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def backend_status() -> dict[str, Any]:
@@ -211,8 +240,7 @@ def explain_proposal(payload: object) -> dict[str, Any]:
         "result": {
             "kind": "proposal-explanation",
             "summary": (
-                f"Proposal {normalized_proposal_id} is governed, "
-                "locally verified, and simulated."
+                f"Proposal {normalized_proposal_id} is governed, locally verified, and simulated."
             ),
             "explanation": (
                 f"{normalized_symbol} is presented as a {side} proposal from "
@@ -369,6 +397,72 @@ def handle_request(request: object) -> dict[str, Any]:
     if command == "emergency_paper_stop":
         return {"ok": True, "result": paper_execution_emergency_stop()}
 
+    if command in {
+        "production_research_status",
+        "strategy_status",
+        "shadow_mode_status",
+        "shadow_performance",
+    }:
+        return {"ok": True, "result": production_research_status()}
+
+    if command == "paper_exit_status":
+        return {"ok": True, "result": paper_execution_status()}
+
+    if command == "promotion_readiness":
+        return {"ok": True, "result": promotion_readiness()}
+
+    if command == "shadow_mode_enable":
+        return {"ok": True, "result": shadow_mode_enable()}
+
+    if command == "shadow_mode_disable":
+        return {"ok": True, "result": shadow_mode_disable()}
+
+    if command == "request_paper_promotion":
+        return {"ok": True, "result": request_paper_promotion()}
+
+    research_collections = {
+        "current_batch_research": "research",
+        "recent_research_results": "research",
+        "shadow_positions": "shadow_positions",
+        "shadow_outcomes": "shadow_outcomes",
+    }
+    if command in research_collections:
+        return {
+            "ok": True,
+            "result": production_research_collection(
+                research_collections[command], request.get("payload")
+            ),
+        }
+
+    research_details = {
+        "candidate_detail": "candidates",
+        "proposal_detail": "proposals",
+    }
+    if command in research_details:
+        return {
+            "ok": True,
+            "result": production_research_detail(research_details[command], request.get("payload")),
+        }
+
+    if command == "reconcile_positions":
+        return {"ok": True, "result": reconcile_positions()}
+
+    if command == "emergency_paper_liquidation":
+        return {"ok": True, "result": emergency_paper_liquidation()}
+
+    if command == "position_detail":
+        payload = request.get("payload")
+        values = payload if isinstance(payload, dict) else {}
+        identity = values.get("identity")
+        positions = paper_execution_collection("positions", {"limit": 100})
+        position = next(
+            (item for item in positions["items"] if item.get("symbol") == identity),
+            None,
+        )
+        if position is None:
+            return error_response("paper_position_not_found", "Paper position was not found.")
+        return {"ok": True, "result": {**positions, "item": position}}
+
     collection_commands = {
         "recent_candidates": "candidates",
         "recent_proposals": "proposals",
@@ -403,7 +497,7 @@ def main() -> int:
             "invalid_json",
             "Input must contain one valid JSON object.",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - bridge boundary sanitizes every failure
         response = error_response(
             "bridge_failure",
             "The local Sigil bridge failed safely.",

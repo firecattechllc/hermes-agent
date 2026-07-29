@@ -20,6 +20,7 @@ const SIGIL_ASSET_CATALOG_STATUS_CHANNEL = 'sigil:get-asset-catalog-status'
 const SIGIL_ASSET_CATALOG_REFRESH_CHANNEL = 'sigil:refresh-asset-catalog'
 const SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL = 'sigil:get-research-universe-status'
 const SIGIL_PAPER_EXECUTION_CHANNEL = 'sigil:paper-execution'
+const SIGIL_PRODUCTION_RESEARCH_CHANNEL = 'sigil:production-research'
 const SIGIL_UPDATE_CHECK_CHANNEL = 'sigil:check-for-updates'
 const SIGIL_UPDATER_SNAPSHOT_CHANNEL = 'sigil:get-updater-snapshot'
 const SIGIL_UPDATE_DOWNLOAD_CHANNEL = 'sigil:approve-update-download'
@@ -78,6 +79,10 @@ contextBridge.exposeInMainWorld('sigilDesktop', {
     operation: string,
     payload?: Readonly<Record<string, unknown>>
   ) => ipcRenderer.invoke(SIGIL_PAPER_EXECUTION_CHANNEL, operation, payload),
+  productionResearch: (
+    operation: string,
+    payload?: Readonly<Record<string, unknown>>
+  ) => ipcRenderer.invoke(SIGIL_PRODUCTION_RESEARCH_CHANNEL, operation, payload),
   explainProposal: (payload: Readonly<Record<string, unknown>>) =>
     ipcRenderer.invoke(SIGIL_EXPLAIN_PROPOSAL_CHANNEL, payload)
 })

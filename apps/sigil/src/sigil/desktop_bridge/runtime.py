@@ -9,7 +9,7 @@ import os
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -18,12 +18,12 @@ from .paper_execution import (
     cancel as _cancel_order,
 )
 from .paper_execution import (
-    fill as _fill_order,
-)
-from .paper_execution import (
     evaluate_runtime_health,
     initialize_execution_state,
     mission_control_status,
+)
+from .paper_execution import (
+    fill as _fill_order,
 )
 from .paper_execution import (
     recalculate as _recalculate,
@@ -31,6 +31,7 @@ from .paper_execution import (
 from .paper_execution import (
     submit as _submit_order,
 )
+
 SCHEMA_VERSION = 5
 CYCLE_SECONDS = 5
 CONTROL_ACTIONS = frozenset({"start", "pause", "stop"})
@@ -38,7 +39,7 @@ AUTHORIZATION_ACTIONS = frozenset({"grant", "revoke"})
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _timestamp(value: datetime) -> str:
@@ -52,13 +53,9 @@ def _authorization_month(value: datetime) -> str:
 def _next_month(value: datetime) -> datetime:
     if value.month == 12:
         return value.replace(
-            year=value.year + 1, month=1, day=1, hour=0, minute=0,
-            second=0, microsecond=0
+            year=value.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
         )
-    return value.replace(
-        month=value.month + 1, day=1, hour=0, minute=0, second=0,
-        microsecond=0
-    )
+    return value.replace(month=value.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
 def _monthly_authorization(now: datetime) -> dict[str, Any]:
@@ -148,9 +145,7 @@ def _initial_state(now: datetime) -> dict[str, Any]:
                 "evidence_reference": authorization["authorization_id"],
                 "summary": "Calendar-month paper authorization started automatically",
                 "details": {
-                    "authorization_month": authorization[
-                        "authorization_month"
-                    ],
+                    "authorization_month": authorization["authorization_month"],
                     "automatic_monthly_policy": True,
                     "broker_submission_attempted": False,
                     "paper_only": True,
@@ -224,15 +219,11 @@ def _append_reset_evidence(
             envelope = json.loads(line)
             body = {
                 "record": envelope.get("record"),
-                "previous_record_sha256": envelope.get(
-                    "previous_record_sha256"
-                ),
+                "previous_record_sha256": envelope.get("previous_record_sha256"),
             }
-            if (
-                envelope.get("previous_record_sha256")
-                != previous_record_sha256
-                or envelope.get("sha256") != _digest(body)
-            ):
+            if envelope.get("previous_record_sha256") != previous_record_sha256 or envelope.get(
+                "sha256"
+            ) != _digest(body):
                 raise RuntimeError("paper reset audit integrity validation failed")
             previous_record_sha256 = str(envelope["sha256"])
     previous_state_sha256 = _digest(state)
@@ -286,9 +277,7 @@ def _upgrade_runtime_state(state: dict[str, Any]) -> None:
     )
 
 
-def _ensure_month_authorization(
-    state: dict[str, Any], now: datetime
-) -> None:
+def _ensure_month_authorization(state: dict[str, Any], now: datetime) -> None:
     authorization = state["paper_authorization"]
     month = _authorization_month(now)
     if authorization.get("authorization_month") == month:
@@ -324,9 +313,7 @@ def _recover_invalid_runtime_state(
     """Quarantine invalid local paper state and safely create a clean runtime."""
 
     now = _now()
-    quarantine_name = (
-        f"runtime-state.invalid-{now.strftime('%Y%m%dT%H%M%S%fZ')}.json"
-    )
+    quarantine_name = f"runtime-state.invalid-{now.strftime('%Y%m%dT%H%M%S%fZ')}.json"
     quarantine_path = directory / quarantine_name
 
     if state_path.exists():
@@ -365,7 +352,6 @@ def _recover_invalid_runtime_state(
     return state
 
 
-
 @contextmanager
 def _locked_state() -> Iterator[tuple[Path, dict[str, Any]]]:
     directory = _state_directory()
@@ -383,8 +369,7 @@ def _locked_state() -> Iterator[tuple[Path, dict[str, Any]]]:
                 valid = (
                     isinstance(payload, dict)
                     and envelope.get("sha256") == _digest(payload)
-                    and payload.get("schema_version")
-                    in {1, 2, 3, 4, SCHEMA_VERSION}
+                    and payload.get("schema_version") in {1, 2, 3, 4, SCHEMA_VERSION}
                 )
             except (json.JSONDecodeError, UnicodeDecodeError, OSError):
                 payload = None
@@ -454,10 +439,7 @@ def _recover_interrupted_cycle(
             "state": "paused",
             "next_cycle_at": None,
             "pause_cause": "safety",
-            "pause_reason": (
-                "An interrupted paper cycle was recovered; "
-                "manual resume is required"
-            ),
+            "pause_reason": ("An interrupted paper cycle was recovered; manual resume is required"),
         }
     )
     _clear_cycle_claim(
@@ -468,19 +450,13 @@ def _recover_interrupted_cycle(
     state["audit"].insert(
         0,
         {
-            "id": (
-                f"AUD-CYCLE-RECOVERY-"
-                f"{int(state['revision']) + 1:06d}"
-            ),
+            "id": (f"AUD-CYCLE-RECOVERY-{int(state['revision']) + 1:06d}"),
             "timestamp": _timestamp(now),
             "status": "paper_cycle_interrupted_recovered",
             "proposal_id": "—",
             "order_id": "—",
             "evidence_reference": str(execution_id),
-            "summary": (
-                "Interrupted paper cycle recovered; "
-                "automation paused fail-closed"
-            ),
+            "summary": ("Interrupted paper cycle recovered; automation paused fail-closed"),
             "details": {
                 "paper_only": True,
                 "execution_id": str(execution_id),
@@ -499,9 +475,7 @@ def _authorization_active(state: dict[str, Any], now: datetime) -> bool:
     expires_at = authorization.get("expires_at")
     if authorization.get("status") != "active" or not expires_at:
         if state["automation"].get("state") == "running":
-            state["automation"].update(
-                {"state": "paused", "next_cycle_at": None}
-            )
+            state["automation"].update({"state": "paused", "next_cycle_at": None})
         return False
     if datetime.fromisoformat(expires_at.replace("Z", "+00:00")) <= now:
         authorization["status"] = "expired"
@@ -533,18 +507,13 @@ def _cycle_order(
     state: dict[str, Any], sequence: int
 ) -> tuple[str, str, Decimal, Decimal, Decimal]:
     if os.environ.get("SIGIL_ASSET_CATALOG_MODE") != "demo":
-        raise ValueError(
-            "catalog research completed without validated proposal market data"
-        )
+        raise ValueError("catalog research completed without validated proposal market data")
     from .universe import (
         PAPER_SIMULATION_PRICES,
         US_LISTED_SCREENING_UNIVERSE,
     )
 
-    market_prices = {
-        symbol: Decimal(price)
-        for symbol, price in PAPER_SIMULATION_PRICES.items()
-    }
+    market_prices = {symbol: Decimal(price) for symbol, price in PAPER_SIMULATION_PRICES.items()}
     side = "BUY" if sequence % 2 else "SELL"
     symbols = tuple(item["symbol"] for item in US_LISTED_SCREENING_UNIVERSE)
     symbol = symbols[(sequence - 1) % len(symbols)]
@@ -566,11 +535,7 @@ def _cycle_order(
         )
         if position is None:
             position = next(
-                (
-                    item
-                    for item in state["positions"]
-                    if Decimal(item["quantity"]) > 0
-                ),
+                (item for item in state["positions"] if Decimal(item["quantity"]) > 0),
                 None,
             )
         if position is None:
@@ -631,10 +596,7 @@ def _run_due_cycle(
 
     sequence = int(automation["cycle_count"]) + 1
     timestamp = _timestamp(now)
-    execution_id = (
-        f"PAPER-CYCLE-{sequence:06d}-"
-        f"{now.strftime('%Y%m%dT%H%M%SZ')}"
-    )
+    execution_id = f"PAPER-CYCLE-{sequence:06d}-{now.strftime('%Y%m%dT%H%M%SZ')}"
 
     automation.update(
         {
@@ -673,9 +635,7 @@ def _run_due_cycle(
                     "proposal_id": "—",
                     "order_id": "—",
                     "evidence_reference": "CATALOG-UNAVAILABLE",
-                    "summary": (
-                        "Catalog-dependent research suspended fail-closed"
-                    ),
+                    "summary": ("Catalog-dependent research suspended fail-closed"),
                     "details": {
                         "paper_only": True,
                         "broker_submission_attempted": False,
@@ -688,19 +648,19 @@ def _run_due_cycle(
                 "cycle_count": sequence,
                 "last_cycle_at": timestamp,
                 "next_cycle_at": _timestamp(
-                    now.replace(microsecond=0)
-                    + timedelta(seconds=CYCLE_SECONDS)
+                    now.replace(microsecond=0) + timedelta(seconds=CYCLE_SECONDS)
                 ),
             }
         )
-        from .autonomous_paper import _service as _paper_execution_service
+        from .production_research import run_production_batch
 
-        _paper_execution_service().record_batch_progress(
+        production = run_production_batch(
             list(research.get("symbols", [])),
             cursor=int(research.get("next_cursor", 0)),
             batch_number=int(research.get("current_batch", 0)),
             total_eligible=int(research.get("proposal_eligible", 0)),
             next_cycle_at=automation["next_cycle_at"],
+            now=now,
         )
         _clear_cycle_claim(automation, last_status="research_batch_completed")
         state["audit"].insert(
@@ -713,20 +673,23 @@ def _run_due_cycle(
                 "order_id": "—",
                 "evidence_reference": str(research["revision"]),
                 "summary": (
-                    "Governed catalog batch advanced; complete validated "
-                    "market research was unavailable"
+                    "Governed catalog batch completed production research "
+                    f"with state {production['progress']['state']}"
                 ),
                 "details": {
                     "paper_only": True,
                     "symbols_examined": research.get("symbols", []),
                     "batch_size": research.get("batch_size"),
                     "next_cursor": research.get("next_cursor"),
-                    "broker_submission_attempted": False,
-                    "proposal_created": False,
-                    "candidate_scoring_completed": False,
-                    "rejection_reason": (
-                        "validated_market_research_unavailable"
-                    ),
+                    "broker_submission_attempted": production["broker_submission_attempted"],
+                    "proposal_created": (production["progress"]["proposals_generated"] > 0),
+                    "candidate_scoring_completed": True,
+                    "strategy_id": production["strategy_id"],
+                    "strategy_version": production["strategy_version"],
+                    "shadow_mode": production["shadow_mode"],
+                    "leading_rejection_reasons": production["progress"][
+                        "leading_rejection_reasons"
+                    ],
                 },
             },
         )
@@ -862,9 +825,7 @@ def _run_due_cycle(
     )
 
 
-def _runtime_visibility(
-    state: dict[str, Any], now: datetime
-) -> dict[str, Any]:
+def _runtime_visibility(state: dict[str, Any], now: datetime) -> dict[str, Any]:
     """Project governed runtime state without creating execution authority."""
     automation = state["automation"]
     raw_health = str(state.get("runtime_health", "corrupt"))
@@ -880,9 +841,7 @@ def _runtime_visibility(
     expires_at = authorization.get("expires_at")
     authorization_active = authorization_status == "active"
     if authorization_active and isinstance(expires_at, str):
-        authorization_active = (
-            datetime.fromisoformat(expires_at.replace("Z", "+00:00")) > now
-        )
+        authorization_active = datetime.fromisoformat(expires_at.replace("Z", "+00:00")) > now
 
     reasons: list[dict[str, object]] = []
 
@@ -942,9 +901,7 @@ def _runtime_visibility(
             f"Runtime health is {raw_health.replace('_', ' ')}",
         )
     connection = state.get("connection", {})
-    if connection.get("status") != "connected" or connection.get(
-        "degraded_services"
-    ):
+    if connection.get("status") != "connected" or connection.get("degraded_services"):
         reason(
             "services_degraded",
             "warning",
@@ -963,9 +920,7 @@ def _runtime_visibility(
             "Real broker submission is unavailable; local paper simulation remains separate",
         )
 
-    critical_block = any(
-        item["severity"] == "critical" for item in reasons
-    )
+    critical_block = any(item["severity"] == "critical" for item in reasons)
     operational_state = automation_state
     if automation_state == "running" and critical_block:
         operational_state = "blocked"
@@ -992,12 +947,8 @@ def _runtime_visibility(
         "health": health,
         "raw_health": raw_health,
         "paper_execution_available": paper_execution_available,
-        "broker_submission_available": bool(
-            state.get("broker_submission_available", False)
-        ),
-        "execution_authorized": bool(
-            state.get("execution_authorized", False)
-        ),
+        "broker_submission_available": bool(state.get("broker_submission_available", False)),
+        "execution_authorized": bool(state.get("execution_authorized", False)),
         "connection_state": str(connection.get("status", "disconnected")),
         "automation_mode": str(automation.get("mode", "unknown")),
         "pause_cause": automation.get("pause_cause"),
@@ -1029,9 +980,7 @@ def runtime_snapshot(*, now: datetime | None = None) -> dict[str, Any]:
         return json.loads(json.dumps(state))
 
 
-def submit_paper_order(
-    request: dict[str, Any], *, now: datetime | None = None
-) -> dict[str, Any]:
+def submit_paper_order(request: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
     """Create a local paper order; this function has no broker transport."""
     observed_at = now or _now()
     with _locked_state() as (state_path, state):
@@ -1098,19 +1047,12 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
         if action == "start":
             health = evaluate_runtime_health(state)
             if health != "healthy":
-                raise ValueError(
-                    f"paper automation cannot start while runtime health is {health}"
-                )
+                raise ValueError(f"paper automation cannot start while runtime health is {health}")
             if not _authorization_active(state, observed_at):
-                raise ValueError(
-                    "an active monthly paper authorization is required"
-                )
+                raise ValueError("an active monthly paper authorization is required")
             if automation.get("state") == "running":
                 control_status = "start_ignored_already_running"
-                control_summary = (
-                    "Paper automation start ignored because it is "
-                    "already running"
-                )
+                control_summary = "Paper automation start ignored because it is already running"
             else:
                 automation["state"] = "running"
                 automation["next_cycle_at"] = _timestamp(observed_at)
@@ -1153,9 +1095,7 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
                 "details": {
                     "broker_submission_attempted": False,
                     "paper_only": True,
-                    "authorization_id": state["paper_authorization"].get(
-                        "authorization_id"
-                    ),
+                    "authorization_id": state["paper_authorization"].get("authorization_id"),
                 },
             },
         )
@@ -1165,9 +1105,7 @@ def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[
         return json.loads(json.dumps(state))
 
 
-def control_paper_authorization(
-    action: object, *, now: datetime | None = None
-) -> dict[str, Any]:
+def control_paper_authorization(action: object, *, now: datetime | None = None) -> dict[str, Any]:
     if action not in AUTHORIZATION_ACTIONS:
         raise ValueError("paper authorization action must be grant or revoke")
     observed_at = now or _now()
@@ -1177,13 +1115,9 @@ def control_paper_authorization(
         _ensure_month_authorization(state, observed_at)
         if action == "grant":
             if authorization.get("status") == "revoked":
-                raise ValueError(
-                    "paper authorization is revoked for this calendar month"
-                )
+                raise ValueError("paper authorization is revoked for this calendar month")
         else:
-            authorization.update(
-                {"status": "revoked", "revoked_at": timestamp}
-            )
+            authorization.update({"status": "revoked", "revoked_at": timestamp})
             state["automation"].update(
                 {
                     "state": "paused",
@@ -1200,15 +1134,12 @@ def control_paper_authorization(
                 "id": f"AUD-AUTH-{state['revision']:06d}",
                 "timestamp": timestamp,
                 "status": (
-                    "authorization_granted"
-                    if action == "grant"
-                    else "authorization_revoked"
+                    "authorization_granted" if action == "grant" else "authorization_revoked"
                 ),
                 "proposal_id": "—",
                 "order_id": "—",
                 "evidence_reference": str(
-                    authorization.get("authorization_id")
-                    or "PAPER-AUTHORIZATION"
+                    authorization.get("authorization_id") or "PAPER-AUTHORIZATION"
                 ),
                 "summary": f"Monthly local paper authorization {action} recorded",
                 "details": {
@@ -1225,13 +1156,9 @@ def control_paper_authorization(
         return json.loads(json.dumps(state))
 
 
-def reset_paper_runtime(
-    confirmation: object, *, now: datetime | None = None
-) -> dict[str, Any]:
+def reset_paper_runtime(confirmation: object, *, now: datetime | None = None) -> dict[str, Any]:
     if confirmation != "RESET LOCAL PAPER PORTFOLIO":
-        raise ValueError(
-            "exact paper reset confirmation is required"
-        )
+        raise ValueError("exact paper reset confirmation is required")
     observed_at = now or _now()
     with _locked_state() as (state_path, state):
         reset_id, previous_state_sha256 = _append_reset_evidence(
