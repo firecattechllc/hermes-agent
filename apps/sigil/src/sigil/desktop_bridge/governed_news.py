@@ -133,3 +133,63 @@ def build_news_intelligence(items: list[dict[str, Any]]) -> dict[str, Any]:
         }
     )
     return projection
+
+
+def _consensus_projection(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Describe source agreement without converting research into authority."""
+    by_symbol: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        for symbol in item["symbols"]:
+            by_symbol.setdefault(str(symbol), []).append(item)
+
+    result: dict[str, Any] = {}
+    directional = {"bullish", "bearish"}
+    for symbol, symbol_items in sorted(by_symbol.items()):
+        sources = {str(item["source"]).strip().lower() for item in symbol_items}
+        sentiments = [str(item["sentiment"]) for item in symbol_items]
+        directional_values = {value for value in sentiments if value in directional}
+        if len(directional_values) > 1:
+            agreement = "conflicting"
+        elif len(sources) >= 2 and directional_values:
+            agreement = "corroborated"
+        elif len(sources) >= 2:
+            agreement = "multi-source-neutral"
+        else:
+            agreement = "single-source"
+        result[symbol] = {
+            "agreement": agreement,
+            "source_count": len(sources),
+            "headline_count": len(symbol_items),
+            "sentiments": {
+                value: sentiments.count(value)
+                for value in sorted(VALID_SENTIMENTS)
+                if sentiments.count(value)
+            },
+            "execution_authority": False,
+        }
+    return result
+
+
+def advisory_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return a deterministic, model-free research summary."""
+    projection = build_news_intelligence(items)
+    consensus = _consensus_projection(items)
+    return {
+        "status": projection["status"],
+        "headline_count": projection["headline_count"],
+        "symbol_count": projection["symbol_count"],
+        "sentiment_counts": projection["sentiment_counts"],
+        "symbol_consensus": consensus,
+        "summary": (
+            "No governed news evidence is available."
+            if not items
+            else (
+                f"{projection['headline_count']} governed headlines cover "
+                f"{projection['symbol_count']} symbols."
+            )
+        ),
+        "advisory_only": True,
+        "execution_authority": False,
+        "broker_submission_attempted": False,
+        "paper_only": True,
+    }
