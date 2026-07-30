@@ -142,7 +142,7 @@ class MarketEvidence:
 @dataclass(frozen=True, slots=True)
 class ProductionStrategyPolicy:
     strategy_id: str = "sigil-liquid-trend"
-    strategy_version: str = "2.2.0"
+    strategy_version: str = "2.8.0"
     minimum_history_bars: int = 50
     short_average_bars: int = 20
     medium_average_bars: int = 50

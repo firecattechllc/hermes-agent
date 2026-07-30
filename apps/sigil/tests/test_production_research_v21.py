@@ -42,19 +42,13 @@ def test_friday_daily_bar_remains_fresh_before_monday_close() -> None:
 def test_small_provider_clock_skew_is_tolerated_but_large_future_skew_fails(tmp_path) -> None:
     research = service(tmp_path)
     accepted = evidence(
-        observed_at=(
-            NOW + timedelta(seconds=MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS)
-        ).isoformat()
+        observed_at=(NOW + timedelta(seconds=MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS)).isoformat()
     )
     rejected = evidence(
-        observed_at=(
-            NOW + timedelta(seconds=MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS + 1)
-        ).isoformat()
+        observed_at=(NOW + timedelta(seconds=MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS + 1)).isoformat()
     )
     assert research.score(asset(), accepted, now=NOW).hard_rejection_reasons == ()
-    assert "stale_quote" in research.score(
-        asset(), rejected, now=NOW
-    ).hard_rejection_reasons
+    assert "stale_quote" in research.score(asset(), rejected, now=NOW).hard_rejection_reasons
 
 
 def test_effective_market_data_configuration_rejects_non_paper_urls(monkeypatch):
@@ -164,7 +158,7 @@ def score(
 def test_valid_production_evidence_produces_complete_score(tmp_path):
     result = score(service(tmp_path))
     assert result.strategy_id == "sigil-liquid-trend"
-    assert result.strategy_version == "2.2.0"
+    assert result.strategy_version == "2.8.0"
     assert result.eligible is True
     assert result.normalized_score >= Decimal("0.68")
     assert result.confidence >= Decimal("0.80")
@@ -307,7 +301,7 @@ def test_completed_batch_generates_shadow_proposal_before_catalog_traversal(tmp_
     assert status["active_shadow_positions"] == 1
     proposal = research.recent("proposals")["items"][0]
     assert proposal["status"] == "admitted_in_shadow"
-    assert proposal["strategy_version"] == "2.2.0"
+    assert proposal["strategy_version"] == "2.8.0"
     assert proposal["evidence_identity"]
     assert proposal["proposed_notional"] == "25.00"
     assert proposal["exit_plan"]["maximum_holding_days"] == 10
@@ -636,3 +630,61 @@ def test_default_shadow_certification_performs_no_broker_calls(tmp_path):
     assert status["live_execution"] is False
     assert status["shadow_mode"] is True
     assert research.recent("audit")["items"][0]["details"]["broker_submission_attempted"] is False
+
+
+def test_promotion_metrics_only_include_current_strategy_outcomes(tmp_path) -> None:
+    research = service(tmp_path)
+
+    state = {
+        "strategy": None,
+        "paper_promotion_approved": False,
+        "shadow_mode": True,
+        "progress": {},
+        "research_results": [],
+        "candidates": [],
+        "proposals": [],
+        "shadow_positions": [],
+        "safety_defects": [],
+        "audit": [],
+        "revision": 1,
+        "shadow_outcomes": [
+            {
+                "strategy_version": "2.2.0",
+                "symbol": "OLD1",
+                "entry_at": "2026-07-01T12:00:00+00:00",
+                "net_simulated_return": "-0.500000",
+            },
+            {
+                "strategy_version": "2.4.0",
+                "symbol": "OLD2",
+                "entry_at": "2026-07-02T12:00:00+00:00",
+                "net_simulated_return": "-0.250000",
+            },
+            {
+                "strategy_version": "2.8.0",
+                "symbol": "NEW1",
+                "entry_at": "2026-07-10T12:00:00+00:00",
+                "net_simulated_return": "0.020000",
+            },
+            {
+                "strategy_version": "2.8.0",
+                "symbol": "NEW2",
+                "entry_at": "2026-07-12T12:00:00+00:00",
+                "net_simulated_return": "-0.005000",
+            },
+        ],
+    }
+
+    projection = research._projection(state)
+    promotion = projection["promotion"]
+
+    assert len(state["shadow_outcomes"]) == 4
+    assert projection["completed_shadow_outcomes"] == 2
+    assert projection["shadow_simulated_return"] == "0.015000"
+    assert projection["shadow_win_rate"] == "0.500000"
+
+    assert promotion["completed_shadow_proposals"] == 2
+    assert promotion["distinct_symbols"] == 2
+    assert promotion["observation_days"] == 2
+    assert promotion["net_simulated_return"] == "0.015000"
+    assert promotion["maximum_drawdown"] == "0.005000"

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -7,7 +7,7 @@ import pytest
 from sigil.desktop_bridge import runtime
 from sigil.desktop_bridge.paper_execution import evaluate_runtime_health
 
-NOW = datetime(2026, 7, 26, 12, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 26, 12, tzinfo=UTC)
 
 
 @pytest.fixture(autouse=True)
@@ -55,18 +55,37 @@ def test_cancel_releases_buying_power() -> None:
 
 
 def test_rejection_is_audited_and_live_is_refused() -> None:
-    rejected = runtime.submit_paper_order({**buy(), "order_id": "ORD-2", "quantity": "100000"}, now=NOW)
+    rejected = runtime.submit_paper_order(
+        {**buy(), "order_id": "ORD-2", "quantity": "100000"}, now=NOW
+    )
     assert rejected["status"] == "rejected"
     with pytest.raises(ValueError, match="only local paper"):
         runtime.submit_paper_order({**buy(), "order_id": "ORD-3", "environment": "live"}, now=NOW)
 
 
 def test_limit_and_stop_orders_remain_deterministic() -> None:
-    limit = runtime.submit_paper_order({**buy(), "order_id": "ORD-4", "order_type": "LIMIT", "limit_price": "90"}, now=NOW)
+    limit = runtime.submit_paper_order(
+        {**buy(), "order_id": "ORD-4", "order_type": "LIMIT", "limit_price": "90"}, now=NOW
+    )
     assert runtime.simulate_paper_fill(limit["id"], {"AAPL": "91"}, now=NOW)["status"] == "open"
     assert runtime.simulate_paper_fill(limit["id"], {"AAPL": "90"}, now=NOW)["status"] == "filled"
-    stop = runtime.submit_paper_order({**buy(), "order_id": "ORD-5", "order_type": "STOP", "stop_price": "110"}, now=NOW)
+    stop = runtime.submit_paper_order(
+        {**buy(), "order_id": "ORD-5", "order_type": "STOP", "stop_price": "110"}, now=NOW
+    )
     assert runtime.simulate_paper_fill(stop["id"], {"AAPL": "120"}, now=NOW)["status"] == "open"
+
+
+def test_initial_paper_runtime_starts_with_cash_and_no_seeded_positions() -> None:
+    state = runtime._initial_state(NOW)
+
+    assert state["positions"] == []
+    assert state["balances"]["cash"] == "10000.00"
+    assert state["balances"]["reserved_cash"] == "0.00"
+    assert state["balances"]["buying_power"] == "10000.00"
+    assert state["balances"]["portfolio_value"] == "0.00"
+    assert state["balances"]["equity"] == "10000.00"
+    assert state["balances"]["unrealized_pnl"] == "0.00"
+    assert state["balances"]["total_account_value"] == "10000.00"
 
 
 def test_mission_control_status_is_paper_only() -> None:
@@ -100,7 +119,7 @@ def test_validated_production_proposal_fills_only_in_local_simulator() -> None:
         "last_proposal": {
             "proposal_id": "SIGIL-V21-PRP-VALIDATED",
             "strategy_id": "sigil-liquid-trend",
-            "strategy_version": "2.2.0",
+            "strategy_version": "2.8.0",
             "symbol": "PEN",
             "side": "buy",
             "proposed_notional": "25.00",
@@ -151,7 +170,7 @@ def test_production_local_simulator_fails_closed_on_expired_or_duplicate_proposa
     proposal = {
         "proposal_id": "SIGIL-V21-PRP-EXPIRED",
         "strategy_id": "sigil-liquid-trend",
-        "strategy_version": "2.2.0",
+        "strategy_version": "2.8.0",
         "symbol": "PEN",
         "side": "buy",
         "proposed_notional": "25.00",
@@ -188,7 +207,7 @@ def _marked_position_state() -> dict[str, object]:
             "entry_at": NOW.isoformat(),
             "entry_proposal_id": "SIGIL-V21-PRP-MARK",
             "strategy_id": "sigil-liquid-trend",
-            "strategy_version": "2.2.0",
+            "strategy_version": "2.8.0",
             "exit_plan": {
                 "stop_loss_percent": "0.05",
                 "take_profit_percent": "0.10",
@@ -342,18 +361,15 @@ def test_monthly_authorization_gates_automatic_paper_buys_and_sells() -> None:
     assert second["executions"][0]["side"] == "SELL"
     assert second["executions"][1]["side"] == "BUY"
     assert all(
-        execution["broker_submission_attempted"] is False
-        for execution in second["executions"]
+        execution["broker_submission_attempted"] is False for execution in second["executions"]
     )
     assert any(
         event["status"] == "paper_auto_approved"
-        and event["details"]["authorization_id"]
-        == authorization["authorization_id"]
+        and event["details"]["authorization_id"] == authorization["authorization_id"]
         for event in second["audit"]
     )
     assert any(
-        event["status"] == "paper_executed"
-        and event["details"]["side"] == "SELL"
+        event["status"] == "paper_executed" and event["details"]["side"] == "SELL"
         for event in second["audit"]
     )
 
@@ -363,19 +379,13 @@ def test_monthly_revocation_is_fail_closed_until_next_calendar_month() -> None:
     revoked = runtime.control_paper_authorization("revoke", now=NOW)
     assert revoked["paper_authorization"]["status"] == "revoked"
     assert revoked["automation"]["state"] == "paused"
-    assert any(
-        event["status"] == "authorization_revoked" for event in revoked["audit"]
-    )
+    assert any(event["status"] == "authorization_revoked" for event in revoked["audit"])
     with pytest.raises(ValueError, match="revoked for this calendar month"):
-        runtime.control_paper_authorization(
-            "grant", now=NOW + timedelta(days=1)
-        )
+        runtime.control_paper_authorization("grant", now=NOW + timedelta(days=1))
     with pytest.raises(ValueError, match="monthly paper authorization"):
         runtime.control_paper_cycle("start", now=NOW + timedelta(days=1))
 
-    next_month = runtime.runtime_snapshot(
-        now=datetime(2026, 8, 1, tzinfo=timezone.utc)
-    )
+    next_month = runtime.runtime_snapshot(now=datetime(2026, 8, 1, tzinfo=UTC))
     assert next_month["paper_authorization"]["status"] == "active"
     assert next_month["paper_authorization"]["authorization_month"] == "2026-08"
     assert next_month["automation"]["state"] == "paused"
@@ -390,9 +400,7 @@ def test_revoked_running_state_pauses_fail_closed() -> None:
     with runtime._locked_state() as (state_path, state):
         state["automation"]["state"] = "running"
         state["automation"]["next_cycle_at"] = NOW.isoformat()
-        state["paper_authorization"].update(
-            {"status": "revoked", "authorization_month": "2026-07"}
-        )
+        state["paper_authorization"].update({"status": "revoked", "authorization_month": "2026-07"})
         runtime._persist(state_path, state)
 
     snapshot = runtime.runtime_snapshot(now=NOW)
@@ -540,10 +548,7 @@ def test_paused_runtime_visibility_projection() -> None:
 
     assert visibility["operational_state"] == "paused"
     assert visibility["pause_cause"] == "manual"
-    assert any(
-        reason["code"] == "automation_paused"
-        for reason in visibility["blocking_reasons"]
-    )
+    assert any(reason["code"] == "automation_paused" for reason in visibility["blocking_reasons"])
 
 
 def test_stopped_runtime_visibility_projection() -> None:
@@ -561,8 +566,7 @@ def test_inactive_authorization_is_a_visibility_blocker() -> None:
 
     assert snapshot["runtime_visibility"]["paper_execution_available"] is False
     assert any(
-        reason["code"] == "authorization_revoked"
-        and reason["severity"] == "critical"
+        reason["code"] == "authorization_revoked" and reason["severity"] == "critical"
         for reason in snapshot["runtime_visibility"]["blocking_reasons"]
     )
 
@@ -579,8 +583,7 @@ def test_unhealthy_runtime_auto_pause_is_visible_and_recovery_stays_paused() -> 
     assert unhealthy["runtime_visibility"]["pause_cause"] == "safety"
     assert unhealthy["runtime_visibility"]["health"] == "degraded"
     assert any(
-        reason["code"] == "automation_safety_paused"
-        and reason["requires_manual_resume"] is True
+        reason["code"] == "automation_safety_paused" and reason["requires_manual_resume"] is True
         for reason in unhealthy["runtime_visibility"]["blocking_reasons"]
     )
     assert unhealthy["audit"][0]["status"] == "safety_paused"
@@ -619,9 +622,7 @@ def test_alpha_1_3_persisted_state_upgrades_safely(tmp_path) -> None:
     snapshot["automation"].pop("pause_reason")
     snapshot.pop("runtime_visibility")
     state_path = tmp_path / "paper-state" / "runtime-state.json"
-    state_path.write_text(
-        json.dumps({"payload": snapshot, "sha256": runtime._digest(snapshot)})
-    )
+    state_path.write_text(json.dumps({"payload": snapshot, "sha256": runtime._digest(snapshot)}))
 
     upgraded = runtime.runtime_snapshot(now=NOW + timedelta(seconds=1))
 

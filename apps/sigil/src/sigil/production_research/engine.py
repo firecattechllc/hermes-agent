@@ -381,11 +381,7 @@ class ProductionResearchService:
                     "current_batch": batch_number,
                     "current_cursor": cursor,
                     "symbols_in_batch": [
-                        str(
-                            asset.symbol
-                            if hasattr(asset, "symbol")
-                            else asset.get("symbol")
-                        )
+                        str(asset.symbol if hasattr(asset, "symbol") else asset.get("symbol"))
                         for asset in assets
                     ],
                     "total_eligible": total_eligible,
@@ -824,8 +820,18 @@ class ProductionResearchService:
             "degraded_conditions": list(state["safety_defects"]),
         }
 
+    def _current_strategy_outcomes(
+        self,
+        state: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        return [
+            item
+            for item in state["shadow_outcomes"]
+            if item.get("strategy_version") == self.policy.strategy_version
+        ]
+
     def _projection(self, state: dict[str, Any]) -> dict[str, Any]:
-        outcomes = state["shadow_outcomes"]
+        outcomes = self._current_strategy_outcomes(state)
         returns = [decimal(item["net_simulated_return"], "shadow return") for item in outcomes]
         return {
             **self._identity(state),
@@ -847,7 +853,7 @@ class ProductionResearchService:
         }
 
     def _promotion_summary(self, state: dict[str, Any]) -> dict[str, Any]:
-        outcomes = state["shadow_outcomes"]
+        outcomes = self._current_strategy_outcomes(state)
         symbols = {item["symbol"] for item in outcomes}
         timestamps = sorted(parse_time(item["entry_at"], "shadow entry") for item in outcomes)
         duration = (timestamps[-1] - timestamps[0]).days if len(timestamps) > 1 else 0
