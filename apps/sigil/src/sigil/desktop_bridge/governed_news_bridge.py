@@ -55,6 +55,15 @@ def governed_alpaca_news_collect(
     *,
     now: datetime | None = None,
 ) -> dict[str, Any]:
+    if not symbols:
+        from .governed_news_universe import (
+            collect_alpaca_universe_news,
+        )
+
+        return collect_alpaca_universe_news(
+            state_directory=_state_directory(),
+        )
+
     from .governed_news_alpaca_collection import collect_alpaca_news
 
     return collect_alpaca_news(

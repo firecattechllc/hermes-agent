@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 const root = join(import.meta.dirname, "..");
@@ -8,6 +9,7 @@ describe("governed news desktop wiring", () => {
   it("uses fixed research-only IPC channels", () => {
     const main = readFileSync(join(root, "electron", "main.ts"), "utf8");
     const preload = readFileSync(join(root, "electron", "preload.ts"), "utf8");
+
     const panel = readFileSync(
       join(root, "src", "mission-control", "governed-news-panel.tsx"),
       "utf8",

@@ -20,6 +20,11 @@ from .governed_news_providers import (
 ALPACA_NEWS_ENDPOINT = "https://data.alpaca.markets/v1beta1/news"
 ALPACA_KEY_ENV = "APCA_API_KEY_ID"
 ALPACA_SECRET_ENV = "APCA_API_SECRET_KEY"
+ALPACA_KEY_ALIASES = ("SIGIL_ALPACA_API_KEY_ID", "ALPACA_API_KEY")
+ALPACA_SECRET_ALIASES = (
+    "SIGIL_ALPACA_API_SECRET_KEY",
+    "ALPACA_SECRET_KEY",
+)
 ALPACA_ENABLED_ENV = "SIGIL_ALPACA_NEWS_ENABLED"
 MAX_ALPACA_SYMBOLS = 50
 MAX_ALPACA_LIMIT = 50
@@ -31,7 +36,7 @@ def _default_fetch_json(
     timeout: float,
 ) -> tuple[object, Mapping[str, str]]:
     request = Request(url, headers=dict(headers), method="GET")
-    with urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed HTTPS endpoint.
+    with urlopen(request, timeout=timeout) as response:
         payload = json.loads(response.read().decode("utf-8"))
         return payload, dict(response.headers.items())
 
@@ -58,7 +63,7 @@ class AlpacaNewsProvider:
         self,
         *,
         limit: int = 10,
-        lookback_minutes: int = 60,
+        lookback_minutes: int = 24 * 60,
         include_content: bool = False,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         fetch_json: FetchJson | None = None,
@@ -77,23 +82,41 @@ class AlpacaNewsProvider:
 
     @staticmethod
     def _credentials() -> tuple[str, str]:
-        key = os.environ.get(ALPACA_KEY_ENV, "").strip()
-        secret = os.environ.get(ALPACA_SECRET_ENV, "").strip()
+        key = next(
+            (
+                os.environ.get(name, "").strip()
+                for name in (ALPACA_KEY_ENV, *ALPACA_KEY_ALIASES)
+                if os.environ.get(name, "").strip()
+            ),
+            "",
+        )
+        secret = next(
+            (
+                os.environ.get(name, "").strip()
+                for name in (ALPACA_SECRET_ENV, *ALPACA_SECRET_ALIASES)
+                if os.environ.get(name, "").strip()
+            ),
+            "",
+        )
         if not key or not secret:
-            raise RuntimeError(f"{ALPACA_KEY_ENV} and {ALPACA_SECRET_ENV} must both be set")
+            raise RuntimeError(
+                f"{ALPACA_KEY_ENV} and {ALPACA_SECRET_ENV} must both be "
+                "configured; supported aliases include ALPACA_API_KEY "
+                "and ALPACA_SECRET_KEY"
+            )
         return key, secret
 
     @staticmethod
     def _map_article(article: object) -> dict[str, Any]:
         if not isinstance(article, dict):
-            raise ValueError("Alpaca news article must be an object")
+            raise TypeError("Alpaca news article must be an object")
         headline = str(article.get("headline", "")).strip()
         source = str(article.get("source", "Alpaca News")).strip() or "Alpaca News"
         source_url = str(article.get("url", "")).strip()
         published_at = str(article.get("created_at") or article.get("updated_at") or "").strip()
         raw_symbols = article.get("symbols", [])
         if not isinstance(raw_symbols, list):
-            raise ValueError("Alpaca article symbols must be a list")
+            raise TypeError("Alpaca article symbols must be a list")
         summary = str(article.get("summary", "")).strip()
         if not summary:
             summary = str(article.get("content", "")).strip()[:2_000]
@@ -142,10 +165,10 @@ class AlpacaNewsProvider:
             self.timeout_seconds,
         )
         if not isinstance(payload, dict):
-            raise ValueError("Alpaca News response must be an object")
+            raise TypeError("Alpaca News response must be an object")
         raw_news = payload.get("news")
         if not isinstance(raw_news, list):
-            raise ValueError("Alpaca News response field 'news' must be a list")
+            raise TypeError("Alpaca News response field 'news' must be a list")
         if len(raw_news) > MAX_ALPACA_LIMIT:
             raise ValueError("Alpaca News returned too many articles")
 

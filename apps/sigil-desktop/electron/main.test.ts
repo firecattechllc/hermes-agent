@@ -58,7 +58,7 @@ describe('Sigil Electron startup', () => {
     const source = fs.readFileSync(path.resolve('src/mission-control/index.tsx'), 'utf8')
     const mainSource = fs.readFileSync(path.resolve('electron/main.ts'), 'utf8')
 
-    expect(source).toContain("RELEASE_STAGE = 'V2.8'")
+    expect(source).toContain("RELEASE_STAGE = 'V2.9'")
     expect(source).toContain('15-minute delayed SIP')
     expect(source).toContain('live partial-market IEX')
     expect(source).toContain('Live IEX capacity')
