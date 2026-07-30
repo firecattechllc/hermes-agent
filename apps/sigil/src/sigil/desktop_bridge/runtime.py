@@ -122,11 +122,8 @@ def _initial_state(now: datetime) -> dict[str, Any]:
         "simulation": True,
         "execution_authorized": False,
         "broker_submission_available": False,
-        "balances": {"cash": "10000.00", "portfolio_value": "10842.16", "currency": "USD"},
-        "positions": [
-            {"symbol": "MSFT", "quantity": "1.25", "market_value": "566.00"},
-            {"symbol": "NVDA", "quantity": "1.60", "market_value": "276.80"},
-        ],
+        "balances": {"cash": "10000.00", "portfolio_value": "0.00", "currency": "USD"},
+        "positions": [],
         "automation": {
             "state": "stopped",
             "cycle_count": 0,
@@ -447,7 +444,7 @@ def _recover_interrupted_cycle(
 
     if isinstance(started_at, str) and started_at:
         try:
-            parsed_started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            parsed_started_at = datetime.fromisoformat(started_at)
             if parsed_started_at.tzinfo is None:
                 parsed_started_at = parsed_started_at.replace(tzinfo=UTC)
 
@@ -514,7 +511,7 @@ def _authorization_active(state: dict[str, Any], now: datetime) -> bool:
         if state["automation"].get("state") == "running":
             state["automation"].update({"state": "paused", "next_cycle_at": None})
         return False
-    if datetime.fromisoformat(expires_at.replace("Z", "+00:00")) <= now:
+    if datetime.fromisoformat(expires_at) <= now:
         authorization["status"] = "expired"
         state["automation"].update({"state": "paused", "next_cycle_at": None})
         state["audit"].insert(
@@ -564,9 +561,7 @@ def _admit_production_proposal_to_local_simulator(
     try:
         notional = Decimal(str(proposal.get("proposed_notional")))
         price = Decimal(str(proposal.get("reference_price")))
-        expires_at = datetime.fromisoformat(
-            str(proposal.get("expires_at", "")).replace("Z", "+00:00")
-        )
+        expires_at = datetime.fromisoformat(str(proposal.get("expires_at", "")))
     except (ArithmeticError, ValueError):
         rejection = "invalid_production_proposal"
         notional = Decimal(0)
@@ -1008,7 +1003,7 @@ def _run_due_cycle(
     if not _authorization_active(state, now):
         return
     next_cycle = automation.get("next_cycle_at")
-    if next_cycle and datetime.fromisoformat(next_cycle.replace("Z", "+00:00")) > now:
+    if next_cycle and datetime.fromisoformat(next_cycle) > now:
         return
 
     if automation.get("cycle_execution_id"):
@@ -1269,9 +1264,7 @@ def _run_due_cycle(
                 "state": "paused",
                 "next_cycle_at": None,
                 "pause_cause": "safety",
-                "pause_reason": (
-                    "Governed paper cycle failed; manual review and resume required"
-                ),
+                "pause_reason": ("Governed paper cycle failed; manual review and resume required"),
             }
         )
         _clear_cycle_claim(automation, last_status="failed")
@@ -1298,6 +1291,7 @@ def _run_due_cycle(
         _persist(state_path, state)
         raise
 
+
 def _runtime_visibility(state: dict[str, Any], now: datetime) -> dict[str, Any]:
     """Project governed runtime state without creating execution authority."""
     automation = state["automation"]
@@ -1314,7 +1308,7 @@ def _runtime_visibility(state: dict[str, Any], now: datetime) -> dict[str, Any]:
     expires_at = authorization.get("expires_at")
     authorization_active = authorization_status == "active"
     if authorization_active and isinstance(expires_at, str):
-        authorization_active = datetime.fromisoformat(expires_at.replace("Z", "+00:00")) > now
+        authorization_active = datetime.fromisoformat(expires_at) > now
 
     reasons: list[dict[str, object]] = []
 
