@@ -49,6 +49,7 @@ def governed_news_collect(
         now=now,
     )
 
+
 def governed_alpaca_news_collect(
     symbols: list[str],
     *,
@@ -61,4 +62,3 @@ def governed_alpaca_news_collect(
         symbols=symbols,
         now=now,
     )
-

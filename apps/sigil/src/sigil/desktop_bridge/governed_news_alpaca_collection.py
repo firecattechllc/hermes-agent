@@ -22,11 +22,7 @@ def collect_alpaca_news(
             "status": "disabled",
             "provider": "Alpaca News",
             "requested_symbols": sorted(
-                {
-                    str(symbol).strip().upper()
-                    for symbol in symbols
-                    if str(symbol).strip()
-                }
+                {str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()}
             ),
             "received_count": 0,
             "stored_count": 0,

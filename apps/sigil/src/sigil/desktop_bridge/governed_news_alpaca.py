@@ -41,9 +41,7 @@ def _utc_timestamp(value: datetime) -> str:
 
 
 def _bounded_symbols(symbols: Iterable[str]) -> list[str]:
-    normalized = sorted(
-        {str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()}
-    )
+    normalized = sorted({str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()})
     if not normalized:
         raise ValueError("at least one Alpaca news symbol is required")
     if len(normalized) > MAX_ALPACA_SYMBOLS:
@@ -82,9 +80,7 @@ class AlpacaNewsProvider:
         key = os.environ.get(ALPACA_KEY_ENV, "").strip()
         secret = os.environ.get(ALPACA_SECRET_ENV, "").strip()
         if not key or not secret:
-            raise RuntimeError(
-                f"{ALPACA_KEY_ENV} and {ALPACA_SECRET_ENV} must both be set"
-            )
+            raise RuntimeError(f"{ALPACA_KEY_ENV} and {ALPACA_SECRET_ENV} must both be set")
         return key, secret
 
     @staticmethod
@@ -94,9 +90,7 @@ class AlpacaNewsProvider:
         headline = str(article.get("headline", "")).strip()
         source = str(article.get("source", "Alpaca News")).strip() or "Alpaca News"
         source_url = str(article.get("url", "")).strip()
-        published_at = str(
-            article.get("created_at") or article.get("updated_at") or ""
-        ).strip()
+        published_at = str(article.get("created_at") or article.get("updated_at") or "").strip()
         raw_symbols = article.get("symbols", [])
         if not isinstance(raw_symbols, list):
             raise ValueError("Alpaca article symbols must be a list")
@@ -160,17 +154,13 @@ class AlpacaNewsProvider:
             items=tuple(self._map_article(article) for article in raw_news),
             request_url=request_url,
             rate_limit={
-                "limit": _header_int(
-                    response_headers, "x-ratelimit-limit", "ratelimit-limit"
-                ),
+                "limit": _header_int(response_headers, "x-ratelimit-limit", "ratelimit-limit"),
                 "remaining": _header_int(
                     response_headers,
                     "x-ratelimit-remaining",
                     "ratelimit-remaining",
                 ),
-                "reset": _header_int(
-                    response_headers, "x-ratelimit-reset", "ratelimit-reset"
-                ),
+                "reset": _header_int(response_headers, "x-ratelimit-reset", "ratelimit-reset"),
             },
         )
 

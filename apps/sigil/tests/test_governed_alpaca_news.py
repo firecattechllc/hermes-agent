@@ -99,9 +99,7 @@ def test_enabled_collection_writes_governed_evidence(monkeypatch, tmp_path) -> N
     credentials(monkeypatch)
     monkeypatch.setenv(ALPACA_ENABLED_ENV, "true")
 
-    provider = AlpacaNewsProvider(
-        fetch_json=lambda *_: (alpaca_response(), {})
-    )
+    provider = AlpacaNewsProvider(fetch_json=lambda *_: (alpaca_response(), {}))
     store = NewsEvidenceStore(tmp_path)
     result = collect_alpaca_news(
         store=store,
