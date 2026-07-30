@@ -11,6 +11,8 @@ from copy import deepcopy
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from .governed_news import empty_news_intelligence
+
 MONEY = Decimal("0.01")
 VALID_SIDES = frozenset({"BUY", "SELL"})
 VALID_TYPES = frozenset({"MARKET", "LIMIT", "STOP"})
@@ -31,15 +33,23 @@ def number(value: object, field: str, *, positive: bool = False) -> Decimal:
     return result
 
 
-def audit(state: dict[str, Any], *, timestamp: str, event: str, order_id: str, details: dict[str, Any]) -> None:
+def audit(
+    state: dict[str, Any], *, timestamp: str, event: str, order_id: str, details: dict[str, Any]
+) -> None:
     sequence = len(state["audit"]) + 1
-    state["audit"].insert(0, {
-        "id": f"AUD-EXEC-{sequence:06d}", "timestamp": timestamp,
-        "status": event, "proposal_id": "—", "order_id": order_id,
-        "evidence_reference": f"PAPER-RUNTIME:{order_id}",
-        "summary": f"Paper runtime {event.replace('_', ' ')}",
-        "details": {**details, "paper_only": True, "broker_submission_attempted": False},
-    })
+    state["audit"].insert(
+        0,
+        {
+            "id": f"AUD-EXEC-{sequence:06d}",
+            "timestamp": timestamp,
+            "status": event,
+            "proposal_id": "—",
+            "order_id": order_id,
+            "evidence_reference": f"PAPER-RUNTIME:{order_id}",
+            "summary": f"Paper runtime {event.replace('_', ' ')}",
+            "details": {**details, "paper_only": True, "broker_submission_attempted": False},
+        },
+    )
 
 
 def initialize_execution_state(state: dict[str, Any]) -> None:
@@ -75,6 +85,7 @@ def initialize_execution_state(state: dict[str, Any]) -> None:
     state.setdefault("last_execution", None)
     state.setdefault("closed_positions", [])
     state.setdefault("runtime_health", "healthy")
+    state.setdefault("news_intelligence", empty_news_intelligence())
     state["schema_version"] = max(int(state.get("schema_version", 1)), 2)
 
 
@@ -170,7 +181,6 @@ def evaluate_runtime_health(state: dict[str, Any]) -> str:
     return "healthy"
 
 
-
 def submit(state: dict[str, Any], request: dict[str, Any], *, timestamp: str) -> dict[str, Any]:
     """Validate and reserve an order.  It never contacts a broker."""
     initialize_execution_state(state)
@@ -191,7 +201,11 @@ def submit(state: dict[str, Any], request: dict[str, Any], *, timestamp: str) ->
         raise ValueError("limit orders require limit_price")
     if order_type == "STOP" and stop_price is None:
         raise ValueError("stop orders require stop_price")
-    reserve_price = number(limit_price if limit_price is not None else request.get("reference_price"), "reference_price", positive=True)
+    reserve_price = number(
+        limit_price if limit_price is not None else request.get("reference_price"),
+        "reference_price",
+        positive=True,
+    )
     reserve = quantity * reserve_price if side == "BUY" else Decimal(0)
     if side == "SELL":
         position = next(
@@ -229,16 +243,54 @@ def submit(state: dict[str, Any], request: dict[str, Any], *, timestamp: str) ->
             )
             return deepcopy(order)
     if reserve > Decimal(state["balances"]["buying_power"]):
-        order = {"id": order_id, "symbol": symbol, "side": side, "order_type": order_type, "quantity": str(quantity), "filled_quantity": "0", "status": "rejected", "reason": "insufficient_buying_power", "created_at": timestamp}
+        order = {
+            "id": order_id,
+            "symbol": symbol,
+            "side": side,
+            "order_type": order_type,
+            "quantity": str(quantity),
+            "filled_quantity": "0",
+            "status": "rejected",
+            "reason": "insufficient_buying_power",
+            "created_at": timestamp,
+        }
         state["orders"][order_id] = order
         state["rejected_orders"].insert(0, order_id)
-        audit(state, timestamp=timestamp, event="order_rejected", order_id=order_id, details={"reason": order["reason"]})
+        audit(
+            state,
+            timestamp=timestamp,
+            event="order_rejected",
+            order_id=order_id,
+            details={"reason": order["reason"]},
+        )
         return deepcopy(order)
-    order = {"id": order_id, "symbol": symbol, "side": side, "order_type": order_type, "quantity": str(quantity), "filled_quantity": "0", "remaining_quantity": str(quantity), "reference_price": str(reserve_price), "limit_price": str(limit_price) if limit_price is not None else None, "stop_price": str(stop_price) if stop_price is not None else None, "reserved_cash": money(reserve), "status": "open", "created_at": timestamp}
+    order = {
+        "id": order_id,
+        "symbol": symbol,
+        "side": side,
+        "order_type": order_type,
+        "quantity": str(quantity),
+        "filled_quantity": "0",
+        "remaining_quantity": str(quantity),
+        "reference_price": str(reserve_price),
+        "limit_price": str(limit_price) if limit_price is not None else None,
+        "stop_price": str(stop_price) if stop_price is not None else None,
+        "reserved_cash": money(reserve),
+        "status": "open",
+        "created_at": timestamp,
+    }
     state["orders"][order_id] = order
-    state["balances"]["reserved_cash"] = money(Decimal(state["balances"]["reserved_cash"]) + reserve)
+    state["balances"]["reserved_cash"] = money(
+        Decimal(state["balances"]["reserved_cash"]) + reserve
+    )
     state["balances"]["buying_power"] = money(Decimal(state["balances"]["buying_power"]) - reserve)
-    audit(state, timestamp=timestamp, event="order_submitted", order_id=order_id, details={"reserved_cash": money(reserve)})
+    audit(
+        state,
+        timestamp=timestamp,
+        event="order_submitted",
+        order_id=order_id,
+        details={"reserved_cash": money(reserve)},
+    )
     return deepcopy(order)
 
 
@@ -246,11 +298,22 @@ def _fillable(order: dict[str, Any], price: Decimal) -> bool:
     if order["order_type"] == "MARKET":
         return True
     if order["order_type"] == "LIMIT":
-        return price <= Decimal(order["limit_price"]) if order["side"] == "BUY" else price >= Decimal(order["limit_price"])
+        return (
+            price <= Decimal(order["limit_price"])
+            if order["side"] == "BUY"
+            else price >= Decimal(order["limit_price"])
+        )
     return False  # Stop orders are retained as state only.
 
 
-def fill(state: dict[str, Any], order_id: str, snapshot: dict[str, Any], *, timestamp: str, quantity: object | None = None) -> dict[str, Any]:
+def fill(
+    state: dict[str, Any],
+    order_id: str,
+    snapshot: dict[str, Any],
+    *,
+    timestamp: str,
+    quantity: object | None = None,
+) -> dict[str, Any]:
     """Apply an injected deterministic market price to an open paper order."""
     initialize_execution_state(state)
     order = state["orders"].get(order_id)
@@ -260,7 +323,9 @@ def fill(state: dict[str, Any], order_id: str, snapshot: dict[str, Any], *, time
     if not _fillable(order, price):
         return deepcopy(order)
     remaining = Decimal(order["remaining_quantity"])
-    fill_quantity = remaining if quantity is None else number(quantity, "fill quantity", positive=True)
+    fill_quantity = (
+        remaining if quantity is None else number(quantity, "fill quantity", positive=True)
+    )
     if fill_quantity > remaining:
         raise ValueError("fill quantity exceeds remaining quantity")
     cost = fill_quantity * price
@@ -268,7 +333,14 @@ def fill(state: dict[str, Any], order_id: str, snapshot: dict[str, Any], *, time
     position = positions.get(order["symbol"])
     if order["side"] == "BUY":
         if position is None:
-            position = {"symbol": order["symbol"], "quantity": "0", "average_cost": "0", "market_value": "0", "unrealized_pnl": "0", "realized_pnl": "0"}
+            position = {
+                "symbol": order["symbol"],
+                "quantity": "0",
+                "average_cost": "0",
+                "market_value": "0",
+                "unrealized_pnl": "0",
+                "realized_pnl": "0",
+            }
             state["positions"].append(position)
         old_qty, old_cost = Decimal(position["quantity"]), Decimal(position["average_cost"])
         position["average_cost"] = str((old_qty * old_cost + cost) / (old_qty + fill_quantity))
@@ -280,22 +352,46 @@ def fill(state: dict[str, Any], order_id: str, snapshot: dict[str, Any], *, time
         realized = (price - Decimal(position["average_cost"])) * fill_quantity
         position["quantity"] = str(Decimal(position["quantity"]) - fill_quantity)
         position["realized_pnl"] = money(Decimal(position["realized_pnl"]) + realized)
-        state["balances"]["realized_pnl"] = money(Decimal(state["balances"]["realized_pnl"]) + realized)
+        state["balances"]["realized_pnl"] = money(
+            Decimal(state["balances"]["realized_pnl"]) + realized
+        )
         state["balances"]["cash"] = money(Decimal(state["balances"]["cash"]) + cost)
     reserved_release = min(
         Decimal(order["reserved_cash"]),
         fill_quantity * Decimal(order["reference_price"]),
     )
-    state["balances"]["reserved_cash"] = money(Decimal(state["balances"]["reserved_cash"]) - reserved_release)
+    state["balances"]["reserved_cash"] = money(
+        Decimal(state["balances"]["reserved_cash"]) - reserved_release
+    )
     order["reserved_cash"] = money(Decimal(order["reserved_cash"]) - reserved_release)
     order["filled_quantity"] = str(Decimal(order["filled_quantity"]) + fill_quantity)
     order["remaining_quantity"] = str(remaining - fill_quantity)
     order["status"] = "filled" if remaining == fill_quantity else "partially_filled"
-    receipt = {"id": f"PAPER-FILL-{order_id}-{len(state['filled_orders']) + 1:04d}", "order_id": order_id, "symbol": order["symbol"], "side": order["side"], "quantity": str(fill_quantity), "price": money(price), "timestamp": timestamp, "status": order["status"], "broker_submission_attempted": False}
+    receipt = {
+        "id": f"PAPER-FILL-{order_id}-{len(state['filled_orders']) + 1:04d}",
+        "order_id": order_id,
+        "symbol": order["symbol"],
+        "side": order["side"],
+        "quantity": str(fill_quantity),
+        "price": money(price),
+        "timestamp": timestamp,
+        "status": order["status"],
+        "broker_submission_attempted": False,
+    }
     state["filled_orders"].insert(0, receipt)
     state["executions"].insert(0, receipt)
     state["last_execution"] = receipt
-    audit(state, timestamp=timestamp, event="order_filled", order_id=order_id, details={"quantity": str(fill_quantity), "price": money(price), "partial": order["status"] == "partially_filled"})
+    audit(
+        state,
+        timestamp=timestamp,
+        event="order_filled",
+        order_id=order_id,
+        details={
+            "quantity": str(fill_quantity),
+            "price": money(price),
+            "partial": order["status"] == "partially_filled",
+        },
+    )
     recalculate(state, snapshot)
     return deepcopy(order)
 
@@ -306,7 +402,9 @@ def cancel(state: dict[str, Any], order_id: str, *, timestamp: str) -> dict[str,
     if not order or order["status"] not in {"open", "partially_filled"}:
         raise ValueError("order is not cancellable")
     release = Decimal(order["reserved_cash"])
-    state["balances"]["reserved_cash"] = money(Decimal(state["balances"]["reserved_cash"]) - release)
+    state["balances"]["reserved_cash"] = money(
+        Decimal(state["balances"]["reserved_cash"]) - release
+    )
     state["balances"]["buying_power"] = money(Decimal(state["balances"]["buying_power"]) + release)
     order.update({"reserved_cash": "0.00", "status": "cancelled", "cancelled_at": timestamp})
     state["cancelled_orders"].insert(0, order_id)
@@ -319,7 +417,11 @@ def recalculate(state: dict[str, Any], snapshot: dict[str, Any]) -> None:
     unrealized = Decimal(0)
     for position in state["positions"]:
         quantity = Decimal(position["quantity"])
-        price = number(snapshot.get(position["symbol"], position.get("average_cost")), "market snapshot price", positive=True)
+        price = number(
+            snapshot.get(position["symbol"], position.get("average_cost")),
+            "market snapshot price",
+            positive=True,
+        )
         value = quantity * price
         pnl = (price - Decimal(position["average_cost"])) * quantity
         position["market_value"] = money(value)
@@ -328,7 +430,15 @@ def recalculate(state: dict[str, Any], snapshot: dict[str, Any]) -> None:
         unrealized += pnl
     cash = Decimal(state["balances"]["cash"])
     equity = cash + market_value
-    state["balances"].update({"portfolio_value": money(market_value), "equity": money(equity), "unrealized_pnl": money(unrealized), "total_account_value": money(equity), "buying_power": money(cash - Decimal(state["balances"]["reserved_cash"]))})
+    state["balances"].update(
+        {
+            "portfolio_value": money(market_value),
+            "equity": money(equity),
+            "unrealized_pnl": money(unrealized),
+            "total_account_value": money(equity),
+            "buying_power": money(cash - Decimal(state["balances"]["reserved_cash"])),
+        }
+    )
 
 
 def apply_position_marks(
