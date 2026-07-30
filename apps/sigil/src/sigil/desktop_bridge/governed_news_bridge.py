@@ -32,3 +32,19 @@ def governed_news_timeline(symbol: object) -> dict[str, Any]:
 
 def governed_news_advisory_summary() -> dict[str, Any]:
     return advisory_summary(_store().records())
+
+
+def governed_news_collect(
+    provider: object,
+    symbols: list[str],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    from .governed_news_ingestion import collect_governed_news
+
+    return collect_governed_news(
+        provider=provider,
+        store=_store(),
+        symbols=symbols,
+        now=now,
+    )
