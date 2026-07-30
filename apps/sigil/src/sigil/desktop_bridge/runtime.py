@@ -122,11 +122,8 @@ def _initial_state(now: datetime) -> dict[str, Any]:
         "simulation": True,
         "execution_authorized": False,
         "broker_submission_available": False,
-        "balances": {"cash": "10000.00", "portfolio_value": "10842.16", "currency": "USD"},
-        "positions": [
-            {"symbol": "MSFT", "quantity": "1.25", "market_value": "566.00"},
-            {"symbol": "NVDA", "quantity": "1.60", "market_value": "276.80"},
-        ],
+        "balances": {"cash": "10000.00", "portfolio_value": "0.00", "currency": "USD"},
+        "positions": [],
         "automation": {
             "state": "stopped",
             "cycle_count": 0,
