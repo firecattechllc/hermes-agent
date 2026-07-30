@@ -74,11 +74,20 @@ def collect_local_position_marks(
     *,
     now: datetime,
 ) -> dict[str, dict[str, Any]]:
-    """Collect fresh bid-side marks for local positions without broker mutation."""
+    """Collect validated latest-available bid marks for local paper positions.
+
+    A position mark is considered usable when the provider response was
+    retrieved contemporaneously, the quote is positive and non-contradictory,
+    and the quote is not future-dated or older than seven calendar days.
+
+    The seven-day bound permits closed-market, weekend, and holiday valuation
+    without treating an indefinitely old quote as current.
+    """
     if len(symbols) > 3:
         raise ValueError("local simulated position monitoring is bounded to three symbols")
     if not symbols:
         return {}
+
     try:
         evidence = AlpacaProductionDataClient.from_environment().collect_batch(
             tuple(sorted(set(symbols))),
@@ -97,8 +106,12 @@ def collect_local_position_marks(
             for symbol in symbols
         }
 
+    maximum_mark_age_seconds = 7 * 24 * 60 * 60
+    maximum_receipt_age_seconds = 30
+
     result: dict[str, dict[str, Any]] = {}
     by_symbol = {item.symbol: item for item in evidence}
+
     for symbol in symbols:
         item = by_symbol.get(symbol)
         if item is None:
@@ -111,28 +124,73 @@ def collect_local_position_marks(
                 "reason": "position_mark_missing",
             }
             continue
-        age = int(
-            (now - parse_time(item.observed_at, "position quote timestamp")).total_seconds()
-        )
-        fresh = (
-            item.status.value == "complete"
-            and item.bid is not None
-            and -MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS <= age <= 30
-        )
-        result[symbol] = {
-            "status": "fresh" if fresh else ("stale" if item.bid is not None else "unavailable"),
-            "price": str(item.bid) if fresh and item.bid is not None else None,
-            "timestamp": item.observed_at,
-            "source": f"{item.source}:{item.feed}",
-            "evidence_identity": item.evidence_checksum,
-            "reason": (
-                None
-                if fresh
-                else "position_mark_stale"
-                if item.bid is not None
-                else "position_mark_incomplete"
-            ),
+
+        try:
+            quote_age = int(
+                (now - parse_time(item.observed_at, "position quote timestamp")).total_seconds()
+            )
+            receipt_age = int(
+                (
+                    now - parse_time(item.received_at, "position quote receipt timestamp")
+                ).total_seconds()
+            )
+        except ValueError:
+            result[symbol] = {
+                "status": "unavailable",
+                "price": None,
+                "timestamp": item.observed_at,
+                "source": f"{item.source}:{item.feed}",
+                "evidence_identity": item.evidence_checksum,
+                "reason": "position_mark_timestamp_invalid",
+            }
+            continue
+
+        evidence_status = item.status.value
+        structurally_valid = evidence_status not in {
+            "malformed",
+            "contradictory",
+            "unavailable",
         }
+        quote_valid = item.bid is not None and item.bid > 0
+        quote_time_valid = (
+            -MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS <= quote_age <= maximum_mark_age_seconds
+        )
+        receipt_fresh = (
+            -MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS <= receipt_age <= maximum_receipt_age_seconds
+        )
+
+        usable = structurally_valid and quote_valid and quote_time_valid and receipt_fresh
+
+        if usable:
+            status = "fresh"
+            reason = None
+            price = str(item.bid)
+        elif evidence_status in {"malformed", "contradictory"}:
+            status = "unavailable"
+            reason = f"position_mark_{evidence_status}"
+            price = None
+        elif not quote_valid:
+            status = "unavailable"
+            reason = "position_mark_incomplete"
+            price = None
+        elif not receipt_fresh:
+            status = "unavailable"
+            reason = "position_mark_provider_response_stale"
+            price = None
+        else:
+            status = "stale"
+            reason = "position_mark_stale"
+            price = None
+
+        result[symbol] = {
+            "status": status,
+            "price": price,
+            "timestamp": item.observed_at,
+            "source": f"{item.source}:{item.feed}:latest_available_bid",
+            "evidence_identity": item.evidence_checksum,
+            "reason": reason,
+        }
+
     return result
 
 
