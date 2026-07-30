@@ -115,6 +115,7 @@ def test_handled_cycle_failure_cleans_up_and_pauses_fail_closed(
     assert audit["details"]["broker_submission_attempted"] is False
     assert audit["details"]["requires_manual_resume"] is True
 
+
 def test_completed_cycle_clears_single_flight_claim() -> None:
     runtime.control_paper_cycle("start", now=NOW)
     completed = runtime.runtime_snapshot(now=NOW)
@@ -167,3 +168,54 @@ def test_stale_persisted_cycle_claim_recovers_fail_closed() -> None:
     assert audit["details"]["claim_timeout_seconds"] == (runtime.CYCLE_CLAIM_TIMEOUT_SECONDS)
     assert audit["details"]["cycle_started_at_valid"] is True
     assert audit["details"]["broker_submission_attempted"] is False
+
+
+def test_handled_cycle_failure_does_not_recover_as_interrupted_on_restart(monkeypatch):
+    runtime.control_paper_cycle("start", now=NOW)
+
+    def fail_during_submit(*args, **kwargs):
+        raise RuntimeError("simulated cycle failure during submit")
+
+    monkeypatch.setattr(runtime, "_submit_order", fail_during_submit)
+
+    with pytest.raises(RuntimeError, match="simulated cycle failure during submit"):
+        runtime.runtime_snapshot(now=NOW)
+
+    state_path = runtime._state_directory() / "runtime-state.json"
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))["payload"]
+    automation = persisted["automation"]
+
+    assert automation["state"] == "paused"
+    assert automation["next_cycle_at"] is None
+    assert automation["cycle_execution_id"] is None
+    assert automation["cycle_started_at"] is None
+    assert automation["cycle_status"] == "idle"
+    assert automation["last_cycle_status"] == "failed"
+    assert automation["cycle_count"] == 0
+    assert persisted["executions"] == []
+
+    audit = persisted["audit"][0]
+    assert audit["status"] == "paper_cycle_failed"
+    assert audit["details"]["cycle_execution_id"].startswith("PAPER-CYCLE-000001-")
+    assert audit["details"]["exception_type"] == "RuntimeError"
+    assert audit["details"]["exception_message"] == "simulated cycle failure during submit"
+    assert audit["details"]["broker_submission_attempted"] is False
+    assert audit["details"]["requires_manual_resume"] is True
+
+    # Now, wait until after the next cycle would have been due and check that we do not recover an interrupted cycle
+    later = NOW + timedelta(seconds=runtime.CYCLE_SECONDS + 1)
+    snapshot = runtime.runtime_snapshot(now=later)
+    automation_again = snapshot["automation"]
+
+    assert automation_again["state"] == "paused"
+    assert automation_again["next_cycle_at"] is None
+    assert automation_again["cycle_execution_id"] is None
+    assert automation_again["cycle_started_at"] is None
+    assert automation_again["cycle_status"] == "idle"
+    assert automation_again["last_cycle_status"] == "failed"
+    assert automation_again["cycle_count"] == 0
+
+    # Check that there is no audit event indicating an interrupted cycle recovery
+    assert all(
+        event["status"] != "paper_cycle_interrupted_recovered" for event in snapshot["audit"]
+    )
