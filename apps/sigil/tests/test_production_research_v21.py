@@ -164,7 +164,7 @@ def score(
 def test_valid_production_evidence_produces_complete_score(tmp_path):
     result = score(service(tmp_path))
     assert result.strategy_id == "sigil-liquid-trend"
-    assert result.strategy_version == "2.1.0"
+    assert result.strategy_version == "2.2.0"
     assert result.eligible is True
     assert result.normalized_score >= Decimal("0.68")
     assert result.confidence >= Decimal("0.80")
@@ -307,7 +307,7 @@ def test_completed_batch_generates_shadow_proposal_before_catalog_traversal(tmp_
     assert status["active_shadow_positions"] == 1
     proposal = research.recent("proposals")["items"][0]
     assert proposal["status"] == "admitted_in_shadow"
-    assert proposal["strategy_version"] == "2.1.0"
+    assert proposal["strategy_version"] == "2.2.0"
     assert proposal["evidence_identity"]
     assert proposal["proposed_notional"] == "25.00"
     assert proposal["exit_plan"]["maximum_holding_days"] == 10

@@ -1,4 +1,4 @@
-"""Structured bridge and runtime orchestration for v2.1 production research."""
+"""Structured bridge and runtime orchestration for v2.2 production research."""
 
 from __future__ import annotations
 
