@@ -47,6 +47,12 @@ from .production_research import (
     shadow_mode_disable,
     shadow_mode_enable,
 )
+from .governed_news_bridge import (
+    governed_alpaca_news_collect,
+    governed_news_advisory_summary,
+    governed_news_status,
+    governed_news_timeline,
+)
 from .providers import provider_snapshot
 from .runtime import (
     control_paper_authorization,
@@ -64,6 +70,10 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "control_paper_authorization",
     "reset_paper_runtime",
     "provider_snapshot",
+    "governed_news_status",
+    "governed_news_timeline",
+    "governed_news_advisory_summary",
+    "governed_alpaca_news_collect",
     "market_universe_status",
     "market_universe_search",
     "alpaca_market_data_status",
@@ -324,6 +334,50 @@ def handle_request(request: object) -> dict[str, Any]:
             }
         except ValueError as error:
             return error_response("paper_reset_denied", str(error))
+
+    if command == "governed_news_status":
+        return {"ok": True, "result": governed_news_status()}
+
+    if command == "governed_news_advisory_summary":
+        return {"ok": True, "result": governed_news_advisory_summary()}
+
+    if command == "governed_news_timeline":
+        payload = request.get("payload")
+        if not isinstance(payload, dict):
+            return error_response(
+                "invalid_payload",
+                "Governed news timeline requires a payload object.",
+            )
+        symbol = payload.get("symbol")
+        if not valid_non_empty_string(symbol):
+            return error_response(
+                "invalid_payload",
+                "Governed news timeline requires a symbol.",
+            )
+        return {"ok": True, "result": governed_news_timeline(symbol)}
+
+    if command == "governed_alpaca_news_collect":
+        payload = request.get("payload")
+        if not isinstance(payload, dict):
+            return error_response(
+                "invalid_payload",
+                "Governed Alpaca news collection requires a payload object.",
+            )
+        symbols = payload.get("symbols")
+        if (
+            not isinstance(symbols, list)
+            or not symbols
+            or len(symbols) > 50
+            or any(not valid_non_empty_string(symbol) for symbol in symbols)
+        ):
+            return error_response(
+                "invalid_payload",
+                "Governed Alpaca news symbols must contain 1 to 50 symbols.",
+            )
+        return {
+            "ok": True,
+            "result": governed_alpaca_news_collect([symbol.strip().upper() for symbol in symbols]),
+        }
 
     if command == "provider_snapshot":
         return {"ok": True, "result": provider_snapshot()}

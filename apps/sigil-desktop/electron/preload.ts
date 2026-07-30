@@ -84,5 +84,14 @@ contextBridge.exposeInMainWorld('sigilDesktop', {
     payload?: Readonly<Record<string, unknown>>
   ) => ipcRenderer.invoke(SIGIL_PRODUCTION_RESEARCH_CHANNEL, operation, payload),
   explainProposal: (payload: Readonly<Record<string, unknown>>) =>
-    ipcRenderer.invoke(SIGIL_EXPLAIN_PROPOSAL_CHANNEL, payload)
+    ipcRenderer.invoke(SIGIL_EXPLAIN_PROPOSAL_CHANNEL, payload),
+
+  getGovernedNewsStatus: () =>
+    ipcRenderer.invoke("sigil:get-governed-news-status"),
+  getGovernedNewsTimeline: (symbol: string) =>
+    ipcRenderer.invoke("sigil:get-governed-news-timeline", symbol),
+  getGovernedNewsAdvisorySummary: () =>
+    ipcRenderer.invoke("sigil:get-governed-news-advisory-summary"),
+  collectGovernedAlpacaNews: (symbols: string[]) =>
+    ipcRenderer.invoke("sigil:collect-governed-alpaca-news", symbols),
 })

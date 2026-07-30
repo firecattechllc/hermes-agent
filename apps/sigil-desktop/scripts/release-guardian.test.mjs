@@ -35,6 +35,7 @@ describe('Sigil Release Guardian', () => {
       'Executions',
       'Reconciliation',
       'Audit',
+      'News',
       'Settings'
     ])
     expect(coverage.inventory.ipc_channels).toEqual([
@@ -45,6 +46,10 @@ describe('Sigil Release Guardian', () => {
       'sigil:control-paper-authorization',
       'sigil:reset-paper-runtime',
       'sigil:get-provider-snapshot',
+      'sigil:get-governed-news-status',
+      'sigil:get-governed-news-timeline',
+      'sigil:get-governed-news-advisory-summary',
+      'sigil:collect-governed-alpaca-news',
       'sigil:get-market-universe-status',
       'sigil:search-market-universe',
       'sigil:get-alpaca-market-data-status',

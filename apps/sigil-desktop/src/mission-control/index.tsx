@@ -19,6 +19,7 @@ import {
 } from '../hermes-engine'
 
 import { desktopSigilOperatorAdapter } from './desktop-adapter'
+import { GovernedNewsPanel } from './governed-news-panel'
 import { sigilOperatorAdapter as mockSigilOperatorAdapter } from './mock-adapter'
 import type {
   AlpacaMarketDataStatus,
@@ -37,9 +38,9 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const RELEASE_STAGE = 'V2.2'
+const RELEASE_STAGE = 'V2.8'
 
-const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'settings'] as const
+const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'news', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
 
 const SECTION_LABELS: Record<Section, string> = {
@@ -50,6 +51,7 @@ const SECTION_LABELS: Record<Section, string> = {
   executions: 'Executions',
   reconciliation: 'Reconciliation',
   audit: 'Audit',
+  news: 'News',
   settings: 'Settings'
 }
 
@@ -2101,6 +2103,7 @@ export function SigilOperatorView({
             {selectedProposal ? <ContextInspector proposal={selectedProposal} /> : null}
           </div>
         ) : null}
+        {section === 'news' ? <GovernedNewsPanel /> : null}
         {section === 'proposals' ? (
           <div className={cn('py-5', PAGE_INSET_X)}>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
