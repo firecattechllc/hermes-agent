@@ -48,3 +48,17 @@ def governed_news_collect(
         symbols=symbols,
         now=now,
     )
+
+def governed_alpaca_news_collect(
+    symbols: list[str],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    from .governed_news_alpaca_collection import collect_alpaca_news
+
+    return collect_alpaca_news(
+        store=_store(),
+        symbols=symbols,
+        now=now,
+    )
+
