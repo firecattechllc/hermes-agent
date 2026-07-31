@@ -15,7 +15,9 @@ describe('SigilOperatorView', () => {
     expect(screen.getByText('DISCONNECTED')).toBeTruthy()
     expect(screen.getByText('•••• 23F4')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /submit/i })).toBeNull()
-    expect(screen.getByText(/No broker submission available/)).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toContain(
+      'No broker submission'
+    )
   })
 
   it('keeps manual proposal actions locked when governed paper runtime controls are active', async () => {
