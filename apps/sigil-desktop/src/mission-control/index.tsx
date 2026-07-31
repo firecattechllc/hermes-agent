@@ -1462,6 +1462,9 @@ export function SigilOperatorView({
   const [pendingPaperExecutionAction, setPendingPaperExecutionAction] = useState<
     'deactivate' | null
   >(null)
+  const [paperExecutionActionInFlight, setPaperExecutionActionInFlight] = useState<
+    'deactivate' | null
+  >(null)
 
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [cycleActionInFlight, setCycleActionInFlight] = useState<'start' | 'pause' | 'stop' | null>(null)
@@ -2342,13 +2345,22 @@ export function SigilOperatorView({
           const action = pendingPaperExecutionAction
           const api = desktopApi()?.paperExecution
 
-          if (action && api) {
-            const response = await api(action)
+          if (action && api && paperExecutionActionInFlight === null) {
+            setPaperExecutionActionInFlight(action)
+            setControlError(null)
 
-            if (response.ok) {
-              setPaperExecution(response.result)
-            } else {
-              setControlError(response.message)
+            try {
+              const response = await api(action)
+
+              if (response.ok) {
+                setPaperExecution(response.result)
+              } else {
+                setControlError(response.message)
+              }
+            } catch (reason) {
+              setControlError(reason instanceof Error ? reason.message : String(reason))
+            } finally {
+              setPaperExecutionActionInFlight(null)
             }
           }
 
