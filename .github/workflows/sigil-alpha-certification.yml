@@ -1,0 +1,154 @@
+name: Sigil Alpha Certification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - sigil-alpha
+    paths:
+      - "apps/sigil/**"
+      - "apps/sigil-desktop/**"
+      - ".github/workflows/sigil-alpha-certification.yml"
+  push:
+    branches:
+      - sigil-alpha
+    paths:
+      - "apps/sigil/**"
+      - "apps/sigil-desktop/**"
+      - ".github/workflows/sigil-alpha-certification.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sigil-alpha-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  SIGIL_BROKER_SUBMISSION_ENABLED: "false"
+  SIGIL_EXECUTION_AUTHORITY_ENABLED: "false"
+  OPENAI_API_KEY: ""
+  ALPACA_API_KEY_ID: ""
+  ALPACA_API_SECRET_KEY: ""
+  SIGIL_ALPACA_API_KEY_ID: ""
+  SIGIL_ALPACA_API_SECRET_KEY: ""
+  SIGIL_PUBLIC_API_SECRET: ""
+
+jobs:
+  backend:
+    name: Sigil backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: apps/sigil
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            apps/sigil/pyproject.toml
+            apps/sigil/uv.lock
+
+      - name: Install Python 3.11
+        run: uv python install 3.11
+
+      - name: Install locked dependencies
+        run: uv sync --locked --python 3.11 --extra dev
+
+      - name: Ruff critical-error validation
+        run: |
+          # Baseline-safe blocking rules: syntax errors, invalid constructs,
+          # undefined names, and other correctness-level failures.
+          # Existing repository-wide formatting debt remains non-blocking
+          # during final Alpha closure.
+          uv run ruff check --select E9,F63,F7,F82 .
+
+      - name: Compile Python sources
+        run: |
+          uv run python -m compileall -q src tests scripts
+
+      - name: Import Sigil and verify paper runtime
+        env:
+          SIGIL_DESKTOP_STATE_DIR: ${{ runner.temp }}/sigil-alpha-state
+        run: |
+          mkdir -p "${SIGIL_DESKTOP_STATE_DIR}"
+
+          uv run python -c '
+          import sigil
+          from sigil.desktop_bridge.runtime import runtime_snapshot
+
+          snapshot = runtime_snapshot()
+          assert snapshot["environment"] == "paper"
+          assert snapshot["simulation"] is True
+          assert snapshot["broker_submission_available"] is False
+          assert snapshot["execution_authorized"] is False
+          assert snapshot["runtime_health"] == "healthy"
+          assert snapshot["runtime_visibility"]["broker_submission_available"] is False
+          print("Sigil import, paper runtime, and broker boundary passed")
+          '
+
+      - name: Run full backend suite
+        run: uv run pytest -q
+
+  desktop:
+    name: Sigil desktop and bridge
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript validation
+        run: npm run --prefix apps/sigil-desktop typecheck
+
+      - name: Desktop tests
+        run: npm run --prefix apps/sigil-desktop test
+
+      - name: Desktop lint
+        run: npm run --prefix apps/sigil-desktop lint
+
+      - name: Stage and test packaged Python bridge
+        run: npm run --prefix apps/sigil-desktop test:packaged-backend
+
+      - name: Production desktop build
+        run: npm run --prefix apps/sigil-desktop build
+
+      - name: Verify paper-only safety declarations
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "${SIGIL_BROKER_SUBMISSION_ENABLED}" = "false"
+          test "${SIGIL_EXECUTION_AUTHORITY_ENABLED}" = "false"
+
+          if grep -RInE \
+            'SIGIL_BROKER_SUBMISSION_ENABLED[[:space:]]*[:=][[:space:]]*["'\'']?true' \
+            apps/sigil apps/sigil-desktop \
+            --exclude-dir=node_modules \
+            --exclude-dir=release \
+            --exclude-dir=dist \
+            --exclude-dir=packaged-backend
+          then
+            echo "::error::Found a source-controlled broker-submission enablement."
+            exit 1
+          fi
+
+          echo "Paper-only CI boundary confirmed."
