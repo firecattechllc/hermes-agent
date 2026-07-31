@@ -4,7 +4,6 @@ from sigil.desktop_bridge.governed_news_ingestion import collect_governed_news
 from sigil.desktop_bridge.governed_news_providers import JsonNewsProvider
 from sigil.desktop_bridge.governed_news_store import NewsEvidenceStore
 
-
 NOW = datetime(2026, 7, 30, 3, 30, tzinfo=UTC)
 
 

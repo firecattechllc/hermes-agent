@@ -16,6 +16,7 @@ from .governed_news_providers import (
     ProviderBatch,
     _header_int,
 )
+from .providers import load_credentials
 
 ALPACA_NEWS_ENDPOINT = "https://data.alpaca.markets/v1beta1/news"
 ALPACA_KEY_ENV = "APCA_API_KEY_ID"
@@ -82,29 +83,40 @@ class AlpacaNewsProvider:
 
     @staticmethod
     def _credentials() -> tuple[str, str]:
-        key = next(
-            (
-                os.environ.get(name, "").strip()
-                for name in (ALPACA_KEY_ENV, *ALPACA_KEY_ALIASES)
-                if os.environ.get(name, "").strip()
-            ),
-            "",
+        """Resolve Alpaca credentials through Sigil's authoritative loader.
+
+        Canonical Sigil credentials take precedence over process-level aliases.
+        Environment aliases remain available for isolated development and
+        compatibility, but they must provide a complete key/secret pair.
+        """
+        credentials = load_credentials()
+
+        key = str(credentials.get("SIGIL_ALPACA_API_KEY_ID", "")).strip()
+        secret = str(credentials.get("SIGIL_ALPACA_API_SECRET_KEY", "")).strip()
+
+        if key and secret:
+            return key, secret
+
+        environment_pairs = (
+            (ALPACA_KEY_ENV, ALPACA_SECRET_ENV),
+            ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"),
         )
-        secret = next(
-            (
-                os.environ.get(name, "").strip()
-                for name in (ALPACA_SECRET_ENV, *ALPACA_SECRET_ALIASES)
-                if os.environ.get(name, "").strip()
-            ),
-            "",
+
+        for key_name, secret_name in environment_pairs:
+            environment_key = os.environ.get(key_name, "").strip()
+            environment_secret = os.environ.get(
+                secret_name,
+                "",
+            ).strip()
+
+            if environment_key and environment_secret:
+                return environment_key, environment_secret
+
+        raise RuntimeError(
+            "Alpaca News credentials are not configured as a complete "
+            "key/secret pair. Configure SIGIL_ALPACA_API_KEY_ID and "
+            "SIGIL_ALPACA_API_SECRET_KEY through Sigil's credential store."
         )
-        if not key or not secret:
-            raise RuntimeError(
-                f"{ALPACA_KEY_ENV} and {ALPACA_SECRET_ENV} must both be "
-                "configured; supported aliases include ALPACA_API_KEY "
-                "and ALPACA_SECRET_KEY"
-            )
-        return key, secret
 
     @staticmethod
     def _map_article(article: object) -> dict[str, Any]:

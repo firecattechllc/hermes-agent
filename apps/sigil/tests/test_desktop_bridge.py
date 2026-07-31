@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import pytest
 
 from sigil.asset_catalog import AssetCatalogStore, build_snapshot
+from sigil.desktop_bridge import providers as desktop_bridge_providers
 from sigil.desktop_bridge.providers import load_credentials, provider_snapshot
 from sigil.desktop_bridge.runner import backend_status, handle_request
 
@@ -50,6 +51,10 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "control_paper_authorization",
         "reset_paper_runtime",
         "provider_snapshot",
+        "governed_news_status",
+        "governed_news_timeline",
+        "governed_news_advisory_summary",
+        "governed_alpaca_news_collect",
         "market_universe_status",
         "market_universe_search",
         "alpaca_market_data_status",
@@ -191,9 +196,12 @@ def test_alpaca_market_data_catalog_freshness_uses_durable_catalog_state(
 def test_alpaca_market_data_catalog_freshness_fails_closed_without_catalog(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    monkeypatch.setenv(
-        "SIGIL_DESKTOP_STATE_DIR", str(tmp_path / "missing-catalog-state")
+    monkeypatch.setattr(
+        desktop_bridge_providers,
+        "load_credentials",
+        dict,
     )
+    monkeypatch.setenv("SIGIL_DESKTOP_STATE_DIR", str(tmp_path / "missing-catalog-state"))
     for name in (
         "APCA_API_KEY_ID",
         "APCA_API_SECRET_KEY",
@@ -221,7 +229,7 @@ def test_alpaca_market_data_catalog_freshness_fails_closed_without_catalog(
     assert refresh["ok"] is True
     refreshed_catalog = refresh["result"]["asset_catalog"]
     assert refreshed_catalog["stale"] is True
-    assert refreshed_catalog["last_error"] == "trading_api_unauthorized"
+    assert refreshed_catalog["last_error"] == "credentials_missing"
 
 
 def test_explain_proposal_returns_governed_result() -> None:
@@ -345,14 +353,10 @@ class ProviderResponse:
 def test_provider_snapshot_is_read_only_masked_and_secret_free(tmp_path) -> None:
     credential_path = tmp_path / "providers.txt"
     credential_path.write_text(
-        "\n".join(
-            (
-                "SIGIL_ALPACA_API_KEY_ID=alpaca-key",
-                "SIGIL_ALPACA_API_SECRET_KEY=alpaca-secret",
-                "SIGIL_PUBLIC_API_SECRET=public-secret",
-                "SIGIL_BROKER_SUBMISSION_ENABLED=false",
-            )
-        )
+        "SIGIL_ALPACA_API_KEY_ID=alpaca-key\n"
+        "SIGIL_ALPACA_API_SECRET_KEY=alpaca-secret\n"
+        "SIGIL_PUBLIC_API_SECRET=public-secret\n"
+        "SIGIL_BROKER_SUBMISSION_ENABLED=false"
     )
     credential_path.chmod(0o600)
     requests = []

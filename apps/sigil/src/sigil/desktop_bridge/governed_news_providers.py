@@ -38,7 +38,7 @@ def _default_fetch_json(
     timeout: float,
 ) -> tuple[object, Mapping[str, str]]:
     request = Request(url, headers=dict(headers), method="GET")
-    with urlopen(request, timeout=timeout) as response:  # noqa: S310 - URL is HTTPS-validated.
+    with urlopen(request, timeout=timeout) as response:
         body = response.read()
         payload = json.loads(body.decode("utf-8"))
         return payload, dict(response.headers.items())
@@ -115,17 +115,17 @@ class JsonNewsProvider:
             self.timeout_seconds,
         )
         if not isinstance(payload, dict):
-            raise ValueError("provider response must be an object")
+            raise TypeError("provider response must be an object")
         raw_items = payload.get(self.items_field)
         if not isinstance(raw_items, list):
-            raise ValueError(f"provider response field {self.items_field!r} must be a list")
+            raise TypeError(f"provider response field {self.items_field!r} must be a list")
         if len(raw_items) > MAX_PROVIDER_ITEMS:
             raise ValueError("provider response contains too many items")
 
         items: list[dict[str, Any]] = []
         for item in raw_items:
             if not isinstance(item, dict):
-                raise ValueError("provider items must be objects")
+                raise TypeError("provider items must be objects")
             items.append(dict(item))
 
         rate_limit = {

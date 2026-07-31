@@ -26,7 +26,7 @@ def _timestamp(value: object, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field} is required")
     try:
-        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.strip())
     except ValueError as error:
         raise ValueError(f"{field} must be an ISO-8601 timestamp") from error
     if parsed.tzinfo is None:
@@ -63,7 +63,7 @@ def empty_news_intelligence() -> dict[str, Any]:
 
 def normalize_news_item(payload: object, *, received_at: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
-        raise ValueError("news payload must be an object")
+        raise TypeError("news payload must be an object")
     if payload.get("execution_authority") is True or payload.get("broker_submission") is True:
         raise ValueError("news intelligence cannot grant execution authority")
     headline = str(payload.get("headline", "")).strip()
@@ -84,7 +84,7 @@ def normalize_news_item(payload: object, *, received_at: str) -> dict[str, Any]:
         raise ValueError("sentiment is unsupported")
     raw_symbols = payload.get("symbols", [])
     if not isinstance(raw_symbols, list):
-        raise ValueError("symbols must be a list")
+        raise TypeError("symbols must be a list")
     symbols = sorted({str(symbol).strip().upper() for symbol in raw_symbols if str(symbol).strip()})
     if len(symbols) > MAX_SYMBOLS:
         raise ValueError("news item references too many symbols")
