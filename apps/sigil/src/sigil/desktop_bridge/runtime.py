@@ -1118,6 +1118,16 @@ def _run_due_cycle(
                         "local_simulated_execution": local_simulated_execution,
                         "local_position_monitoring": local_position_monitoring["status"],
                         "candidate_scoring_completed": True,
+                        "governed_news_context_status": production["governed_news_context"][
+                            "status"
+                        ],
+                        "symbols_with_current_news": production["governed_news_context"][
+                            "symbols_with_current_news"
+                        ],
+                        "news_advisory_only": production["news_advisory_only"],
+                        "news_affects_candidate_eligibility": production[
+                            "news_affects_candidate_eligibility"
+                        ],
                         "strategy_id": production["strategy_id"],
                         "strategy_version": production["strategy_version"],
                         "shadow_mode": production["shadow_mode"],

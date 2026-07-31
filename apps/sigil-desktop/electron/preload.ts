@@ -6,6 +6,7 @@ declare const __SIGIL_BUILD_TIME__: string
 declare const __SIGIL_VERSION__: string
 
 const SIGIL_BACKEND_STATUS_CHANNEL = 'sigil:get-backend-status'
+const SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL = 'sigil:get-governed-news-stream-status'
 const SIGIL_EXPLAIN_PROPOSAL_CHANNEL = 'sigil:explain-proposal'
 const SIGIL_RUNTIME_SNAPSHOT_CHANNEL = 'sigil:get-runtime-snapshot'
 const SIGIL_PAPER_CYCLE_CONTROL_CHANNEL = 'sigil:control-paper-cycle'
@@ -65,33 +66,21 @@ contextBridge.exposeInMainWorld('sigilDesktop', {
   getMarketUniverseStatus: () => ipcRenderer.invoke(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL),
   searchMarketUniverse: (payload: Readonly<Record<string, unknown>>) =>
     ipcRenderer.invoke(SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL, payload),
-  getAlpacaMarketDataStatus: () =>
-    ipcRenderer.invoke(SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL),
-  controlAlpacaMarketData: (action: string) =>
-    ipcRenderer.invoke(SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL, action),
-  getAssetCatalogStatus: () =>
-    ipcRenderer.invoke(SIGIL_ASSET_CATALOG_STATUS_CHANNEL),
-  refreshAssetCatalog: () =>
-    ipcRenderer.invoke(SIGIL_ASSET_CATALOG_REFRESH_CHANNEL),
-  getResearchUniverseStatus: () =>
-    ipcRenderer.invoke(SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL),
-  paperExecution: (
-    operation: string,
-    payload?: Readonly<Record<string, unknown>>
-  ) => ipcRenderer.invoke(SIGIL_PAPER_EXECUTION_CHANNEL, operation, payload),
-  productionResearch: (
-    operation: string,
-    payload?: Readonly<Record<string, unknown>>
-  ) => ipcRenderer.invoke(SIGIL_PRODUCTION_RESEARCH_CHANNEL, operation, payload),
+  getAlpacaMarketDataStatus: () => ipcRenderer.invoke(SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL),
+  controlAlpacaMarketData: (action: string) => ipcRenderer.invoke(SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL, action),
+  getAssetCatalogStatus: () => ipcRenderer.invoke(SIGIL_ASSET_CATALOG_STATUS_CHANNEL),
+  refreshAssetCatalog: () => ipcRenderer.invoke(SIGIL_ASSET_CATALOG_REFRESH_CHANNEL),
+  getResearchUniverseStatus: () => ipcRenderer.invoke(SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL),
+  paperExecution: (operation: string, payload?: Readonly<Record<string, unknown>>) =>
+    ipcRenderer.invoke(SIGIL_PAPER_EXECUTION_CHANNEL, operation, payload),
+  productionResearch: (operation: string, payload?: Readonly<Record<string, unknown>>) =>
+    ipcRenderer.invoke(SIGIL_PRODUCTION_RESEARCH_CHANNEL, operation, payload),
   explainProposal: (payload: Readonly<Record<string, unknown>>) =>
     ipcRenderer.invoke(SIGIL_EXPLAIN_PROPOSAL_CHANNEL, payload),
 
-  getGovernedNewsStatus: () =>
-    ipcRenderer.invoke("sigil:get-governed-news-status"),
-  getGovernedNewsTimeline: (symbol: string) =>
-    ipcRenderer.invoke("sigil:get-governed-news-timeline", symbol),
-  getGovernedNewsAdvisorySummary: () =>
-    ipcRenderer.invoke("sigil:get-governed-news-advisory-summary"),
-  collectGovernedAlpacaNews: (symbols: string[]) =>
-    ipcRenderer.invoke("sigil:collect-governed-alpaca-news", symbols),
+  getGovernedNewsStatus: () => ipcRenderer.invoke('sigil:get-governed-news-status'),
+  getGovernedNewsStreamStatus: () => ipcRenderer.invoke(SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL),
+  getGovernedNewsTimeline: (symbol: string) => ipcRenderer.invoke('sigil:get-governed-news-timeline', symbol),
+  getGovernedNewsAdvisorySummary: () => ipcRenderer.invoke('sigil:get-governed-news-advisory-summary'),
+  collectGovernedAlpacaNews: (symbols: string[]) => ipcRenderer.invoke('sigil:collect-governed-alpaca-news', symbols)
 })

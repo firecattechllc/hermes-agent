@@ -119,7 +119,7 @@ def test_validated_production_proposal_fills_only_in_local_simulator() -> None:
         "last_proposal": {
             "proposal_id": "SIGIL-V21-PRP-VALIDATED",
             "strategy_id": "sigil-liquid-trend",
-            "strategy_version": "2.8.0",
+            "strategy_version": "2.9.0",
             "symbol": "PEN",
             "side": "buy",
             "proposed_notional": "25.00",
@@ -170,7 +170,7 @@ def test_production_local_simulator_fails_closed_on_expired_or_duplicate_proposa
     proposal = {
         "proposal_id": "SIGIL-V21-PRP-EXPIRED",
         "strategy_id": "sigil-liquid-trend",
-        "strategy_version": "2.8.0",
+        "strategy_version": "2.9.0",
         "symbol": "PEN",
         "side": "buy",
         "proposed_notional": "25.00",
@@ -207,7 +207,7 @@ def _marked_position_state() -> dict[str, object]:
             "entry_at": NOW.isoformat(),
             "entry_proposal_id": "SIGIL-V21-PRP-MARK",
             "strategy_id": "sigil-liquid-trend",
-            "strategy_version": "2.8.0",
+            "strategy_version": "2.9.0",
             "exit_plan": {
                 "stop_loss_percent": "0.05",
                 "take_profit_percent": "0.10",

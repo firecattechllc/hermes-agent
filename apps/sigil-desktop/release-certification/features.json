@@ -631,7 +631,8 @@
         "sigil:get-governed-news-status",
         "sigil:get-governed-news-timeline",
         "sigil:get-governed-news-advisory-summary",
-        "sigil:collect-governed-alpaca-news"
+        "sigil:collect-governed-alpaca-news",
+        "sigil:get-governed-news-stream-status"
       ],
       "ui": {
         "navigation_label": "News",

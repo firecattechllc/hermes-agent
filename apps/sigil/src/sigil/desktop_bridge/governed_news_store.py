@@ -30,6 +30,21 @@ class NewsEvidenceStore:
 
         return hashlib.sha256(cls._canonical(value)).hexdigest()
 
+    @classmethod
+    def _duplicate_identity(cls, record: dict[str, Any]) -> str:
+        """Identify the same article independently of ingestion time."""
+        stable_fields = {
+            "headline": record.get("headline"),
+            "summary": record.get("summary"),
+            "source": record.get("source"),
+            "source_url": record.get("source_url"),
+            "published_at": record.get("published_at"),
+            "symbols": record.get("symbols"),
+            "sentiment": record.get("sentiment"),
+            "confidence": record.get("confidence"),
+        }
+        return cls._digest(stable_fields)
+
     def _read_envelopes(self) -> list[dict[str, Any]]:
         if self.path.is_symlink():
             raise RuntimeError("governed news ledger cannot be a symlink")
@@ -60,7 +75,7 @@ class NewsEvidenceStore:
                 raise RuntimeError("governed news ledger integrity validation failed")
             record = envelope.get("record")
             if not isinstance(record, dict):
-                raise RuntimeError("governed news ledger record is invalid")
+                raise TypeError("governed news ledger record is invalid")
             previous = expected
             envelopes.append(envelope)
         return envelopes
@@ -71,11 +86,15 @@ class NewsEvidenceStore:
     def ingest(self, payload: object, *, received_at: str) -> dict[str, Any]:
         record = normalize_news_item(payload, received_at=received_at)
         envelopes = self._read_envelopes()
-        existing = {str(envelope["record"]["evidence_identity"]) for envelope in envelopes}
-        if record["evidence_identity"] in existing:
+        duplicate_identity = self._duplicate_identity(record)
+        existing_duplicate_identities = {
+            self._duplicate_identity(envelope["record"]) for envelope in envelopes
+        }
+        if duplicate_identity in existing_duplicate_identities:
             return {
                 "status": "duplicate",
                 "record": record,
+                "duplicate_identity": duplicate_identity,
                 "broker_submission_attempted": False,
             }
 

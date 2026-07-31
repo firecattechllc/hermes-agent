@@ -10,7 +10,6 @@ from sigil.desktop_bridge.governed_news_alpaca import (
 from sigil.desktop_bridge.governed_news_alpaca_collection import collect_alpaca_news
 from sigil.desktop_bridge.governed_news_store import NewsEvidenceStore
 
-
 NOW = datetime(2026, 7, 30, 4, 0, tzinfo=UTC)
 
 
@@ -68,8 +67,15 @@ def test_alpaca_provider_maps_official_response(monkeypatch) -> None:
 
 
 def test_alpaca_provider_requires_both_credentials(monkeypatch) -> None:
-    monkeypatch.delenv(ALPACA_KEY_ENV, raising=False)
-    monkeypatch.delenv(ALPACA_SECRET_ENV, raising=False)
+    for name in (
+        ALPACA_KEY_ENV,
+        ALPACA_SECRET_ENV,
+        "SIGIL_ALPACA_API_KEY_ID",
+        "SIGIL_ALPACA_API_SECRET_KEY",
+        "ALPACA_API_KEY",
+        "ALPACA_SECRET_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
     provider = AlpacaNewsProvider(fetch_json=lambda *_: (alpaca_response(), {}))
 
     try:

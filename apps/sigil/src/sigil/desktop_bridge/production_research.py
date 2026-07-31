@@ -17,6 +17,8 @@ from sigil.production_research.engine import MAXIMUM_PROVIDER_CLOCK_SKEW_SECONDS
 from sigil.production_research.models import decimal, parse_time
 
 from .autonomous_paper import _service as _execution_service
+from .governed_news_context import production_news_context
+from .governed_news_store import NewsEvidenceStore
 from .runtime import _state_directory
 
 
@@ -274,6 +276,14 @@ def run_production_batch(
         market_data_freshness=("unavailable" if provider_failure else "fresh"),
     )
     result["broker_submission_attempted"] = False
+    result["governed_news_context"] = production_news_context(
+        NewsEvidenceStore(_state_directory()),
+        tuple(symbols),
+        now=now,
+    )
+    result["news_advisory_only"] = True
+    result["news_affects_candidate_eligibility"] = False
+
     # Forward monitoring is independent from whether the current batch produced
     # a candidate. Matching shadow positions advance using the same validated,
     # contemporaneous evidence and never contact the trading API.

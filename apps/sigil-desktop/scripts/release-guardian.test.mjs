@@ -47,6 +47,7 @@ describe('Sigil Release Guardian', () => {
       'sigil:reset-paper-runtime',
       'sigil:get-provider-snapshot',
       'sigil:get-governed-news-status',
+      'sigil:get-governed-news-stream-status',
       'sigil:get-governed-news-timeline',
       'sigil:get-governed-news-advisory-summary',
       'sigil:collect-governed-alpaca-news',

@@ -23,6 +23,7 @@ function object(value: unknown): JsonObject {
 
 function result(value: unknown): JsonObject {
   const response = object(value);
+
   return response.ok === true ? object(response.result) : response;
 }
 
@@ -39,7 +40,7 @@ function count(value: unknown): number {
 }
 
 export function GovernedNewsPanel(): React.JSX.Element {
-  const [symbolsText, setSymbolsText] = useState("AAPL, MSFT, NVDA");
+  const [symbolsText, setSymbolsText] = useState("");
   const [status, setStatus] = useState<JsonObject>({});
   const [advisory, setAdvisory] = useState<JsonObject>({});
   const [timeline, setTimeline] = useState<JsonObject>({});
@@ -61,23 +62,30 @@ export function GovernedNewsPanel(): React.JSX.Element {
 
   const refresh = useCallback(async () => {
     const desktop = api();
+
     if (!desktop) {
       setMessage("Desktop bridge unavailable.");
+
       return;
     }
+
     setBusy(true);
+
     try {
       const [nextStatus, nextAdvisory] = await Promise.all([
         desktop.getGovernedNewsStatus(),
         desktop.getGovernedNewsAdvisorySummary(),
       ]);
+
       setStatus(result(nextStatus));
       setAdvisory(result(nextAdvisory));
+
       if (symbols[0]) {
         setTimeline(
           result(await desktop.getGovernedNewsTimeline(symbols[0])),
         );
       }
+
       setMessage("Governed evidence refreshed.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "News refresh failed.");
@@ -92,26 +100,44 @@ export function GovernedNewsPanel(): React.JSX.Element {
 
   const collect = async () => {
     const desktop = api();
-    if (!desktop || symbols.length === 0) {
-      setMessage("Enter at least one ticker symbol.");
+
+    if (!desktop) {
+      setMessage("Desktop bridge unavailable.");
+
       return;
     }
+
     setBusy(true);
+
     try {
       const collection = result(await desktop.collectGovernedAlpacaNews(symbols));
+
       if (collection.status === "disabled") {
         setMessage(
           "Alpaca collection is disabled. Set SIGIL_ALPACA_NEWS_ENABLED=true for the desktop runtime.",
         );
       } else {
         setMessage(
-          `Collection ${text(collection.status, "finished")}: ${count(
-            collection.stored_count,
-          )} stored, ${count(collection.duplicate_count)} duplicates, ${count(
-            collection.rejected_count,
-          )} rejected.`,
+          collection.mode === "rolling-governed-universe"
+            ? `Universe collection ${text(
+                collection.status,
+                "finished",
+              )}: ${count(collection.processed_symbols)} of ${count(
+                collection.total_symbols,
+              )} symbols scanned; ${count(
+                collection.stored_count,
+              )} stored; next cursor ${count(collection.next_cursor)}.`
+            : `Collection ${text(
+                collection.status,
+                "finished",
+              )}: ${count(collection.stored_count)} stored, ${count(
+                collection.duplicate_count,
+              )} duplicates, ${count(
+                collection.rejected_count,
+              )} rejected.`,
         );
       }
+
       await refresh();
     } catch (error) {
       setMessage(
@@ -128,7 +154,7 @@ export function GovernedNewsPanel(): React.JSX.Element {
   const headlines = timelineItems.length ? timelineItems : statusItems;
 
   return (
-    <section className="space-y-5 px-6 py-5" aria-label="Governed news intelligence">
+    <section aria-label="Governed news intelligence" className="space-y-5 px-6 py-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
@@ -160,24 +186,27 @@ export function GovernedNewsPanel(): React.JSX.Element {
         </label>
         <div className="mt-2 flex flex-col gap-3 md:flex-row">
           <input
-            id="news-symbols"
-            value={symbolsText}
-            onChange={(event) => setSymbolsText(event.target.value)}
             className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+            id="news-symbols"
+            onChange={(event) => setSymbolsText(event.target.value)}
+            placeholder="Optional targeted tickers; leave blank for governed universe scan"
+            value={symbolsText}
           />
           <button
-            type="button"
-            disabled={busy || symbols.length === 0}
-            onClick={() => void collect()}
             className="rounded bg-neutral-100 px-4 py-2 text-sm font-semibold text-neutral-950 disabled:opacity-50"
+            disabled={busy}
+            onClick={() => void collect()}
+            type="button"
           >
-            Collect Alpaca News
+            {symbols.length
+              ? "Collect targeted news"
+              : "Scan governed universe"}
           </button>
           <button
-            type="button"
+            className="rounded border border-neutral-700 px-4 py-2 text-sm font-semibold text-neutral-200 disabled:opacity-50"
             disabled={busy}
             onClick={() => void refresh()}
-            className="rounded border border-neutral-700 px-4 py-2 text-sm font-semibold text-neutral-200 disabled:opacity-50"
+            type="button"
           >
             Refresh evidence
           </button>
@@ -192,7 +221,7 @@ export function GovernedNewsPanel(): React.JSX.Element {
           ["Corroborated", consensus.corroborated_count],
           ["Conflicting", consensus.conflicting_count],
         ].map(([label, value]) => (
-          <div key={String(label)} className="rounded-lg border border-neutral-800 bg-neutral-950/50 p-4">
+          <div className="rounded-lg border border-neutral-800 bg-neutral-950/50 p-4" key={String(label)}>
             <p className="text-xs uppercase text-neutral-500">{String(label)}</p>
             <p className="mt-2 text-2xl font-semibold text-neutral-100">{count(value)}</p>
           </div>
@@ -214,7 +243,7 @@ export function GovernedNewsPanel(): React.JSX.Element {
               </p>
             ) : (
               headlines.slice(0, 20).map((headline, index) => (
-                <article key={text(headline.evidence_identity, String(index))} className="space-y-2 px-4 py-4">
+                <article className="space-y-2 px-4 py-4" key={text(headline.evidence_identity, String(index))}>
                   <p className="text-xs text-neutral-500">
                     {text(headline.source, "Unknown source")} • {text(headline.published_at)}
                   </p>
