@@ -1464,6 +1464,7 @@ export function SigilOperatorView({
   >(null)
 
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
+  const [cycleActionInFlight, setCycleActionInFlight] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [pendingAuthorizationAction, setPendingAuthorizationAction] = useState<'grant' | 'revoke' | null>(null)
   const [pendingPaperReset, setPendingPaperReset] = useState(false)
   const [controlError, setControlError] = useState<string | null>(null)
@@ -1945,26 +1946,31 @@ export function SigilOperatorView({
                     'border-emerald-400 bg-emerald-500 text-white opacity-100 shadow-[0_0_0_1px_rgba(52,211,153,.25)]'
                 )}
                 disabled={
-                  action === 'start'
+                  cycleActionInFlight !== null ||
+                  (action === 'start'
                     ? snapshot.automationState === 'running' ||
                       snapshot.paperAuthorization?.status !== 'active'
                     : action === 'pause'
                       ? snapshot.automationState !== 'running'
-                      : snapshot.automationState === 'stopped'
+                      : snapshot.automationState === 'stopped')
                 }
                 key={action}
                 onClick={async () => {
-                  if (!adapter.controlPaperCycle) {
+                  if (!adapter.controlPaperCycle || cycleActionInFlight !== null) {
                     return
                   }
 
+                  setCycleActionInFlight(action)
+                  setControlError(null)
+
                   try {
-                    setControlError(null)
                     setSnapshot(await adapter.controlPaperCycle(action))
                   } catch (reason) {
                     setControlError(
                       reason instanceof Error ? reason.message : String(reason)
                     )
+                  } finally {
+                    setCycleActionInFlight(null)
                   }
                 }}
                 size="xs"
@@ -1976,11 +1982,13 @@ export function SigilOperatorView({
                       : 'outline'
                 }
               >
-                {action === 'start' && snapshot.automationState === 'running'
-                  ? '● Running'
-                  : action === 'start' && snapshot.automationState === 'paused'
-                    ? 'Resume'
-                    : `${action[0]?.toUpperCase()}${action.slice(1)}`}
+                {cycleActionInFlight === action
+                  ? `${action === 'start' ? 'Starting' : action === 'pause' ? 'Pausing' : 'Stopping'}…`
+                  : action === 'start' && snapshot.automationState === 'running'
+                    ? '● Running'
+                    : action === 'start' && snapshot.automationState === 'paused'
+                      ? 'Resume'
+                      : `${action[0]?.toUpperCase()}${action.slice(1)}`}
               </Button>
             ))}
           </div>
