@@ -1466,6 +1466,9 @@ export function SigilOperatorView({
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [cycleActionInFlight, setCycleActionInFlight] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [pendingAuthorizationAction, setPendingAuthorizationAction] = useState<'grant' | 'revoke' | null>(null)
+  const [authorizationActionInFlight, setAuthorizationActionInFlight] = useState<
+    'grant' | 'revoke' | null
+  >(null)
   const [pendingPaperReset, setPendingPaperReset] = useState(false)
   const [controlError, setControlError] = useState<string | null>(null)
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -2402,12 +2405,20 @@ export function SigilOperatorView({
         destructive={pendingAuthorizationAction === 'revoke'}
         onClose={() => setPendingAuthorizationAction(null)}
         onConfirm={async () => {
-          if (pendingAuthorizationAction && adapter.controlPaperAuthorization) {
+          if (
+            pendingAuthorizationAction &&
+            adapter.controlPaperAuthorization &&
+            authorizationActionInFlight === null
+          ) {
+            setAuthorizationActionInFlight(pendingAuthorizationAction)
+            setControlError(null)
+
             try {
-              setControlError(null)
               setSnapshot(await adapter.controlPaperAuthorization(pendingAuthorizationAction))
             } catch (reason) {
               setControlError(reason instanceof Error ? reason.message : String(reason))
+            } finally {
+              setAuthorizationActionInFlight(null)
             }
           }
 
