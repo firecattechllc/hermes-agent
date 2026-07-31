@@ -1,5 +1,5 @@
 import { PAGE_INSET_X } from '@hermes-desktop/app/layout-constants'
-import { useCallback, useEffect, useMemo, useState, useRef} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
