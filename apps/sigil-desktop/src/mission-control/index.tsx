@@ -1,5 +1,5 @@
 import { PAGE_INSET_X } from '@hermes-desktop/app/layout-constants'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -1462,10 +1462,19 @@ export function SigilOperatorView({
   const [pendingPaperExecutionAction, setPendingPaperExecutionAction] = useState<
     'deactivate' | null
   >(null)
+  const [paperExecutionActionInFlight, setPaperExecutionActionInFlight] = useState<
+    'deactivate' | null
+  >(null)
+  const paperExecutionActionInFlightRef = useRef(false)
 
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
+  const [cycleActionInFlight, setCycleActionInFlight] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [pendingAuthorizationAction, setPendingAuthorizationAction] = useState<'grant' | 'revoke' | null>(null)
+  const [authorizationActionInFlight, setAuthorizationActionInFlight] = useState<
+    'grant' | 'revoke' | null
+  >(null)
   const [pendingPaperReset, setPendingPaperReset] = useState(false)
+  const [paperResetInFlight, setPaperResetInFlight] = useState(false)
   const [controlError, setControlError] = useState<string | null>(null)
   const [aboutOpen, setAboutOpen] = useState(false)
   const [updater, setUpdater] = useState<UpdaterSnapshot | null>(null)
@@ -1945,26 +1954,31 @@ export function SigilOperatorView({
                     'border-emerald-400 bg-emerald-500 text-white opacity-100 shadow-[0_0_0_1px_rgba(52,211,153,.25)]'
                 )}
                 disabled={
-                  action === 'start'
+                  cycleActionInFlight !== null ||
+                  (action === 'start'
                     ? snapshot.automationState === 'running' ||
                       snapshot.paperAuthorization?.status !== 'active'
                     : action === 'pause'
                       ? snapshot.automationState !== 'running'
-                      : snapshot.automationState === 'stopped'
+                      : snapshot.automationState === 'stopped')
                 }
                 key={action}
                 onClick={async () => {
-                  if (!adapter.controlPaperCycle) {
+                  if (!adapter.controlPaperCycle || cycleActionInFlight !== null) {
                     return
                   }
 
+                  setCycleActionInFlight(action)
+                  setControlError(null)
+
                   try {
-                    setControlError(null)
                     setSnapshot(await adapter.controlPaperCycle(action))
                   } catch (reason) {
                     setControlError(
                       reason instanceof Error ? reason.message : String(reason)
                     )
+                  } finally {
+                    setCycleActionInFlight(null)
                   }
                 }}
                 size="xs"
@@ -1976,11 +1990,13 @@ export function SigilOperatorView({
                       : 'outline'
                 }
               >
-                {action === 'start' && snapshot.automationState === 'running'
-                  ? '● Running'
-                  : action === 'start' && snapshot.automationState === 'paused'
-                    ? 'Resume'
-                    : `${action[0]?.toUpperCase()}${action.slice(1)}`}
+                {cycleActionInFlight === action
+                  ? `${action === 'start' ? 'Starting' : action === 'pause' ? 'Pausing' : 'Stopping'}…`
+                  : action === 'start' && snapshot.automationState === 'running'
+                    ? '● Running'
+                    : action === 'start' && snapshot.automationState === 'paused'
+                      ? 'Resume'
+                      : `${action[0]?.toUpperCase()}${action.slice(1)}`}
               </Button>
             ))}
           </div>
@@ -2330,13 +2346,29 @@ export function SigilOperatorView({
           const action = pendingPaperExecutionAction
           const api = desktopApi()?.paperExecution
 
-          if (action && api) {
-            const response = await api(action)
+          if (
+            action &&
+            api &&
+            paperExecutionActionInFlight === null &&
+            !paperExecutionActionInFlightRef.current
+          ) {
+            paperExecutionActionInFlightRef.current = true
+            setPaperExecutionActionInFlight(action)
+            setControlError(null)
 
-            if (response.ok) {
-              setPaperExecution(response.result)
-            } else {
-              setControlError(response.message)
+            try {
+              const response = await api(action)
+
+              if (response.ok) {
+                setPaperExecution(response.result)
+              } else {
+                setControlError(response.message)
+              }
+            } catch (reason) {
+              setControlError(reason instanceof Error ? reason.message : String(reason))
+            } finally {
+              paperExecutionActionInFlightRef.current = false
+              setPaperExecutionActionInFlight(null)
             }
           }
 
@@ -2394,12 +2426,20 @@ export function SigilOperatorView({
         destructive={pendingAuthorizationAction === 'revoke'}
         onClose={() => setPendingAuthorizationAction(null)}
         onConfirm={async () => {
-          if (pendingAuthorizationAction && adapter.controlPaperAuthorization) {
+          if (
+            pendingAuthorizationAction &&
+            adapter.controlPaperAuthorization &&
+            authorizationActionInFlight === null
+          ) {
+            setAuthorizationActionInFlight(pendingAuthorizationAction)
+            setControlError(null)
+
             try {
-              setControlError(null)
               setSnapshot(await adapter.controlPaperAuthorization(pendingAuthorizationAction))
             } catch (reason) {
               setControlError(reason instanceof Error ? reason.message : String(reason))
+            } finally {
+              setAuthorizationActionInFlight(null)
             }
           }
 
@@ -2414,13 +2454,17 @@ export function SigilOperatorView({
         destructive
         onClose={() => setPendingPaperReset(false)}
         onConfirm={async () => {
-          if (adapter.resetPaperRuntime) {
+          if (adapter.resetPaperRuntime && !paperResetInFlight) {
+            setPaperResetInFlight(true)
+            setControlError(null)
+
             try {
-              setControlError(null)
               setSnapshot(await adapter.resetPaperRuntime())
               setSection('portfolio')
             } catch (reason) {
               setControlError(reason instanceof Error ? reason.message : String(reason))
+            } finally {
+              setPaperResetInFlight(false)
             }
           }
 
