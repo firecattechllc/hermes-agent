@@ -7,7 +7,7 @@ describe('Sigil Electron startup', () => {
     expect(source).toContain("SIGIL_APP_NAME = 'Sigil'")
     expect(source).toContain("SIGIL_BUNDLE_ID = 'com.firecattechnology.sigil'")
     expect(source).toContain("SIGIL_USER_DATA_DIRECTORY = 'Sigil'")
-    expect(source).toContain("title: SIGIL_APP_NAME")
+    expect(source).toContain('title: SIGIL_APP_NAME')
     expect(source).not.toContain('HERMES_DESKTOP')
   })
 
@@ -17,9 +17,9 @@ describe('Sigil Electron startup', () => {
 
     expect(mainSource).toContain("SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'")
     expect(mainSource).toContain("runBridgeRequest({ command: 'provider_snapshot' })")
-    expect(mainSource).toContain("SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL")
+    expect(mainSource).toContain('SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL')
     expect(mainSource).toContain("command: 'control_paper_authorization'")
-    expect(mainSource).toContain("SIGIL_PAPER_RUNTIME_RESET_CHANNEL")
+    expect(mainSource).toContain('SIGIL_PAPER_RUNTIME_RESET_CHANNEL')
     expect(mainSource).toContain("command: 'reset_paper_runtime'")
     expect(mainSource).toContain("confirmation: 'RESET LOCAL PAPER PORTFOLIO'")
     expect(preloadSource).toContain('getProviderSnapshot')
@@ -54,6 +54,19 @@ describe('Sigil Electron startup', () => {
     )
   })
 
+  it('supervises the governed realtime news worker through Electron lifecycle', () => {
+    const source = fs.readFileSync(path.resolve('electron/main.ts'), 'utf8')
+    const preloadSource = fs.readFileSync(path.resolve('electron/preload.ts'), 'utf8')
+
+    expect(source).toContain('createGovernedNewsStreamLifecycle()')
+    expect(source).toContain('governedNewsStreamLifecycle.start()')
+    expect(source).toContain("app.on('before-quit'")
+    expect(source).toContain('governedNewsStreamLifecycle.stop()')
+    expect(source).toContain('SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL')
+    expect(preloadSource).toContain('getGovernedNewsStreamStatus')
+    expect(preloadSource).not.toContain('APCA_API_SECRET_KEY')
+  })
+
   it('exposes only data controls for Alpaca free market data', () => {
     const source = fs.readFileSync(path.resolve('src/mission-control/index.tsx'), 'utf8')
     const mainSource = fs.readFileSync(path.resolve('electron/main.ts'), 'utf8')
@@ -71,8 +84,6 @@ describe('Sigil Electron startup', () => {
     expect(source).toContain("['Proposal eligible', status.proposal_eligible_count]")
     expect(source).toContain('Refresh catalog')
     expect(source).not.toContain('Submit Alpaca order')
-    expect(mainSource).toContain(
-      'Update metadata is not bundled with this unsigned development build.'
-    )
+    expect(mainSource).toContain('Update metadata is not bundled with this unsigned development build.')
   })
 })

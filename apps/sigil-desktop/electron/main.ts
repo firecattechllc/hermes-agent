@@ -1,20 +1,13 @@
-import { spawn } from 'node:child_process'
-import { existsSync } from "node:fs"
+import { type ChildProcess, spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron'
 
-import {
-  enableGovernedPaperExecutionByDefault,
-  type PaperExecutionStartupStatus
-} from './paper-execution-startup'
-import {
-  GovernedUpdater,
-  UnavailableUpdater,
-  type UpdaterClient,
-  type UpdaterController
-} from './updater'
+import { GovernedNewsStreamLifecycle, type GovernedNewsStreamLifecycleSnapshot } from './governed-news-stream-lifecycle'
+import { enableGovernedPaperExecutionByDefault, type PaperExecutionStartupStatus } from './paper-execution-startup'
+import { GovernedUpdater, UnavailableUpdater, type UpdaterClient, type UpdaterController } from './updater'
 
 export const SIGIL_APP_NAME = 'Sigil'
 export const SIGIL_BUNDLE_ID = 'com.firecattechnology.sigil'
@@ -27,6 +20,7 @@ export const SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL = 'sigil:control-paper-au
 export const SIGIL_PAPER_RUNTIME_RESET_CHANNEL = 'sigil:reset-paper-runtime'
 export const SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'
 export const SIGIL_GOVERNED_NEWS_STATUS_CHANNEL = 'sigil:get-governed-news-status'
+export const SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL = 'sigil:get-governed-news-stream-status'
 export const SIGIL_GOVERNED_NEWS_TIMELINE_CHANNEL = 'sigil:get-governed-news-timeline'
 export const SIGIL_GOVERNED_NEWS_ADVISORY_CHANNEL = 'sigil:get-governed-news-advisory-summary'
 export const SIGIL_GOVERNED_ALPACA_NEWS_COLLECT_CHANNEL = 'sigil:collect-governed-alpaca-news'
@@ -53,13 +47,9 @@ const certificationProposals = new Map([
 ])
 
 function certificationResponse(payload: Readonly<Record<string, unknown>>) {
-  const token = process.argv
-    .find(argument => argument.startsWith('--sigil-release-certification='))
-    ?.split('=', 2)[1]
+  const token = process.argv.find(argument => argument.startsWith('--sigil-release-certification='))?.split('=', 2)[1]
 
-  const enabled =
-    Boolean(token) &&
-    token === process.env.SIGIL_RELEASE_CERTIFICATION_TOKEN
+  const enabled = Boolean(token) && token === process.env.SIGIL_RELEASE_CERTIFICATION_TOKEN
 
   if (!enabled) {
     return { bounded: true, error: 'certification_unavailable' }
@@ -112,9 +102,7 @@ function certificationResponse(payload: Readonly<Record<string, unknown>>) {
     const updateAvailable = candidate.some(
       (value, index) =>
         value > (current[index] ?? 0) &&
-        candidate.slice(0, index).every(
-          (part, prior) => part === (current[prior] ?? 0)
-        )
+        candidate.slice(0, index).every((part, prior) => part === (current[prior] ?? 0))
     )
 
     return {
@@ -156,14 +144,50 @@ nativeTheme.themeSource = 'dark'
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 
+let governedNewsStreamLifecycle: GovernedNewsStreamLifecycle | null = null
+let governedNewsStreamQuitPending = false
+
+function governedNewsStateDirectory(): string {
+  return path.join(app.getPath('userData'), 'paper-runtime')
+}
+
+function createGovernedNewsStreamLifecycle(): GovernedNewsStreamLifecycle {
+  return new GovernedNewsStreamLifecycle({
+    python: pythonExecutable(),
+    sourceRoot: backendSourceRoot(),
+    workingDirectory: backendWorkingDirectory(),
+    stateDirectory: governedNewsStateDirectory(),
+    environment: process.env,
+    spawnWorker: (executable, arguments_, options): ChildProcess => spawn(executable, [...arguments_], options)
+  })
+}
+
+async function governedNewsStreamSnapshot(): Promise<GovernedNewsStreamLifecycleSnapshot> {
+  if (!governedNewsStreamLifecycle) {
+    return {
+      enabled: false,
+      process_running: false,
+      process_pid: null,
+      lifecycle_state: 'stopped',
+      last_process_error: null,
+      state_file: path.join(governedNewsStateDirectory(), 'governed-news-stream-state.json'),
+      stream_state: null,
+      advisory_only: true,
+      execution_authority: false,
+      broker_submission_attempted: false,
+      paper_only: true
+    }
+  }
+
+  return governedNewsStreamLifecycle.snapshot()
+}
+
 function repositoryRoot(): string {
   return path.resolve(currentDirectory, '../../..')
 }
 
 function shouldEnableGovernedPaperExecution(): boolean {
-  const releaseCertification = process.argv.some(argument =>
-    argument.startsWith('--sigil-release-certification=')
-  )
+  const releaseCertification = process.argv.some(argument => argument.startsWith('--sigil-release-certification='))
 
   return !releaseCertification && process.env.SIGIL_ADAPTER !== 'mock'
 }
@@ -182,14 +206,10 @@ function pythonExecutable(): string {
     '/usr/local/opt/python@3.11/bin/python3.11'
   ]
 
-  const packagedPython = packagedCandidates.find(candidate =>
-    existsSync(candidate)
-  )
+  const packagedPython = packagedCandidates.find(candidate => existsSync(candidate))
 
   if (!packagedPython) {
-    throw new Error(
-      'Sigil requires Python 3.11. No certified packaged runtime was found.'
-    )
+    throw new Error('Sigil requires Python 3.11. No certified packaged runtime was found.')
   }
 
   return packagedPython
@@ -221,25 +241,19 @@ type BridgeResponse<T = unknown> =
       message: string
     }
 
-export function runBridgeRequest<T>(
-  request: BridgeRequest
-): Promise<BridgeResponse<T>> {
+export function runBridgeRequest<T>(request: BridgeRequest): Promise<BridgeResponse<T>> {
   return new Promise(resolve => {
     const sourceRoot = backendSourceRoot()
 
-    const child = spawn(
-      pythonExecutable(),
-      ['-m', 'sigil.desktop_bridge.runner'],
-      {
-        cwd: backendWorkingDirectory(),
-        env: {
-          ...process.env,
-          PYTHONPATH: sourceRoot,
-          SIGIL_DESKTOP_STATE_DIR: path.join(app.getPath('userData'), 'paper-runtime')
-        },
-        stdio: ['pipe', 'pipe', 'pipe']
-      }
-    )
+    const child = spawn(pythonExecutable(), ['-m', 'sigil.desktop_bridge.runner'], {
+      cwd: backendWorkingDirectory(),
+      env: {
+        ...process.env,
+        PYTHONPATH: sourceRoot,
+        SIGIL_DESKTOP_STATE_DIR: governedNewsStateDirectory()
+      },
+      stdio: ['pipe', 'pipe', 'pipe']
+    })
 
     let stdout = ''
     let stderr = ''
@@ -254,22 +268,25 @@ export function runBridgeRequest<T>(
       resolve(response)
     }
 
-    const timeout = setTimeout(() => {
-      child.kill()
-      finish({
-        ok: false,
-        error: 'backend_timeout',
-        message: 'The local Sigil backend did not respond in time.'
-      })
-    }, [
-      'provider_snapshot',
-      'governed_alpaca_news_collect',
-      'asset_catalog_refresh',
-      'runtime_snapshot',
-      'control_paper_cycle'
-    ].includes(request.command)
-      ? 45_000
-      : 5_000)
+    const timeout = setTimeout(
+      () => {
+        child.kill()
+        finish({
+          ok: false,
+          error: 'backend_timeout',
+          message: 'The local Sigil backend did not respond in time.'
+        })
+      },
+      [
+        'provider_snapshot',
+        'governed_alpaca_news_collect',
+        'asset_catalog_refresh',
+        'runtime_snapshot',
+        'control_paper_cycle'
+      ].includes(request.command)
+        ? 45_000
+        : 5_000
+    )
 
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
@@ -309,9 +326,7 @@ export function runBridgeRequest<T>(
       finish({
         ok: false,
         error: 'invalid_backend_response',
-        message:
-          stderr.trim() ||
-          'The local Sigil backend returned an invalid response.'
+        message: stderr.trim() || 'The local Sigil backend returned an invalid response.'
       })
     })
 
@@ -347,20 +362,14 @@ async function installReadiness(): Promise<Readonly<{ ready: boolean; reason?: s
 }
 
 async function initializeUpdater(): Promise<GovernedUpdater> {
-  if (
-    app.isPackaged &&
-    !existsSync(path.join(process.resourcesPath, 'app-update.yml'))
-  ) {
-    throw new Error(
-      'Update metadata is not bundled with this unsigned development build.'
-    )
+  if (app.isPackaged && !existsSync(path.join(process.resourcesPath, 'app-update.yml'))) {
+    throw new Error('Update metadata is not bundled with this unsigned development build.')
   }
 
   const updaterModule = await import('electron-updater')
 
   const autoUpdater =
-    updaterModule.autoUpdater ??
-    (updaterModule.default as { autoUpdater?: UpdaterClient } | undefined)?.autoUpdater
+    updaterModule.autoUpdater ?? (updaterModule.default as { autoUpdater?: UpdaterClient } | undefined)?.autoUpdater
 
   if (!autoUpdater) {
     throw new Error('The packaged update service is unavailable.')
@@ -396,6 +405,7 @@ export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_PAPER_RUNTIME_RESET_CHANNEL)
   ipcMain.removeHandler(SIGIL_PROVIDER_SNAPSHOT_CHANNEL)
   ipcMain.removeHandler(SIGIL_GOVERNED_NEWS_STATUS_CHANNEL)
+  ipcMain.removeHandler(SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_GOVERNED_NEWS_TIMELINE_CHANNEL)
   ipcMain.removeHandler(SIGIL_GOVERNED_NEWS_ADVISORY_CHANNEL)
   ipcMain.removeHandler(SIGIL_GOVERNED_ALPACA_NEWS_COLLECT_CHANNEL)
@@ -415,30 +425,22 @@ export function registerSigilIpc(): void {
 
   ipcMain.handle(SIGIL_BACKEND_STATUS_CHANNEL, () => readBackendStatus())
 
-  ipcMain.handle(
-    SIGIL_EXPLAIN_PROPOSAL_CHANNEL,
-    (_event, payload: Readonly<Record<string, unknown>>) =>
-      runBridgeRequest({
-        command: 'explain_proposal',
-        payload
-      })
+  ipcMain.handle(SIGIL_EXPLAIN_PROPOSAL_CHANNEL, (_event, payload: Readonly<Record<string, unknown>>) =>
+    runBridgeRequest({
+      command: 'explain_proposal',
+      payload
+    })
   )
 
-  ipcMain.handle(SIGIL_RUNTIME_SNAPSHOT_CHANNEL, () =>
-    runBridgeRequest({ command: 'runtime_snapshot' })
+  ipcMain.handle(SIGIL_RUNTIME_SNAPSHOT_CHANNEL, () => runBridgeRequest({ command: 'runtime_snapshot' }))
+  ipcMain.handle(SIGIL_PAPER_CYCLE_CONTROL_CHANNEL, (_event, action: 'start' | 'pause' | 'stop') =>
+    runBridgeRequest({ command: 'control_paper_cycle', payload: { action } })
   )
-  ipcMain.handle(
-    SIGIL_PAPER_CYCLE_CONTROL_CHANNEL,
-    (_event, action: 'start' | 'pause' | 'stop') =>
-      runBridgeRequest({ command: 'control_paper_cycle', payload: { action } })
-  )
-  ipcMain.handle(
-    SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL,
-    (_event, action: 'grant' | 'revoke') =>
-      runBridgeRequest({
-        command: 'control_paper_authorization',
-        payload: { action }
-      })
+  ipcMain.handle(SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL, (_event, action: 'grant' | 'revoke') =>
+    runBridgeRequest({
+      command: 'control_paper_authorization',
+      payload: { action }
+    })
   )
   ipcMain.handle(SIGIL_PAPER_RUNTIME_RESET_CHANNEL, () =>
     runBridgeRequest({
@@ -446,53 +448,36 @@ export function registerSigilIpc(): void {
       payload: { confirmation: 'RESET LOCAL PAPER PORTFOLIO' }
     })
   )
-  ipcMain.handle(SIGIL_PROVIDER_SNAPSHOT_CHANNEL, () =>
-    runBridgeRequest({ command: 'provider_snapshot' })
-  )
-  ipcMain.handle(SIGIL_GOVERNED_NEWS_STATUS_CHANNEL, () =>
-    runBridgeRequest({ command: 'governed_news_status' })
-  )
-  ipcMain.handle(
-    SIGIL_GOVERNED_NEWS_TIMELINE_CHANNEL,
-    (_event, symbol: string) =>
-      runBridgeRequest({
-        command: 'governed_news_timeline',
-        payload: { symbol }
-      })
+  ipcMain.handle(SIGIL_PROVIDER_SNAPSHOT_CHANNEL, () => runBridgeRequest({ command: 'provider_snapshot' }))
+  ipcMain.handle(SIGIL_GOVERNED_NEWS_STATUS_CHANNEL, () => runBridgeRequest({ command: 'governed_news_status' }))
+  ipcMain.handle(SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL, () => governedNewsStreamSnapshot())
+  ipcMain.handle(SIGIL_GOVERNED_NEWS_TIMELINE_CHANNEL, (_event, symbol: string) =>
+    runBridgeRequest({
+      command: 'governed_news_timeline',
+      payload: { symbol }
+    })
   )
   ipcMain.handle(SIGIL_GOVERNED_NEWS_ADVISORY_CHANNEL, () =>
     runBridgeRequest({ command: 'governed_news_advisory_summary' })
   )
-  ipcMain.handle(
-    SIGIL_GOVERNED_ALPACA_NEWS_COLLECT_CHANNEL,
-    (_event, symbols: string[]) =>
-      runBridgeRequest({
-        command: 'governed_alpaca_news_collect',
-        payload: { symbols }
-      })
+  ipcMain.handle(SIGIL_GOVERNED_ALPACA_NEWS_COLLECT_CHANNEL, (_event, symbols: string[]) =>
+    runBridgeRequest({
+      command: 'governed_alpaca_news_collect',
+      payload: { symbols }
+    })
   )
-  ipcMain.handle(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL, () =>
-    runBridgeRequest({ command: 'market_universe_status' })
-  )
-  ipcMain.handle(
-    SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL,
-    (_event, payload: Readonly<Record<string, unknown>>) =>
-      runBridgeRequest({ command: 'market_universe_search', payload })
+  ipcMain.handle(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL, () => runBridgeRequest({ command: 'market_universe_status' }))
+  ipcMain.handle(SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL, (_event, payload: Readonly<Record<string, unknown>>) =>
+    runBridgeRequest({ command: 'market_universe_search', payload })
   )
   ipcMain.handle(SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL, () =>
     runBridgeRequest({ command: 'alpaca_market_data_status' })
   )
-  ipcMain.handle(
-    SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL,
-    (_event, action: string) =>
-      runBridgeRequest({ command: 'control_alpaca_market_data', payload: { action } })
+  ipcMain.handle(SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL, (_event, action: string) =>
+    runBridgeRequest({ command: 'control_alpaca_market_data', payload: { action } })
   )
-  ipcMain.handle(SIGIL_ASSET_CATALOG_STATUS_CHANNEL, () =>
-    runBridgeRequest({ command: 'asset_catalog_status' })
-  )
-  ipcMain.handle(SIGIL_ASSET_CATALOG_REFRESH_CHANNEL, () =>
-    runBridgeRequest({ command: 'asset_catalog_refresh' })
-  )
+  ipcMain.handle(SIGIL_ASSET_CATALOG_STATUS_CHANNEL, () => runBridgeRequest({ command: 'asset_catalog_status' }))
+  ipcMain.handle(SIGIL_ASSET_CATALOG_REFRESH_CHANNEL, () => runBridgeRequest({ command: 'asset_catalog_refresh' }))
   ipcMain.handle(SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL, () =>
     runBridgeRequest({ command: 'research_universe_status' })
   )
@@ -565,10 +550,8 @@ export function registerSigilIpc(): void {
   ipcMain.handle(SIGIL_UPDATE_DOWNLOAD_CHANNEL, () => governedUpdater?.approveDownload())
   ipcMain.handle(SIGIL_UPDATE_DEFER_CHANNEL, () => governedUpdater?.defer())
   ipcMain.handle(SIGIL_UPDATE_INSTALL_CHANNEL, () => governedUpdater?.restartAndInstall())
-  ipcMain.handle(
-    SIGIL_RELEASE_CERTIFICATION_CHANNEL,
-    (_event, payload: Readonly<Record<string, unknown>>) =>
-      certificationResponse(payload)
+  ipcMain.handle(SIGIL_RELEASE_CERTIFICATION_CHANNEL, (_event, payload: Readonly<Record<string, unknown>>) =>
+    certificationResponse(payload)
   )
 }
 
@@ -602,6 +585,8 @@ export function createSigilWindow(): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
+  governedNewsStreamLifecycle = createGovernedNewsStreamLifecycle()
+  governedNewsStreamLifecycle.start()
   let updater: UpdaterController
 
   try {
@@ -614,9 +599,7 @@ app.whenReady().then(async () => {
   registerSigilIpc()
 
   if (shouldEnableGovernedPaperExecution()) {
-    await enableGovernedPaperExecutionByDefault(request =>
-      runBridgeRequest<PaperExecutionStartupStatus>(request)
-    )
+    await enableGovernedPaperExecutionByDefault(request => runBridgeRequest<PaperExecutionStartupStatus>(request))
   }
 
   createSigilWindow()
@@ -631,6 +614,19 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createSigilWindow()
     }
+  })
+})
+
+app.on('before-quit', event => {
+  if (governedNewsStreamQuitPending || !governedNewsStreamLifecycle?.running) {
+    return
+  }
+
+  event.preventDefault()
+  governedNewsStreamQuitPending = true
+
+  void governedNewsStreamLifecycle.stop().finally(() => {
+    app.quit()
   })
 })
 
