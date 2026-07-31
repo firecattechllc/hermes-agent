@@ -221,6 +221,37 @@ def emergency_paper_liquidation() -> dict[str, Any]:
     return execution.monitor_positions(prices, now=now, emergency=True)
 
 
+def _fresh_catalog_snapshot(now: datetime) -> Any:
+    """Return a fresh governed catalog, refreshing stale state when possible.
+
+    A stale-but-usable catalog is sufficient evidence to attempt a bounded
+    provider refresh, but it is never passed into production research as
+    fresh. Refresh failures remain fail-closed and preserve the original
+    exception as their cause.
+    """
+
+    catalog_service = AssetCatalogService(_state_directory())
+    catalog_state, snapshot, _metadata = catalog_service.store.load(now=now)
+
+    if snapshot is not None and catalog_state == "fresh":
+        return snapshot
+
+    try:
+        refresh_result = catalog_service.refresh()
+    except Exception as error:
+        raise RuntimeError("production research catalog refresh failed") from error
+
+    if refresh_result.get("status") != "fresh":
+        failure_code = refresh_result.get("failure_code") or "unknown"
+        raise RuntimeError(f"production research catalog refresh failed: {failure_code}")
+
+    catalog_state, snapshot, _metadata = catalog_service.store.load(now=now)
+    if snapshot is None or catalog_state != "fresh":
+        raise RuntimeError("production research requires a fresh governed catalog")
+
+    return snapshot
+
+
 def run_production_batch(
     symbols: list[str],
     *,
@@ -230,9 +261,7 @@ def run_production_batch(
     next_cycle_at: str | None,
     now: datetime,
 ) -> dict[str, Any]:
-    catalog_state, snapshot, _metadata = AssetCatalogService(_state_directory()).store.load(now=now)
-    if snapshot is None or catalog_state != "fresh":
-        raise RuntimeError("production research requires a fresh governed catalog")
+    snapshot = _fresh_catalog_snapshot(now)
     selected = set(symbols)
     assets = [asset for asset in snapshot.normalized_assets if asset.symbol in selected]
     data_client = AlpacaProductionDataClient.from_environment()
