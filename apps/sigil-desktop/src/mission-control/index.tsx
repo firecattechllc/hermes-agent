@@ -1,5 +1,5 @@
 import { PAGE_INSET_X } from '@hermes-desktop/app/layout-constants'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef} from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -1465,6 +1465,7 @@ export function SigilOperatorView({
   const [paperExecutionActionInFlight, setPaperExecutionActionInFlight] = useState<
     'deactivate' | null
   >(null)
+  const paperExecutionActionInFlightRef = useRef(false)
 
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [cycleActionInFlight, setCycleActionInFlight] = useState<'start' | 'pause' | 'stop' | null>(null)
@@ -2345,7 +2346,13 @@ export function SigilOperatorView({
           const action = pendingPaperExecutionAction
           const api = desktopApi()?.paperExecution
 
-          if (action && api && paperExecutionActionInFlight === null) {
+          if (
+            action &&
+            api &&
+            paperExecutionActionInFlight === null &&
+            !paperExecutionActionInFlightRef.current
+          ) {
+            paperExecutionActionInFlightRef.current = true
             setPaperExecutionActionInFlight(action)
             setControlError(null)
 
@@ -2360,6 +2367,7 @@ export function SigilOperatorView({
             } catch (reason) {
               setControlError(reason instanceof Error ? reason.message : String(reason))
             } finally {
+              paperExecutionActionInFlightRef.current = false
               setPaperExecutionActionInFlight(null)
             }
           }
