@@ -1470,6 +1470,7 @@ export function SigilOperatorView({
     'grant' | 'revoke' | null
   >(null)
   const [pendingPaperReset, setPendingPaperReset] = useState(false)
+  const [paperResetInFlight, setPaperResetInFlight] = useState(false)
   const [controlError, setControlError] = useState<string | null>(null)
   const [aboutOpen, setAboutOpen] = useState(false)
   const [updater, setUpdater] = useState<UpdaterSnapshot | null>(null)
@@ -2433,13 +2434,17 @@ export function SigilOperatorView({
         destructive
         onClose={() => setPendingPaperReset(false)}
         onConfirm={async () => {
-          if (adapter.resetPaperRuntime) {
+          if (adapter.resetPaperRuntime && !paperResetInFlight) {
+            setPaperResetInFlight(true)
+            setControlError(null)
+
             try {
-              setControlError(null)
               setSnapshot(await adapter.resetPaperRuntime())
               setSection('portfolio')
             } catch (reason) {
               setControlError(reason instanceof Error ? reason.message : String(reason))
+            } finally {
+              setPaperResetInFlight(false)
             }
           }
 
