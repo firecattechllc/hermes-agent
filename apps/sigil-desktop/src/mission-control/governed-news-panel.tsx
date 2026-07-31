@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type JsonObject = Record<string, unknown>;
 
@@ -46,6 +46,7 @@ export function GovernedNewsPanel(): React.JSX.Element {
   const [timeline, setTimeline] = useState<JsonObject>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Loading governed evidence…");
+  const actionLocked = useRef(false);
 
   const symbols = useMemo(
     () =>
@@ -60,18 +61,8 @@ export function GovernedNewsPanel(): React.JSX.Element {
     [symbolsText],
   );
 
-  const refresh = useCallback(async () => {
-    const desktop = api();
-
-    if (!desktop) {
-      setMessage("Desktop bridge unavailable.");
-
-      return;
-    }
-
-    setBusy(true);
-
-    try {
+  const loadEvidence = useCallback(
+    async (desktop: NewsDesktopApi): Promise<void> => {
       const [nextStatus, nextAdvisory] = await Promise.all([
         desktop.getGovernedNewsStatus(),
         desktop.getGovernedNewsAdvisorySummary(),
@@ -84,21 +75,18 @@ export function GovernedNewsPanel(): React.JSX.Element {
         setTimeline(
           result(await desktop.getGovernedNewsTimeline(symbols[0])),
         );
+      } else {
+        setTimeline({});
       }
+    },
+    [symbols],
+  );
 
-      setMessage("Governed evidence refreshed.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "News refresh failed.");
-    } finally {
-      setBusy(false);
+  const refresh = useCallback(async () => {
+    if (actionLocked.current) {
+      return;
     }
-  }, [symbols]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  const collect = async () => {
     const desktop = api();
 
     if (!desktop) {
@@ -107,6 +95,38 @@ export function GovernedNewsPanel(): React.JSX.Element {
       return;
     }
 
+    actionLocked.current = true;
+    setBusy(true);
+
+    try {
+      await loadEvidence(desktop);
+      setMessage("Governed evidence refreshed.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "News refresh failed.");
+    } finally {
+      actionLocked.current = false;
+      setBusy(false);
+    }
+  }, [loadEvidence]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const collect = async (): Promise<void> => {
+    if (actionLocked.current) {
+      return;
+    }
+
+    const desktop = api();
+
+    if (!desktop) {
+      setMessage("Desktop bridge unavailable.");
+
+      return;
+    }
+
+    actionLocked.current = true;
     setBusy(true);
 
     try {
@@ -138,12 +158,13 @@ export function GovernedNewsPanel(): React.JSX.Element {
         );
       }
 
-      await refresh();
+      await loadEvidence(desktop);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Alpaca collection failed.",
       );
     } finally {
+      actionLocked.current = false;
       setBusy(false);
     }
   };
