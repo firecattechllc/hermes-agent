@@ -48,7 +48,7 @@ def collect_governed_news(
     observed_at = _timestamp(now)
     try:
         batch = provider.collect(symbols)
-    except Exception as error:  # Provider isolation is an explicit runtime boundary.
+    except Exception as error:  # noqa: BLE001 - Provider isolation is an explicit runtime boundary.
         return {
             "status": "provider-failed",
             "provider": provider_name,
@@ -71,7 +71,7 @@ def collect_governed_news(
         try:
             staged = _stage_item(batch, raw_item)
             result = store.ingest(staged, received_at=observed_at)
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - Malformed provider items are isolated.
             failure = _failure(batch.provider, f"item:{index}", error)
             failures.append(failure)
             continue

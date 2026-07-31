@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlparse
 
+from sigil.desktop_bridge import governed_news_alpaca
 from sigil.desktop_bridge.governed_news_alpaca import (
     ALPACA_ENABLED_ENV,
     ALPACA_KEY_ENV,
@@ -33,8 +34,14 @@ def alpaca_response() -> dict[str, object]:
 
 
 def credentials(monkeypatch) -> None:
-    monkeypatch.setenv(ALPACA_KEY_ENV, "test-key")
-    monkeypatch.setenv(ALPACA_SECRET_ENV, "test-secret")
+    monkeypatch.setattr(
+        governed_news_alpaca,
+        "load_credentials",
+        lambda: {
+            "SIGIL_ALPACA_API_KEY_ID": "test-key",
+            "SIGIL_ALPACA_API_SECRET_KEY": "test-secret",
+        },
+    )
 
 
 def test_alpaca_provider_maps_official_response(monkeypatch) -> None:
@@ -67,6 +74,12 @@ def test_alpaca_provider_maps_official_response(monkeypatch) -> None:
 
 
 def test_alpaca_provider_requires_both_credentials(monkeypatch) -> None:
+    monkeypatch.setattr(
+        governed_news_alpaca,
+        "load_credentials",
+        dict,
+    )
+
     for name in (
         ALPACA_KEY_ENV,
         ALPACA_SECRET_ENV,
@@ -76,13 +89,13 @@ def test_alpaca_provider_requires_both_credentials(monkeypatch) -> None:
         "ALPACA_SECRET_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
+
     provider = AlpacaNewsProvider(fetch_json=lambda *_: (alpaca_response(), {}))
 
     try:
         provider.collect(["MSFT"])
     except RuntimeError as error:
-        assert ALPACA_KEY_ENV in str(error)
-        assert ALPACA_SECRET_ENV in str(error)
+        assert "complete key/secret pair" in str(error)
     else:
         raise AssertionError("Alpaca provider accepted missing credentials")
 
