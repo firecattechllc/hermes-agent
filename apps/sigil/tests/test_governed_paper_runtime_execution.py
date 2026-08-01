@@ -98,7 +98,9 @@ def test_mission_control_status_is_paper_only() -> None:
     assert len(status["open_orders"]) == 1
 
 
-def test_validated_production_proposal_fills_only_in_local_simulator() -> None:
+def _production_admission_state(
+    *, buying_power: str = "10000.00", total_account_value: str = "10000.00"
+) -> dict[str, object]:
     state = runtime._initial_state(NOW)
     state["positions"] = []
     state["balances"].update(
@@ -106,31 +108,37 @@ def test_validated_production_proposal_fills_only_in_local_simulator() -> None:
             "cash": "10000.00",
             "portfolio_value": "10000.00",
             "reserved_cash": "0.00",
-            "buying_power": "10000.00",
+            "buying_power": buying_power,
             "equity": "10000.00",
             "realized_pnl": "0.00",
             "unrealized_pnl": "0.00",
-            "total_account_value": "10000.00",
+            "total_account_value": total_account_value,
         }
     )
     state["automation"]["state"] = "running"
-    production = {
+    return state
+
+
+def _production_proposal(*, notional: str, symbol: str = "PEN") -> dict[str, object]:
+    return {
         "broker_submission": False,
         "last_proposal": {
-            "proposal_id": "SIGIL-V21-PRP-VALIDATED",
+            "proposal_id": f"SIGIL-V21-PRP-{symbol}",
             "strategy_id": "sigil-liquid-trend",
             "strategy_version": "3.5.0",
-            "symbol": "PEN",
+            "symbol": symbol,
             "side": "buy",
-            "proposed_notional": "25.00",
-            "reference_price": "12.50",
+            "proposed_notional": notional,
+            "reference_price": "10.00",
             "expires_at": (NOW + timedelta(minutes=2)).isoformat(),
             "status": "admitted_in_shadow",
             "evidence_identity": "evidence-checksum",
         },
     }
 
-    executed = runtime._admit_production_proposal_to_local_simulator(
+
+def _admit(state: dict[str, object], production: dict[str, object]) -> bool:
+    return runtime._admit_production_proposal_to_local_simulator(
         state,
         production,
         sequence=1,
@@ -138,18 +146,82 @@ def test_validated_production_proposal_fills_only_in_local_simulator() -> None:
         now=NOW,
     )
 
+
+def test_exactly_five_percent_of_buying_power_fills_only_in_local_simulator() -> None:
+    state = _production_admission_state(
+        buying_power="10000.00", total_account_value="10000.00"
+    )
+    production = _production_proposal(notional="500.00")
+
+    executed = _admit(state, production)
+
     assert executed is True
     assert state["positions"][0]["symbol"] == "PEN"
-    assert state["positions"][0]["market_value"] == "25.00"
+    assert state["positions"][0]["market_value"] == "500.00"
     assert state["last_execution"]["broker_submission_attempted"] is False
     assert state["broker_submission_available"] is False
     assert state["execution_authorized"] is False
+    assert state["proposals"][0]["risk_results"] == [
+        "Validated production proposal admitted in shadow",
+        "Maximum local simulated order: 5% of available buying power",
+        "Maximum local simulated position: 10% of total account value",
+        "Maximum three local simulated positions",
+        "Broker submission disabled",
+    ]
     assert any(
         event["status"] == "production_paper_simulated"
-        and event["details"]["notional"] == "25.00"
+        and event["details"]["notional"] == "500.00"
         and event["details"]["broker_submission_attempted"] is False
         for event in state["audit"]
     )
+
+
+def test_more_than_five_percent_of_buying_power_is_rejected() -> None:
+    state = _production_admission_state()
+
+    assert _admit(state, _production_proposal(notional="500.01")) is False
+    assert state["audit"][0]["details"]["reason"] == (
+        "maximum_local_order_buying_power_percent_exceeded"
+    )
+
+
+def test_order_within_buying_power_limit_above_position_limit_is_rejected() -> None:
+    state = _production_admission_state(
+        buying_power="20000.00", total_account_value="4000.00"
+    )
+
+    assert _admit(state, _production_proposal(notional="500.00")) is False
+    assert state["audit"][0]["details"]["reason"] == (
+        "maximum_local_position_percent_exceeded"
+    )
+
+
+def test_former_seventy_five_dollar_deployed_capital_limit_no_longer_blocks() -> None:
+    state = _production_admission_state()
+    state["positions"] = [
+        {
+            "symbol": "AAPL",
+            "quantity": "1",
+            "average_cost": "100.00",
+            "market_value": "100.00",
+        }
+    ]
+
+    assert _admit(state, _production_proposal(notional="500.00")) is True
+    assert {position["symbol"] for position in state["positions"]} == {"AAPL", "PEN"}
+
+
+@pytest.mark.parametrize("field", ["buying_power", "total_account_value"])
+@pytest.mark.parametrize("value", [None, "invalid", "NaN", "Infinity", "0", "-1"])
+def test_invalid_local_risk_capacity_fails_closed(field: str, value: str | None) -> None:
+    state = _production_admission_state()
+    if value is None:
+        state["balances"].pop(field)
+    else:
+        state["balances"][field] = value
+
+    assert _admit(state, _production_proposal(notional="25.00")) is False
+    assert state["audit"][0]["details"]["reason"] == "invalid_local_risk_capacity"
 
 
 def test_production_local_simulator_fails_closed_on_expired_or_duplicate_proposal() -> None:

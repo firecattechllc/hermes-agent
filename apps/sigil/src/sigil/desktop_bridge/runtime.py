@@ -578,10 +578,29 @@ def _admit_production_proposal_to_local_simulator(
         for item in state.get("orders", {}).values()
         if item.get("status") in {"open", "partially_filled"}
     }
-    deployed = sum(
-        Decimal(str(item.get("market_value", "0"))) for item in state.get("positions", [])
-    )
-    cash = Decimal(str(state.get("balances", {}).get("cash", "0")))
+    balances = state.get("balances", {})
+    try:
+        cash = Decimal(str(balances.get("cash")))
+        buying_power = Decimal(str(balances.get("buying_power")))
+        total_account_value = Decimal(str(balances.get("total_account_value")))
+        current_symbol_value = sum(
+            (
+                Decimal(str(item.get("market_value", "0")))
+                for item in state.get("positions", [])
+                if str(item.get("symbol", "")).strip().upper() == symbol
+            ),
+            Decimal(0),
+        )
+        valid_local_risk_capacity = all(
+            value.is_finite() and value > 0
+            for value in (buying_power, total_account_value)
+        ) and cash.is_finite()
+    except (ArithmeticError, ValueError):
+        cash = Decimal(0)
+        buying_power = Decimal(0)
+        total_account_value = Decimal(0)
+        current_symbol_value = Decimal(0)
+        valid_local_risk_capacity = False
     if rejection is None and proposal.get("status") != "admitted_in_shadow":
         rejection = "production_proposal_not_shadow_admitted"
     elif rejection is None and side != "BUY":
@@ -598,20 +617,25 @@ def _admit_production_proposal_to_local_simulator(
         rejection = "broker_or_live_execution_authority_present"
     elif rejection is None and not _authorization_active(state, now):
         rejection = "monthly_paper_authorization_inactive"
-    elif rejection is None and evaluate_runtime_health(state) != "healthy":
-        rejection = "local_runtime_unhealthy"
-    elif rejection is None and state["automation"].get("state") != "running":
-        rejection = "local_simulation_not_running"
     elif rejection is None and symbol in open_positions:
         rejection = "duplicate_local_position"
     elif rejection is None and symbol in open_order_symbols:
         rejection = "duplicate_local_entry_order"
     elif rejection is None and len(open_positions) >= 3:
         rejection = "maximum_local_positions_reached"
-    elif rejection is None and notional > Decimal("25.00"):
-        rejection = "maximum_local_order_notional_exceeded"
-    elif rejection is None and deployed + notional > Decimal("75.00"):
-        rejection = "maximum_local_deployed_capital_exceeded"
+    elif rejection is None and not valid_local_risk_capacity:
+        rejection = "invalid_local_risk_capacity"
+    elif rejection is None and notional > buying_power * Decimal("0.05"):
+        rejection = "maximum_local_order_buying_power_percent_exceeded"
+    elif (
+        rejection is None
+        and current_symbol_value + notional > total_account_value * Decimal("0.10")
+    ):
+        rejection = "maximum_local_position_percent_exceeded"
+    elif rejection is None and evaluate_runtime_health(state) != "healthy":
+        rejection = "local_runtime_unhealthy"
+    elif rejection is None and state["automation"].get("state") != "running":
+        rejection = "local_simulation_not_running"
     elif rejection is None and cash - notional < Decimal("100.00"):
         rejection = "minimum_local_cash_buffer_breached"
 
@@ -660,9 +684,9 @@ def _admit_production_proposal_to_local_simulator(
             "evidence_references": [str(proposal["evidence_identity"])],
             "risk_results": [
                 "Validated production proposal admitted in shadow",
-                "Maximum local simulated order notional: $25",
+                "Maximum local simulated order: 5% of available buying power",
+                "Maximum local simulated position: 10% of total account value",
                 "Maximum three local simulated positions",
-                "Maximum local simulated deployed capital: $75",
                 "Broker submission disabled",
             ],
             "exit_plan": dict(proposal.get("exit_plan", {})),
