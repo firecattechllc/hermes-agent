@@ -114,6 +114,75 @@ try {
   }
   process.stdout.write('PASS: packaged optional orchestration surfaces start safely disabled\n')
 
+  const disabledFleet = aiStatus.fleet
+  if (
+    disabledFleet?.enabled !== false ||
+    disabledFleet?.health !== 'disabled' ||
+    disabledFleet?.registered_node_count !== 0 ||
+    disabledFleet?.healthy_node_count !== 0 ||
+    disabledFleet?.active_tasks !== 0 ||
+    disabledFleet?.completion_unknown_tasks !== 0 ||
+    disabledFleet?.broker_submission !== false
+  ) {
+    throw new Error(`Governed fleet did not start safely disabled: ${JSON.stringify(disabledFleet)}`)
+  }
+  process.stdout.write('PASS: packaged governed fleet starts disabled and empty\n')
+
+  run(
+    python,
+    [
+      '-c',
+      [
+        'from dataclasses import replace',
+        'from sigil.ai import *',
+        "NOW='2026-08-01T18:00:00+00:00'; D='sha256:' + ('a' * 64)",
+        "def node(role, cpu=CPUClass.STANDARD, memory=MemoryClass.MEDIUM):",
+        " identity=FleetNodeIdentity('node-'+role.value, role.value, role, DeviceClass.SERVER, 'linux', 'arm64', 'governed-os', TrustTier.TRUSTED, PrivacyTier.LOCAL_ONLY, ExecutionLocation.FLEET, 'tailnet:'+role.value, 'identity-ref:'+role.value, NOW, NOW, True, True)",
+        " model=FleetModelInventory(role.value+'-provider', role.value+'-model', role.value+'-tokenizer', frozenset((Capability.REASONING,)))",
+        " return FleetNodeRegistration(identity, (model,), frozenset((WorkerTaskType.RESEARCH_PREPARATION,)), memory, cpu, None, 2, 10000, 2000, 2000, resource_enforcement_verified=True, enabled=True, health=ProviderHealth.HEALTHY)",
+        "def health(n, state=FleetNodeState.HEALTHY): return FleetNodeHealth(n.identity.node_id, n.identity.authenticated_identity_ref, NOW, NOW, state, n.capabilities, tuple(m.model_id for m in n.models), 10, 0, 0, 'normal', 'normal', 'normal', ProviderHealth.HEALTHY, False, False)",
+        "def request(**kw):",
+        " values=dict(fleet_request_id='fleet-packaged', orchestration_id='orchestration-packaged', step_id='orchestration-step-'+('c'*64), task_correlation_id='packaged-fleet-task', required_capability=Capability.REASONING, responsibility=Responsibility.RESEARCH_ANALYSIS, required_provider_id=None, required_model_id=None, required_tokenizer_id=None, required_vector_dimension=None, required_corpus_revision=None, privacy_requirement=PrivacyTier.LOCAL_ONLY, minimum_trust_tier=TrustTier.TRUSTED, preferred_node_roles=(FleetNodeRole.TITAN,FleetNodeRole.MAC,FleetNodeRole.PRIME), excluded_node_ids=(), maximum_latency_ms=5000, maximum_duration_ms=5000, maximum_memory_class=MemoryClass.MEDIUM, minimum_cpu_class=CPUClass.STANDARD, maximum_cost_class=CostClass.FREE, fallback_permission=False, escalation_permission=True, cancellation_policy='query_before_retry', maximum_retries=1, maximum_remote_steps=1, input_digests=(D,), evidence_context_digests=(D,), requested_at=NOW); values.update(kw); return FleetRoutingRequest(**values)",
+        "titan=node(FleetNodeRole.TITAN); mac=node(FleetNodeRole.MAC, CPUClass.HIGH, MemoryClass.LARGE); prime=node(FleetNodeRole.PRIME, CPUClass.HIGH, MemoryClass.LARGE)",
+        "registry=FleetRegistry((titan,mac,prime)); router=GovernedFleetRouter(registry); healthy={n.identity.node_id:health(n) for n in (titan,mac,prime)}",
+        "assert router.route(request(), healthy, decided_at=NOW).selected_node_id == 'node-titan'",
+        "heavy=request(maximum_memory_class=MemoryClass.LARGE, minimum_cpu_class=CPUClass.HIGH); assert router.route(heavy, healthy, decided_at=NOW).selected_node_id == 'node-mac'",
+        "healthy['node-mac']=health(mac,FleetNodeState.UNAVAILABLE); assert router.route(heavy, healthy, decided_at=NOW).selected_node_id == 'node-prime'",
+        "assert all(not getattr(x, 'broker_submission', True) for x in (request(), router.route(request(), healthy, decided_at=NOW)))"
+      ].join('\n')
+    ],
+    { env: environment }
+  )
+  process.stdout.write('PASS: packaged Titan, Mac escalation, and Prime fallback routing stayed governed\n')
+
+  run(
+    python,
+    [
+      '-c',
+      [
+        'from pathlib import Path',
+        'from sigil.ai import DurableFleetStore, fleet_evidence',
+        "root=Path(__import__('os').environ['SIGIL_DESKTOP_STATE_DIR']).resolve(); store=DurableFleetStore(root)",
+        "store.append(fleet_evidence('failover', 'fleet-packaged-failover', node_id='node-titan', input_value='fleet-packaged', output_value='node-mac', state='retry_next_eligible_node', created_at='2026-08-01T18:00:00+00:00', failure='provider_unavailable'))",
+        "store.append(fleet_evidence('completion_ambiguous', 'remote-task-packaged-unknown', node_id='node-mac', input_value='remote-task-packaged-unknown', output_value=None, state='completion_unknown', created_at='2026-08-01T18:00:01+00:00', failure='transport_ambiguous'))"
+      ].join('\n')
+    ],
+    { env: environment }
+  )
+  const inspectedFleet = bridgeRequest(
+    { command: 'ai_status' },
+    { SIGIL_AI_FLEET_ENABLED: 'true' }
+  ).fleet
+  if (
+    inspectedFleet?.completion_unknown_tasks !== 1 ||
+    inspectedFleet?.latest_failover?.node_id !== 'node-titan' ||
+    inspectedFleet?.execution_authorized !== false ||
+    inspectedFleet?.broker_submission !== false
+  ) {
+    throw new Error(`Packaged fleet failover/ambiguity inspection was unsafe: ${JSON.stringify(inspectedFleet)}`)
+  }
+  process.stdout.write('PASS: packaged fleet failover and completion_unknown stayed visible and non-authoritative\n')
+
   const recentArtifacts = bridgeRequest({
     command: 'ai_recent_artifacts',
     payload: { limit: 1 }

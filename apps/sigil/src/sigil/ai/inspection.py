@@ -10,6 +10,7 @@ from typing import Any
 
 from .artifact_store import AnalysisArtifactStoreError, DurableAnalysisArtifactStore
 from .finbert import FinBERTConfig, GovernedSentimentArtifact, LocalFinBERTProvider
+from .fleet import DurableFleetStore, FleetStoreError
 from .gemma import LocalGemmaConfig, LocalGemmaProvider
 from .kronos import (
     GovernedForecastArtifact,
@@ -125,6 +126,19 @@ def _read_orchestrations(
         return (), "recoverable_tail" if recoverable else "corrupt", recoverable
 
 
+def _read_fleet(root: Path | None) -> tuple[tuple[object, ...], str, bool]:
+    directory = None if root is None else root / "governed-ai-fleet-v1"
+    if directory is None or not (directory / "fleet-evidence.jsonl").exists():
+        return (), "empty", False
+    if not (directory / "fleet-evidence.lock").exists():
+        return (), "corrupt", False
+    try:
+        return DurableFleetStore(root).read(recover_truncated_tail=False), "healthy", False
+    except FleetStoreError as error:
+        recoverable = "truncated tail" in str(error)
+        return (), "recoverable_tail" if recoverable else "corrupt", recoverable
+
+
 def _config(environment: dict[str, str]) -> tuple[LocalGemmaConfig, str]:
     try:
         config = LocalGemmaConfig.from_environment(environment)
@@ -188,6 +202,83 @@ def _kronos_config(
         return KronosConfig(), None, "configuration_invalid"
 
 
+def _fleet_status(records, health: str, tail: bool, enabled: bool) -> dict[str, Any]:
+    def latest(event_type: str, role: str | None = None):
+        return next(
+            (
+                item
+                for item in reversed(records)
+                if item.event_type == event_type
+                and (role is None or dict(item.details).get("role") == role)
+            ),
+            None,
+        )
+
+    def node(role: str) -> dict[str, Any] | None:
+        item = latest("heartbeat", role)
+        if item is None:
+            return None
+        details = dict(item.details)
+        return {
+            "node_id": item.node_id,
+            "state": item.state,
+            "capabilities": details.get("capabilities", "").split(",")
+            if details.get("capabilities")
+            else [],
+            "load": int(details.get("load", "0")),
+        }
+
+    route = latest("routing_decision")
+    failover = latest("failover")
+    return {
+        "enabled": enabled,
+        "health": health if enabled else "disabled",
+        "store_health": health,
+        "recoverable_corruption": tail,
+        "registered_node_count": len(
+            {
+                item.node_id
+                for item in records
+                if item.event_type == "node_registration" and item.node_id is not None
+            }
+        ),
+        "healthy_node_count": len(
+            {
+                item.node_id
+                for item in records
+                if item.event_type == "heartbeat"
+                and item.state == "healthy"
+                and item.node_id is not None
+            }
+        ),
+        "nodes": {role: node(role) for role in ("titan", "mac", "prime")},
+        "active_tasks": sum(
+            item.state in {"acknowledged", "running", "cancellation_requested"}
+            for item in records[-100:]
+        ),
+        "queued_tasks": sum(
+            item.event_type == "task_dispatch" and item.state == "not_started"
+            for item in records[-100:]
+        ),
+        "completion_unknown_tasks": sum(
+            item.state == "completion_unknown" for item in records[-100:]
+        ),
+        "clock_warnings": sum(
+            item.state in {"clock_skew", "stale", "future"} for item in records[-100:]
+        ),
+        "latest_route": None
+        if route is None
+        else {"node_id": route.node_id, "state": route.state, "created_at": route.created_at},
+        "latest_failover": None
+        if failover is None
+        else {"node_id": failover.node_id, "failure": failover.failure_classification},
+        "recent_failures": sum(item.failure_classification is not None for item in records[-20:]),
+        "paper_only": True,
+        "execution_authorized": False,
+        "broker_submission": False,
+    }
+
+
 def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
     source = dict(os.environ if environment is None else environment)
     root = _state_root(source)
@@ -195,6 +286,7 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
     artifacts, artifact_health, artifact_tail = _read_artifacts(root)
     sources, chunks, embeddings, retrieval_health, retrieval_tail = _read_retrieval(root)
     orchestrations, orchestration_health, orchestration_tail = _read_orchestrations(root)
+    fleet_records, fleet_health, fleet_tail = _read_fleet(root)
     latest_by_orchestration = {item.orchestration_id: item for item in orchestrations}
     latest_orchestrations = tuple(latest_by_orchestration.values())
     config, gemma_health = _config(source)
@@ -212,6 +304,7 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
         health == "healthy"
         for health in (gemma_health, finbert_health, embedding_health, kronos_health)
     )
+    fleet_enabled = source.get("SIGIL_AI_FLEET_ENABLED", "").lower() in {"1", "true", "yes"}
     latest = artifacts[-1] if artifacts else None
     latest_sentiment = next(
         (item for item in reversed(artifacts) if isinstance(item, GovernedSentimentArtifact)),
@@ -455,6 +548,7 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
             "execution_authorized": False,
             "broker_submission": False,
         },
+        "fleet": _fleet_status(fleet_records, fleet_health, fleet_tail, fleet_enabled),
         "paper_only": True,
         "execution_authorized": False,
         "broker_submission": False,

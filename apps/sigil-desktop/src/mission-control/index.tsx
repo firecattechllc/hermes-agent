@@ -1798,6 +1798,24 @@ export type AIStatus = {
       updated_at: string
     } | null
   }
+  fleet?: {
+    enabled: boolean
+    health: string
+    store_health: string
+    registered_node_count: number
+    healthy_node_count: number
+    nodes: Record<'titan' | 'mac' | 'prime', { node_id: string; state: string; capabilities: string[]; load: number } | null>
+    active_tasks: number
+    queued_tasks: number
+    completion_unknown_tasks: number
+    clock_warnings: number
+    latest_route: { node_id: string | null; state: string; created_at: string } | null
+    latest_failover: { node_id: string | null; failure: string | null } | null
+    recent_failures: number
+    paper_only: true
+    execution_authorized: false
+    broker_submission: false
+  }
   paper_only: true
   broker_submission: false
 }
@@ -1825,6 +1843,10 @@ export function AIFoundationPanel({ status }: { status: AIStatus | null }) {
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Coordination surfaces</dt><dd className="mt-1 font-mono">Buzz {status?.orchestration?.buzz ?? 'unavailable'} · Atlas {status?.orchestration?.atlas ?? 'unavailable'} · OpenWorker {status?.orchestration?.openworker ?? 'unavailable'}</dd></div>
         <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Orchestration evidence</dt><dd className="mt-1 break-all font-mono">{status?.orchestration?.latest ? `${status.orchestration.latest.capabilities.join(', ') || 'no capabilities'} · ${status.orchestration.latest.artifact_id ?? 'no artifact'} · ${status.orchestration.latest.evidence_identities[0] ?? 'no evidence'}` : 'none'}</dd></div>
         <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Orchestration limitations</dt><dd className="mt-1 break-words font-mono">{status?.orchestration?.latest?.limitations.join(' · ') || 'none'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Governed fleet</dt><dd className="mt-1 font-mono">{status?.fleet?.health ?? 'unavailable'} · {status?.fleet?.healthy_node_count ?? 0}/{status?.fleet?.registered_node_count ?? 0} healthy · {status?.fleet?.active_tasks ?? 0} active · {status?.fleet?.queued_tasks ?? 0} queued</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Titan / Mac / Prime</dt><dd className="mt-1 font-mono">Titan {status?.fleet?.nodes.titan?.state ?? 'unavailable'} · Mac {status?.fleet?.nodes.mac?.state ?? 'unavailable'} · Prime {status?.fleet?.nodes.prime?.state ?? 'unavailable'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Fleet route / failover</dt><dd className="mt-1 break-words font-mono">{status?.fleet?.latest_route?.node_id ?? 'none'} · failover {status?.fleet?.latest_failover?.node_id ?? 'none'} · {status?.fleet?.completion_unknown_tasks ?? 0} completion unknown</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Fleet evidence / clocks</dt><dd className="mt-1 font-mono">{status?.fleet?.store_health ?? 'unavailable'} · {status?.fleet?.clock_warnings ?? 0} clock warnings · paper only · broker disabled</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Registry</dt><dd className="mt-1 font-mono">{status?.configured_model_count ?? 0} models · {status?.available_provider_count ?? 0} available</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Evidence / artifacts</dt><dd className="mt-1 font-mono">{status?.evidence_ledger_health ?? 'unavailable'} · {status?.artifact_store_health ?? 'unavailable'}</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Latest result</dt><dd className="mt-1 break-words font-mono">{status?.last_failure_classification ?? (status?.orchestration?.latest ? `${status.orchestration.latest.state} · ${status.orchestration.latest.completed_steps} completed · ${status.orchestration.latest.failed_steps} failed` : status?.kronos?.last_successful_forecast ? `${status.kronos.last_successful_forecast.symbol} · ${status.kronos.last_successful_forecast.interval} · ${status.kronos.last_successful_forecast.forecast_horizon} points · ${status.kronos.last_successful_forecast.freshness}` : status?.embeddinggemma?.latest_retrieval ? `${status.embeddinggemma.latest_retrieval.result_count} retrieval results · ${status.embeddinggemma.latest_retrieval.freshness.join(', ') || 'no matches'}` : status?.finbert?.latest_sentiment ? `${status.finbert.latest_sentiment.label} · ${Math.round(status.finbert.latest_sentiment.confidence * 100)}% · ${status.finbert.latest_sentiment.source_identity}` : status?.latest_analysis_summary ?? status?.last_successful_analysis_at ?? 'none')}</dd></div>

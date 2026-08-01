@@ -90,6 +90,28 @@ const healthyStatus: AIStatus = {
       updated_at: '2026-08-01T17:10:00Z'
     }
   },
+  fleet: {
+    enabled: true,
+    health: 'healthy',
+    store_health: 'healthy',
+    registered_node_count: 3,
+    healthy_node_count: 2,
+    nodes: {
+      titan: { node_id: 'node-titan', state: 'healthy', capabilities: ['reasoning.v1'], load: 10 },
+      mac: { node_id: 'node-mac', state: 'healthy', capabilities: ['reasoning.v1'], load: 20 },
+      prime: { node_id: 'node-prime', state: 'unavailable', capabilities: [], load: 0 }
+    },
+    active_tasks: 1,
+    queued_tasks: 0,
+    completion_unknown_tasks: 0,
+    clock_warnings: 0,
+    latest_route: { node_id: 'node-titan', state: 'selected', created_at: '2026-08-01T17:10:00Z' },
+    latest_failover: null,
+    recent_failures: 0,
+    paper_only: true,
+    execution_authorized: false,
+    broker_submission: false
+  },
   paper_only: true,
   broker_submission: false
 }
@@ -117,6 +139,9 @@ describe('AI Foundation status panel', () => {
     const evidence = screen.getByText('Orchestration evidence').parentElement?.textContent ?? ''
     expect(evidence).toContain('semantic_retrieval.v1, financial_sentiment.v1')
     expect(evidence).toContain('analysis-artifact-')
+    expect(screen.getByText('healthy · 2/3 healthy · 1 active · 0 queued')).toBeTruthy()
+    expect(screen.getByText('Titan healthy · Mac healthy · Prime unavailable')).toBeTruthy()
+    expect(screen.getByText('healthy · 0 clock warnings · paper only · broker disabled')).toBeTruthy()
   })
 
   it('renders the latest structured failure classification', () => {
