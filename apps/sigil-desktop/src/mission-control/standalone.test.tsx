@@ -369,6 +369,68 @@ describe('standalone Sigil Mission Control', () => {
     }
   })
 
+  it('fails provider and catalog refreshes closed without exposing credentials', async () => {
+    const original = window.sigilDesktop
+
+    window.sigilDesktop = {
+      productName: 'Sigil',
+      persistenceNamespace: 'test',
+      brokerSubmissionAvailable: false,
+      getBackendStatus: async () => ({
+        ok: false,
+        error: 'unused',
+        message: 'unused'
+      }),
+      explainProposal: async () => ({
+        ok: false,
+        error: 'unused',
+        message: 'unused'
+      }),
+      getProviderSnapshot: async () => ({
+        ok: false,
+        error: 'provider_unavailable',
+        message: 'Provider snapshot unavailable'
+      }),
+      refreshAssetCatalog: async () => ({
+        ok: false,
+        error: 'catalog_refresh_failed',
+        message: 'Asset catalog refresh failed safely'
+      })
+    }
+
+    try {
+      render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
+      await screen.findByTestId('sigil-operator')
+
+      expect(
+        await screen.findByText(
+          'Provider refresh degraded safely: Provider snapshot unavailable'
+        )
+      ).toBeTruthy()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh providers' }))
+
+      expect(
+        await screen.findByText(
+          'Provider refresh degraded safely: Provider snapshot unavailable'
+        )
+      ).toBeTruthy()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh catalog' }))
+
+      expect(
+        await screen.findByText('Asset catalog refresh failed safely')
+      ).toBeTruthy()
+
+      expect(screen.getByText('Catalog unavailable')).toBeTruthy()
+      expect(screen.queryByText(/api[_ -]?key|secret|credential value/i)).toBeNull()
+      expect(screen.queryByText(/submit order/i)).toBeNull()
+      expect(window.sigilDesktop.brokerSubmissionAvailable).toBe(false)
+    } finally {
+      window.sigilDesktop = original
+    }
+  })
+
   it('confirmation-gates simulated proposal approval and records local audit evidence', async () => {
     const simulator = new MockSigilOperatorAdapter('disconnected')
     const adapter = {
