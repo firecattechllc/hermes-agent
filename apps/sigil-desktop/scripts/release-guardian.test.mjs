@@ -113,11 +113,11 @@ describe('Sigil Release Guardian', () => {
     const current = parse('current')
     const newer = parse('newer')
 
-    expect(current.version).toBe('2.1.0')
-    expect(semver.gt(current.version, '2.1.0')).toBe(false)
-    expect(newer.version).toBe('2.1.1')
-    expect(semver.gt(newer.version, '2.1.0')).toBe(true)
-    expect(() => semver.gt(parse('malformed').version, '2.1.0')).toThrow()
+    expect(current.version).toBe('3.5.0')
+    expect(semver.gt(current.version, '3.5.0')).toBe(false)
+    expect(newer.version).toBe('3.5.1')
+    expect(semver.gt(newer.version, '3.5.0')).toBe(true)
+    expect(() => semver.gt(parse('malformed').version, '3.5.0')).toThrow()
   })
 
   it('keeps certification IPC token-gated, synthetic, in-memory, and side-effect-free', () => {

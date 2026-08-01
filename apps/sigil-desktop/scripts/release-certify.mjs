@@ -28,7 +28,7 @@ const signed = signature.passed && gatekeeper.passed
 const notarized = stapleApp.passed || stapleDmg.passed
 const report = {
   schema_version: 1,
-  version: '2.1.0',
+  version: '3.5.0',
   classification: notarized ? 'notarized' : signed ? 'signed-only' : 'unsigned-test',
   signed,
   notarized,
