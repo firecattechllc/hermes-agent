@@ -402,6 +402,39 @@ describe('standalone Sigil Mission Control', () => {
     expect(screen.queryByText(/submit order/i)).toBeNull()
   })
 
+  it('confirmation-gates simulated proposal rejection without broker submission', async () => {
+    const simulator = new MockSigilOperatorAdapter('disconnected')
+    const adapter = {
+      readSnapshot: () => simulator.readSnapshot(),
+      applySimulatedAction: (action: Parameters<typeof simulator.applySimulatedAction>[0]) =>
+        simulator.applySimulatedAction(action)
+    }
+
+    render(<SigilOperatorView adapter={adapter} />)
+    await screen.findByTestId('sigil-operator')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Proposals' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Enable simulated operator actions' })
+    )
+
+    const reject = screen.getAllByRole('button', { name: 'Reject' })[0]
+    fireEvent.click(reject)
+
+    expect(screen.getByText('Confirm simulated rejection')).toBeTruthy()
+    expect(
+      screen.getByText(/reject PRP-20260725-0042 in the local simulator/i)
+    ).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm rejection' }))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('rejected').length).toBeGreaterThan(0)
+    })
+
+    expect(screen.queryByText(/submit order/i)).toBeNull()
+  })
+
   it('confirmation-gates local paper automation controls', async () => {
     const adapter = new MockSigilOperatorAdapter()
 
