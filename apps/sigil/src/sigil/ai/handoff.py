@@ -115,3 +115,37 @@ class GovernedRetrievalWorkRequest:
             raise ValueError("retrieval handoff requires digest references")
         if self.expected_output_contract != "sigil.ai.output.semantic-retrieval.v1":
             raise ValueError("retrieval handoff output contract is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class GovernedForecastWorkRequest:
+    """Reference-only Hermes handoff; governed OHLCV stays backend-local."""
+
+    request_id: str
+    task_correlation_id: str
+    series_id: str
+    series_digest: str
+    symbol: str
+    interval: str
+    forecast_horizon: int
+    uncertainty_mode: str
+    requested_quantiles: tuple[float, ...]
+    privacy_requirement: PrivacyTier
+    minimum_trust_tier: TrustTier
+    evidence_context_digests: tuple[str, ...]
+    responsibility: Responsibility
+    expected_output_contract: str = "sigil.ai.output.time-series-forecast.v1"
+    fallback_allowed: bool = False
+    timeout_ms: int = 30_000
+    paper_only: bool = True
+    broker_submission: bool = False
+
+    def __post_init__(self) -> None:
+        if self.paper_only is not True or self.broker_submission is not False:
+            raise ValueError("governed forecast handoff cannot receive execution authority")
+        if _SHA256.fullmatch(self.series_digest) is None or any(
+            _SHA256.fullmatch(item) is None for item in self.evidence_context_digests
+        ):
+            raise ValueError("forecast handoff requires digest references")
+        if self.expected_output_contract != "sigil.ai.output.time-series-forecast.v1":
+            raise ValueError("forecast handoff output contract is invalid")

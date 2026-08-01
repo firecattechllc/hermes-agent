@@ -20,6 +20,14 @@ from .finbert import (
     GovernedSentimentArtifact,
     SentimentLabel,
 )
+from .kronos import (
+    ForecastPoint,
+    GovernedForecastArtifact,
+    GovernedForecastEvaluationArtifact,
+    HorizonMetric,
+    KronosForecastPayload,
+    UncertaintyMode,
+)
 from .models import Capability, PrivacyTier, Responsibility, TrustTier
 from .registry import canonical_digest
 from .retrieval import (
@@ -72,8 +80,18 @@ class DurableAnalysisArtifactStore:
 
     def append(
         self,
-        artifact: GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact,
-    ) -> GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact:
+        artifact: GovernedAnalysisArtifact
+        | GovernedSentimentArtifact
+        | GovernedRetrievalArtifact
+        | GovernedForecastArtifact
+        | GovernedForecastEvaluationArtifact,
+    ) -> (
+        GovernedAnalysisArtifact
+        | GovernedSentimentArtifact
+        | GovernedRetrievalArtifact
+        | GovernedForecastArtifact
+        | GovernedForecastEvaluationArtifact
+    ):
         with self._locked():
             records = self._read_unlocked(recover_truncated_tail=True)
             if any(item.artifact_id == artifact.artifact_id for item in records):
@@ -111,7 +129,12 @@ class DurableAnalysisArtifactStore:
     def read_artifacts(
         self, *, recover_truncated_tail: bool = True
     ) -> tuple[
-        GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact, ...
+        GovernedAnalysisArtifact
+        | GovernedSentimentArtifact
+        | GovernedRetrievalArtifact
+        | GovernedForecastArtifact
+        | GovernedForecastEvaluationArtifact,
+        ...,
     ]:
         with self._locked():
             return self._read_unlocked(recover_truncated_tail=recover_truncated_tail)
@@ -119,7 +142,12 @@ class DurableAnalysisArtifactStore:
     def _read_unlocked(
         self, *, recover_truncated_tail: bool
     ) -> tuple[
-        GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact, ...
+        GovernedAnalysisArtifact
+        | GovernedSentimentArtifact
+        | GovernedRetrievalArtifact
+        | GovernedForecastArtifact
+        | GovernedForecastEvaluationArtifact,
+        ...,
     ]:
         if not self.path.exists():
             return ()
@@ -139,7 +167,11 @@ class DurableAnalysisArtifactStore:
             self._fsync_directory()
             raw = raw[:boundary]
         artifacts: list[
-            GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact
+            GovernedAnalysisArtifact
+            | GovernedSentimentArtifact
+            | GovernedRetrievalArtifact
+            | GovernedForecastArtifact
+            | GovernedForecastEvaluationArtifact
         ] = []
         identities: set[str] = set()
         previous = _ZERO_HASH
@@ -184,7 +216,11 @@ class DurableAnalysisArtifactStore:
 
     @staticmethod
     def _artifact_payload(
-        artifact: GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact,
+        artifact: GovernedAnalysisArtifact
+        | GovernedSentimentArtifact
+        | GovernedRetrievalArtifact
+        | GovernedForecastArtifact
+        | GovernedForecastEvaluationArtifact,
     ) -> dict[str, object]:
         payload = asdict(artifact)
         payload["capability"] = artifact.capability.value
@@ -194,9 +230,48 @@ class DurableAnalysisArtifactStore:
     @staticmethod
     def _decode_artifact(
         payload: object,
-    ) -> GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact:
+    ) -> (
+        GovernedAnalysisArtifact
+        | GovernedSentimentArtifact
+        | GovernedRetrievalArtifact
+        | GovernedForecastArtifact
+        | GovernedForecastEvaluationArtifact
+    ):
         if not isinstance(payload, dict):
             raise AnalysisArtifactCorruptionError("artifact payload shape is invalid")
+        if str(payload.get("artifact_id", "")).startswith("evaluation-artifact-"):
+            return GovernedForecastEvaluationArtifact(
+                **{
+                    **payload,
+                    "capability": Capability(payload["capability"]),
+                    "responsibility": Responsibility(payload["responsibility"]),
+                    "horizon_metrics": tuple(
+                        HorizonMetric(**item) for item in payload["horizon_metrics"]
+                    ),
+                    "limitations": tuple(payload["limitations"]),
+                }
+            )
+        if payload.get("capability") == Capability.TIME_SERIES_FORECASTING.value:
+            structured = payload["structured_payload"]
+            return GovernedForecastArtifact(
+                **{
+                    **payload,
+                    "capability": Capability(payload["capability"]),
+                    "responsibility": Responsibility(payload["responsibility"]),
+                    "source_trust": TrustTier(payload["source_trust"]),
+                    "structured_payload": KronosForecastPayload(
+                        **{
+                            **structured,
+                            "forecast_points": tuple(
+                                ForecastPoint(**item) for item in structured["forecast_points"]
+                            ),
+                            "uncertainty_mode": UncertaintyMode(structured["uncertainty_mode"]),
+                            "limitations": tuple(structured["limitations"]),
+                        }
+                    ),
+                    "limitations": tuple(payload["limitations"]),
+                }
+            )
         if payload.get("capability") == Capability.SEMANTIC_RETRIEVAL.value:
             return GovernedRetrievalArtifact(
                 **{

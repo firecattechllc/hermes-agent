@@ -25,9 +25,21 @@ from .finbert import (
     validate_finbert_output,
 )
 from .handoff import (
+    GovernedForecastWorkRequest,
     GovernedModelWorkRequest,
     GovernedRetrievalWorkRequest,
     GovernedSentimentWorkRequest,
+)
+from .kronos import (
+    GovernedForecastArtifact,
+    GovernedForecastEvaluationArtifact,
+    GovernedForecastRequest,
+    GovernedMarketSeries,
+    KronosValidationError,
+    UncertaintyMode,
+    build_forecast_artifact,
+    evaluate_forecast,
+    validate_kronos_output,
 )
 from .ledger import (
     AIEvidenceLedgerError,
@@ -76,7 +88,12 @@ class AnalysisFailureClass(str):
 class GovernedAnalysisResponse:
     request_id: str
     artifact: (
-        GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact | None
+        GovernedAnalysisArtifact
+        | GovernedSentimentArtifact
+        | GovernedRetrievalArtifact
+        | GovernedForecastArtifact
+        | GovernedForecastEvaluationArtifact
+        | None
     )
     routing_evidence_id: str | None
     invocation_evidence_id: str | None
@@ -565,6 +582,287 @@ class GovernedAnalysisService:
             fallback_permission=work.fallback_allowed,
         )
         return self.analyze_sentiment(request, completed_at=completed_at)
+
+    def forecast(
+        self,
+        request: GovernedForecastRequest,
+        *,
+        series: GovernedMarketSeries,
+        completed_at: str,
+    ) -> GovernedAnalysisResponse:
+        """Route and persist a validated advisory Kronos forecast."""
+        if not self.enabled:
+            return self._failure(request, AnalysisFailureClass.SERVICE_DISABLED, "service disabled")
+        if (
+            request.series_id != series.series_id
+            or request.series_digest != series.source_digest
+            or request.symbol != series.symbol
+            or request.interval != series.interval
+            or series.privacy_classification < request.privacy_requirement
+            or series.source_trust < request.minimum_trust_tier
+            or (request.require_fresh and series.is_stale(request.requested_at))
+        ):
+            return self._failure(
+                request, "market_series_rejected", "market series failed governed validation"
+            )
+        route_request = RoutingRequest(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            evidence_correlation_id=f"forecast-{request.request_id}",
+            responsibility=request.responsibility,
+            required_capabilities=frozenset({Capability.TIME_SERIES_FORECASTING}),
+            preferred_model_family="kronos",
+            privacy_requirement=request.privacy_requirement,
+            maximum_cost_class=CostClass.FREE,
+            execution_location_preference=(ExecutionLocation.LOCAL,),
+            minimum_trust_tier=request.minimum_trust_tier,
+            timeout_ms=request.timeout_ms,
+            fallback_allowed=request.fallback_permission,
+        )
+        decision = GovernedModelRouter(self.registry).route(
+            route_request, decision_timestamp=request.requested_at
+        )
+        selected_model = next(
+            (item for item in self.registry.models if item.model_id == decision.selected_model_id),
+            None,
+        )
+        try:
+            append_routing_decision(
+                self.evidence_ledger,
+                request=route_request,
+                decision=decision,
+                model_version=None if selected_model is None else selected_model.version,
+                execution_location=None
+                if selected_model is None
+                else selected_model.execution_location,
+            )
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+            )
+        if not decision.succeeded or selected_model is None:
+            classification = (
+                AnalysisFailureClass.ROUTING_REJECTED
+                if decision.failure_class is None
+                else decision.failure_class.value
+            )
+            return self._failure(
+                request, classification, "forecast routing rejected", decision.evidence_identity
+            )
+        provider = self.providers.get(selected_model.provider_id)
+        config = getattr(provider, "config", None)
+        if config is not None and (
+            series.interval not in config.allowed_intervals
+            or not config.min_sequence_length <= series.bar_count <= config.max_sequence_length
+            or request.forecast_horizon > config.max_horizon
+        ):
+            return self._failure(
+                request,
+                "forecast_input_unsupported",
+                "forecast bounds are unsupported",
+                decision.evidence_identity,
+            )
+        freshness_state = "stale" if series.is_stale(completed_at) else "current"
+        invocation = ProviderInvocation(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            model_id=selected_model.model_id,
+            registry_revision=self.registry.revision,
+            capability=Capability.TIME_SERIES_FORECASTING,
+            input_payload={
+                "series_id": series.series_id,
+                "series_digest": series.source_digest,
+                "symbol": series.symbol,
+                "interval": series.interval,
+                "bars": [asdict(item) for item in series.bars],
+                "forecast_horizon": request.forecast_horizon,
+                "uncertainty_mode": request.uncertainty_mode.value,
+                "requested_quantiles": list(request.requested_quantiles),
+                "model_id": selected_model.model_id,
+                "tokenizer_id": getattr(provider, "tokenizer_id", "unavailable"),
+                "tokenizer_version": getattr(provider, "tokenizer_version", "unavailable"),
+                "freshness_state": freshness_state,
+                "evidence_context_digests": list(request.evidence_context_digests),
+            },
+            timeout_ms=request.timeout_ms,
+            started_at=request.requested_at,
+            ended_at=completed_at,
+        )
+        try:
+            self._append_attempt(
+                invocation,
+                selected_model.provider_id,
+                selected_model.version,
+                selected_model.execution_location,
+            )
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+                decision.evidence_identity,
+            )
+        result = (
+            self._unavailable_result(invocation, selected_model.execution_location)
+            if provider is None
+            else provider.invoke(invocation)
+        )
+        if not self._result_matches(
+            result, invocation, selected_model.provider_id, selected_model.execution_location
+        ):
+            result = self._malformed_result(
+                invocation, selected_model.provider_id, selected_model.execution_location
+            )
+        try:
+            self._append_result(result, invocation, selected_model.version)
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        if not result.succeeded or result.output is None:
+            classification = (
+                AnalysisFailureClass.PROVIDER_UNAVAILABLE
+                if result.failure is None
+                else result.failure.classification.value
+            )
+            return self._failure(
+                request,
+                classification,
+                "Kronos invocation failed",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        try:
+            payload = validate_kronos_output(
+                result.output,
+                request=request,
+                series=series,
+                provider_id=selected_model.provider_id,
+                model_id=selected_model.model_id,
+                model_version=selected_model.version,
+                tokenizer_id=getattr(provider, "tokenizer_id", "unavailable"),
+                tokenizer_version=getattr(provider, "tokenizer_version", "unavailable"),
+            )
+            if result.evidence.output_digest is None:
+                raise KronosValidationError("Kronos output evidence digest is missing")
+        except (KronosValidationError, TypeError, ValueError):
+            try:
+                rejected_id = self._append_output_rejection(
+                    request, invocation, selected_model.version, result
+                )
+            except AIEvidenceLedgerError:
+                return self._failure(
+                    request,
+                    AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                    "evidence ledger unavailable",
+                    decision.evidence_identity,
+                    result.evidence.evidence_identity,
+                )
+            return self._failure(
+                request,
+                AnalysisFailureClass.OUTPUT_VALIDATION_FAILED,
+                "Kronos output rejected",
+                decision.evidence_identity,
+                rejected_id,
+            )
+        artifact = build_forecast_artifact(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            series_id=series.series_id,
+            series_digest=series.source_digest,
+            symbol=series.symbol,
+            interval=series.interval,
+            provider_id=selected_model.provider_id,
+            model_id=selected_model.model_id,
+            model_version=selected_model.version,
+            tokenizer_id=getattr(provider, "tokenizer_id", "unavailable"),
+            tokenizer_version=getattr(provider, "tokenizer_version", "unavailable"),
+            forecast_horizon=request.forecast_horizon,
+            structured_payload=payload,
+            source_trust=series.source_trust,
+            freshness_state=freshness_state,
+            limitations=payload.limitations,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            input_digest=series.source_digest,
+            output_digest=result.evidence.output_digest,
+            created_at=completed_at,
+            stale_after=series.stale_after,
+            responsibility=request.responsibility,
+        )
+        try:
+            self.artifact_store.append(artifact)
+        except AnalysisArtifactStoreError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.ARTIFACT_PERSISTENCE_FAILED,
+                "artifact store unavailable",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        self._last_failure = None
+        return GovernedAnalysisResponse(
+            request_id=request.request_id,
+            artifact=artifact,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            failure_classification=None,
+            routing_summary="fallback selected" if decision.fallback else "Kronos selected",
+            limitations=payload.limitations,
+        )
+
+    def forecast_hermes(
+        self,
+        work: GovernedForecastWorkRequest,
+        *,
+        series: GovernedMarketSeries,
+        requested_at: str,
+        completed_at: str,
+    ) -> GovernedAnalysisResponse:
+        request = GovernedForecastRequest(
+            request_id=work.request_id,
+            task_correlation_id=work.task_correlation_id,
+            responsibility=work.responsibility,
+            series_id=work.series_id,
+            series_digest=work.series_digest,
+            symbol=work.symbol,
+            interval=work.interval,
+            forecast_horizon=work.forecast_horizon,
+            uncertainty_mode=UncertaintyMode(work.uncertainty_mode),
+            requested_quantiles=work.requested_quantiles,
+            privacy_requirement=work.privacy_requirement,
+            minimum_trust_tier=work.minimum_trust_tier,
+            fallback_permission=work.fallback_allowed,
+            timeout_ms=work.timeout_ms,
+            requested_at=requested_at,
+            evidence_context_digests=work.evidence_context_digests,
+        )
+        return self.forecast(request, series=series, completed_at=completed_at)
+
+    def evaluate_forecast(
+        self,
+        forecast: GovernedForecastArtifact,
+        observed: GovernedMarketSeries,
+        *,
+        request_id: str,
+        task_correlation_id: str,
+        evaluated_at: str,
+    ) -> GovernedForecastEvaluationArtifact:
+        artifact = evaluate_forecast(
+            forecast,
+            observed,
+            request_id=request_id,
+            task_correlation_id=task_correlation_id,
+            evaluated_at=evaluated_at,
+        )
+        self.artifact_store.append(artifact)
+        return artifact
 
     def index_retrieval_source(
         self, request: GovernedIndexingRequest, *, completed_at: str

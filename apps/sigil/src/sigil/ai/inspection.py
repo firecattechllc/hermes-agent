@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from .artifact_store import AnalysisArtifactStoreError, DurableAnalysisArtifactStore
 from .finbert import FinBERTConfig, GovernedSentimentArtifact, LocalFinBERTProvider
 from .gemma import LocalGemmaConfig, LocalGemmaProvider
+from .kronos import (
+    GovernedForecastArtifact,
+    GovernedForecastEvaluationArtifact,
+    KronosConfig,
+    LocalKronosProvider,
+)
 from .ledger import AIEvidenceLedgerError, DurableAIEvidenceLedger
 from .retrieval import (
     DurableRetrievalStore,
@@ -21,7 +28,7 @@ from .retrieval import (
 
 INSPECTION_SCHEMA_VERSION = 1
 MAX_INSPECTION_LIMIT = 50
-_ARTIFACT_ID = re.compile(r"^analysis-artifact-[0-9a-f]{64}$")
+_ARTIFACT_ID = re.compile(r"^(?:analysis|evaluation)-artifact-[0-9a-f]{64}$")
 
 
 class AIInspectionValidationError(ValueError):
@@ -141,6 +148,24 @@ def _embedding_config(
         return EmbeddingGemmaConfig(), None, "configuration_invalid"
 
 
+def _kronos_config(
+    environment: dict[str, str],
+) -> tuple[KronosConfig, LocalKronosProvider | None, str]:
+    try:
+        config = KronosConfig.from_environment(environment)
+        provider = LocalKronosProvider(config)
+        health = (
+            "disabled"
+            if not config.enabled
+            else "configured_unverified"
+            if provider.identity.health.value == "healthy"
+            else "unavailable"
+        )
+        return config, provider, health
+    except ValueError:
+        return KronosConfig(), None, "configuration_invalid"
+
+
 def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
     source = dict(os.environ if environment is None else environment)
     root = _state_root(source)
@@ -150,14 +175,17 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
     config, gemma_health = _config(source)
     finbert_config, finbert_provider, finbert_health = _finbert_config(source)
     embedding_config, embedding_provider, embedding_health = _embedding_config(source)
+    kronos_config, kronos_provider, kronos_health = _kronos_config(source)
     failures = [item for item in evidence if getattr(item, "failure_classification", None)]
     providers = (
         (1 if config.model_id else 0)
         + (1 if finbert_config.enabled else 0)
         + (1 if embedding_config.enabled else 0)
+        + (1 if kronos_config.enabled else 0)
     )
     available = sum(
-        health == "healthy" for health in (gemma_health, finbert_health, embedding_health)
+        health == "healthy"
+        for health in (gemma_health, finbert_health, embedding_health, kronos_health)
     )
     latest = artifacts[-1] if artifacts else None
     latest_sentiment = next(
@@ -168,7 +196,23 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
         (item for item in reversed(artifacts) if isinstance(item, GovernedRetrievalArtifact)),
         None,
     )
-    if isinstance(latest, GovernedRetrievalArtifact):
+    latest_forecast = next(
+        (item for item in reversed(artifacts) if isinstance(item, GovernedForecastArtifact)),
+        None,
+    )
+    latest_evaluation = next(
+        (
+            item
+            for item in reversed(artifacts)
+            if isinstance(item, GovernedForecastEvaluationArtifact)
+        ),
+        None,
+    )
+    if isinstance(latest, GovernedForecastEvaluationArtifact):
+        latest_summary = f"forecast evaluation MAE {latest.mae:.6g}"
+    elif isinstance(latest, GovernedForecastArtifact):
+        latest_summary = f"{latest.symbol} {latest.forecast_horizon}-point forecast"
+    elif isinstance(latest, GovernedRetrievalArtifact):
         latest_summary = f"{len(latest.results)} retrieval results"
     elif isinstance(latest, GovernedSentimentArtifact):
         latest_summary = latest.structured_payload.label.value
@@ -256,6 +300,50 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
             if last_failure is None
             else last_failure.failure_classification,
         },
+        "kronos": {
+            "enabled": kronos_config.enabled,
+            "model_id": kronos_config.model_id,
+            "model_version": kronos_config.model_version,
+            "tokenizer_id": kronos_config.tokenizer_id,
+            "tokenizer_version": kronos_config.tokenizer_version,
+            "health": kronos_health,
+            "available": bool(kronos_provider and kronos_health == "healthy"),
+            "device_class": kronos_config.device,
+            "supported_intervals": list(kronos_config.allowed_intervals),
+            "minimum_sequence_length": kronos_config.min_sequence_length,
+            "maximum_sequence_length": kronos_config.max_sequence_length,
+            "maximum_horizon": kronos_config.max_horizon,
+            "forecast_artifact_count": sum(
+                isinstance(item, GovernedForecastArtifact) for item in artifacts
+            ),
+            "evaluation_artifact_count": sum(
+                isinstance(item, GovernedForecastEvaluationArtifact) for item in artifacts
+            ),
+            "last_successful_forecast": None
+            if latest_forecast is None
+            else {
+                "symbol": latest_forecast.symbol,
+                "interval": latest_forecast.interval,
+                "forecast_horizon": latest_forecast.forecast_horizon,
+                "created_at": latest_forecast.created_at,
+                "uncertainty_available": latest_forecast.structured_payload.uncertainty_mode.value
+                != "none",
+                "freshness": latest_forecast.freshness_state,
+                "limitations": list(latest_forecast.limitations[:5]),
+            },
+            "last_evaluation_summary": None
+            if latest_evaluation is None
+            else {
+                "mae": latest_evaluation.mae,
+                "rmse": latest_evaluation.rmse,
+                "sample_count": latest_evaluation.sample_count,
+                "evaluated_at": latest_evaluation.created_at,
+                "limitations": list(latest_evaluation.limitations[:5]),
+            },
+            "last_failure_classification": None
+            if last_failure is None
+            else last_failure.failure_classification,
+        },
         "paper_only": True,
         "execution_authorized": False,
         "broker_submission": False,
@@ -277,6 +365,9 @@ def ai_registry_status(environment: dict[str, str] | None = None) -> dict[str, A
     embedding_config, embedding_provider, embedding_health = _embedding_config(source)
     if embedding_config.enabled and embedding_provider is not None:
         models.append((embedding_provider.registration(), embedding_health))
+    kronos_config, kronos_provider, kronos_health = _kronos_config(source)
+    if kronos_config.enabled and kronos_provider is not None:
+        models.append((kronos_provider.registration(), kronos_health))
     return {
         "schema_version": 1,
         "entries": [
@@ -306,6 +397,26 @@ def ai_registry_status(environment: dict[str, str] | None = None) -> dict[str, A
 
 
 def _artifact_summary(artifact) -> dict[str, Any]:
+    if isinstance(artifact, GovernedForecastEvaluationArtifact):
+        return {
+            "artifact_id": artifact.artifact_id,
+            "request_id": artifact.request_id,
+            "task_correlation_id": artifact.task_correlation_id,
+            "capability": artifact.capability.value,
+            "responsibility": artifact.responsibility.value,
+            "created_at": artifact.created_at,
+            "forecast_evaluation": {
+                "forecast_artifact_id": artifact.forecast_artifact_id,
+                "observed_series_id": artifact.observed_series_id,
+                "mae": artifact.mae,
+                "rmse": artifact.rmse,
+                "sample_count": artifact.sample_count,
+            },
+            "limitations": list(artifact.limitations[:5]),
+            "paper_only": True,
+            "execution_authorized": False,
+            "broker_submission": False,
+        }
     summary = {
         "artifact_id": artifact.artifact_id,
         "request_id": artifact.request_id,
@@ -336,6 +447,14 @@ def _artifact_summary(artifact) -> dict[str, Any]:
             "result_count": len(artifact.results),
             "corpus_ids": list(artifact.corpus_ids),
             "freshness": sorted({item.freshness_state for item in artifact.results}),
+        }
+    if isinstance(artifact, GovernedForecastArtifact):
+        summary["forecast"] = {
+            "symbol": artifact.symbol,
+            "interval": artifact.interval,
+            "forecast_horizon": artifact.forecast_horizon,
+            "uncertainty_mode": artifact.structured_payload.uncertainty_mode.value,
+            "freshness": artifact.freshness_state,
         }
     return summary
 
@@ -384,7 +503,46 @@ def ai_artifact_get(payload: object, environment: dict[str, str] | None = None) 
     match = next((item for item in artifacts if item.artifact_id == artifact_id), None)
     if match is None:
         return {"schema_version": 1, "found": False, "artifact": None, "health": health}
-    if isinstance(match, GovernedSentimentArtifact):
+    if isinstance(match, GovernedForecastEvaluationArtifact):
+        structured_payload = {
+            "forecast_artifact_id": match.forecast_artifact_id,
+            "observed_series_id": match.observed_series_id,
+            "observed_series_digest": match.observed_series_digest,
+            "evaluation_start_at": match.evaluation_start_at,
+            "evaluation_end_at": match.evaluation_end_at,
+            "mae": match.mae,
+            "rmse": match.rmse,
+            "mape": match.mape,
+            "directional_accuracy": match.directional_accuracy,
+            "interval_coverage": match.interval_coverage,
+            "sample_count": match.sample_count,
+            "horizon_metrics": [
+                {
+                    "horizon_index": item.horizon_index,
+                    "mae": item.mae,
+                    "rmse": item.rmse,
+                    "directional_accuracy": item.directional_accuracy,
+                    "interval_coverage": item.interval_coverage,
+                    "sample_count": item.sample_count,
+                }
+                for item in match.horizon_metrics
+            ],
+            "limitations": list(match.limitations),
+        }
+    elif isinstance(match, GovernedForecastArtifact):
+        structured_payload = {
+            "series_id": match.series_id,
+            "series_digest": match.series_digest,
+            "symbol": match.symbol,
+            "interval": match.interval,
+            "forecast_horizon": match.forecast_horizon,
+            "forecast_points": [asdict(item) for item in match.structured_payload.forecast_points],
+            "uncertainty_mode": match.structured_payload.uncertainty_mode.value,
+            "calibration": match.structured_payload.calibration,
+            "freshness": match.freshness_state,
+            "limitations": list(match.limitations),
+        }
+    elif isinstance(match, GovernedSentimentArtifact):
         structured_payload = {
             "label": match.structured_payload.label.value,
             "positive_score": match.structured_payload.positive_score,
@@ -437,8 +595,8 @@ def ai_artifact_get(payload: object, environment: dict[str, str] | None = None) 
         "artifact": {
             **_artifact_summary(match),
             "structured_payload": structured_payload,
-            "routing_evidence_id": match.routing_evidence_id,
-            "invocation_evidence_id": match.invocation_evidence_id,
+            "routing_evidence_id": getattr(match, "routing_evidence_id", None),
+            "invocation_evidence_id": getattr(match, "invocation_evidence_id", None),
         },
     }
 

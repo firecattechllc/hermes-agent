@@ -43,6 +43,27 @@ const healthyStatus: AIStatus = {
       limitations: ['Advisory retrieval only']
     }
   },
+  kronos: {
+    enabled: true,
+    available: true,
+    health: 'healthy',
+    model_id: 'neoquasar.kronos-small',
+    tokenizer_id: 'neoquasar.kronos-tokenizer-base',
+    supported_intervals: ['1d'],
+    maximum_sequence_length: 512,
+    maximum_horizon: 64,
+    forecast_artifact_count: 1,
+    evaluation_artifact_count: 1,
+    last_successful_forecast: {
+      symbol: 'AAPL',
+      interval: '1d',
+      forecast_horizon: 8,
+      created_at: '2026-08-01T17:05:00Z',
+      uncertainty_available: false,
+      freshness: 'current',
+      limitations: ['Advisory only']
+    }
+  },
   paper_only: true,
   broker_submission: false
 }
@@ -62,8 +83,9 @@ describe('AI Foundation status panel', () => {
 
     expect(screen.getAllByText('healthy').length).toBeGreaterThan(0)
     expect(screen.getByText('1 models · 1 available')).toBeTruthy()
-    expect(screen.getByText('2 retrieval results · current')).toBeTruthy()
+    expect(screen.getByText('AAPL · 1d · 8 points · current')).toBeTruthy()
     expect(screen.getByText('healthy · 3 sources · 4 embeddings')).toBeTruthy()
+    expect(screen.getByText('healthy · 1 forecasts · 1 evaluations')).toBeTruthy()
   })
 
   it('renders the latest structured failure classification', () => {

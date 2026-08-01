@@ -214,6 +214,68 @@ try {
   )
   process.stdout.write('PASS: packaged deterministic indexing and retrieval stayed advisory-only\n')
 
+  const disabledKronos = aiStatus.kronos
+  if (
+    disabledKronos?.enabled !== false ||
+    disabledKronos?.health !== 'disabled' ||
+    disabledKronos?.forecast_artifact_count !== 0 ||
+    disabledKronos?.evaluation_artifact_count !== 0
+  ) {
+    throw new Error(`Kronos was not safely disabled: ${JSON.stringify(disabledKronos)}`)
+  }
+  process.stdout.write('PASS: packaged Kronos and empty forecast stores start safely\n')
+
+  const unavailableKronos = bridgeRequest(
+    { command: 'ai_status' },
+    {
+      SIGIL_AI_KRONOS_ENABLED: 'true',
+      SIGIL_AI_KRONOS_MODEL_VERSION: 'packaged-unverified',
+      SIGIL_AI_KRONOS_TOKENIZER_VERSION: 'packaged-unverified',
+      SIGIL_AI_KRONOS_ALLOWED_INTERVALS: '1d'
+    }
+  ).kronos
+  if (
+    unavailableKronos?.enabled !== true ||
+    !['configured_unverified', 'unavailable'].includes(unavailableKronos?.health) ||
+    unavailableKronos?.forecast_artifact_count !== 0
+  ) {
+    throw new Error(`Kronos unavailable status was unsafe: ${JSON.stringify(unavailableKronos)}`)
+  }
+  process.stdout.write('PASS: packaged Kronos optional runtime status is bounded\n')
+
+  run(
+    python,
+    [
+      '-c',
+      [
+        'from datetime import datetime, timedelta, timezone',
+        'from pathlib import Path',
+        'from sigil.ai import *',
+        'class Runtime:',
+        " def forecast(self, *, bars, horizon, uncertainty_mode):",
+        "  end = datetime.fromisoformat(bars[-1]['timestamp'])",
+        "  return [{'horizon_index': index, 'timestamp': (end + timedelta(days=index)).isoformat().replace('+00:00', 'Z'), 'open': 131.5 + index, 'high': 133.0 + index, 'low': 131.0 + index, 'close': 132.0 + index, 'volume': 1100.0, 'lower_close': None, 'upper_close': None} for index in range(1, horizon + 1)]",
+        "root = Path(__import__('os').environ['SIGIL_DESKTOP_STATE_DIR']).resolve()",
+        "bars = tuple(GovernedMarketBar((datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(days=index)).isoformat().replace('+00:00', 'Z'), 100.0 + index, 102.0 + index, 99.0 + index, 101.0 + index, 1000.0 + index) for index in range(32))",
+        "series = GovernedMarketSeries('packaged-aapl-v1', 'governed-market:AAPL', market_series_digest(bars), 'AAPL', 'equity', 'NASDAQ', '1d', 'UTC', bars[0].timestamp, bars[-1].timestamp, bars[-1].timestamp, '2026-03-01T00:00:00Z', bars)",
+        "provider = LocalKronosProvider(KronosConfig(enabled=True, model_version='packaged-test', tokenizer_version='packaged-test', min_sequence_length=16, max_sequence_length=64, max_horizon=8, allowed_intervals=('1d',)), Runtime())",
+        'registry = GovernedModelRegistry((provider.identity,), (provider.registration(),))',
+        "service = GovernedAnalysisService(registry=registry, providers={provider.identity.provider_id: provider}, evidence_ledger=DurableAIEvidenceLedger(root), artifact_store=DurableAnalysisArtifactStore(root), enabled=True)",
+        "request = GovernedForecastRequest('packaged-forecast', 'packaged-forecast-task', Responsibility.MARKET_FORECASTING, series.series_id, series.source_digest, series.symbol, series.interval, 2, UncertaintyMode.NONE, (), PrivacyTier.LOCAL_ONLY, TrustTier.TRUSTED, False, 1000, '2026-02-02T00:00:00Z', ('sha256:' + 'a' * 64,))",
+        "forecast = service.forecast(request, series=series, completed_at='2026-02-02T00:00:01Z')",
+        "observed_bars = tuple(GovernedMarketBar((datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(days=index)).isoformat().replace('+00:00', 'Z'), 100.0 + index, 102.0 + index, 99.0 + index, 101.0 + index, 1000.0 + index) for index in range(34))",
+        "observed = GovernedMarketSeries('packaged-aapl-observed', 'governed-market:AAPL', market_series_digest(observed_bars), 'AAPL', 'equity', 'NASDAQ', '1d', 'UTC', observed_bars[0].timestamp, observed_bars[-1].timestamp, observed_bars[-1].timestamp, '2026-03-01T00:00:00Z', observed_bars)",
+        "evaluation = service.evaluate_forecast(forecast.artifact, observed, request_id='packaged-evaluation', task_correlation_id='packaged-evaluation-task', evaluated_at='2026-02-10T00:00:00Z')",
+        'assert forecast.succeeded and evaluation.sample_count == 2',
+        'assert forecast.execution_authorized is False and forecast.broker_submission is False',
+        'assert evaluation.execution_authorized is False and evaluation.broker_submission is False',
+        "assert 'bars' not in str(forecast.artifact).lower() and 'tensor' not in str(forecast.artifact).lower()"
+      ].join('\n')
+    ],
+    { env: environment }
+  )
+  process.stdout.write('PASS: packaged deterministic Kronos forecast and evaluation stayed advisory-only\n')
+
   const stoppedSnapshot = bridgeRequest({
     command: 'control_paper_cycle',
     payload: { action: 'stop' }

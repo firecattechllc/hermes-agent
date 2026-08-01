@@ -108,6 +108,8 @@ class Responsibility(str, Enum):
     EVIDENCE_RETRIEVAL = "evidence_retrieval"
     PROPOSAL_CONTEXT = "proposal_context"
     AUDIT_CONTEXT = "audit_context"
+    MARKET_FORECASTING = "market_forecasting"
+    SCENARIO_ANALYSIS = "scenario_analysis"
     ORCHESTRATION_SUPPORT = "orchestration_support"
     AUTHORIZE_CAPITAL = "authorize_capital"
     CHANGE_POLICY = "change_policy"
@@ -126,6 +128,8 @@ class Responsibility(str, Enum):
     SOURCE_DELETION_WITHOUT_GOVERNED_OPERATOR_ACTION = (
         "source_deletion_without_governed_operator_action"
     )
+    AUTOMATIC_STRATEGY_PROMOTION = "automatic_strategy_promotion"
+    AUTOMATIC_FORECAST_DRIVEN_TRADING = "automatic_forecast_driven_trading"
 
 
 PROHIBITED_RESPONSIBILITIES = frozenset(
@@ -145,6 +149,8 @@ PROHIBITED_RESPONSIBILITIES = frozenset(
         Responsibility.CREDENTIAL_ACCESS,
         Responsibility.UNRESTRICTED_SHELL_EXECUTION,
         Responsibility.SOURCE_DELETION_WITHOUT_GOVERNED_OPERATOR_ACTION,
+        Responsibility.AUTOMATIC_STRATEGY_PROMOTION,
+        Responsibility.AUTOMATIC_FORECAST_DRIVEN_TRADING,
     }
 )
 

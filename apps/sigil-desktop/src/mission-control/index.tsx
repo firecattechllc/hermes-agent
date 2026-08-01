@@ -1751,6 +1751,27 @@ export type AIStatus = {
       limitations: string[]
     } | null
   }
+  kronos?: {
+    enabled: boolean
+    available: boolean
+    health: string
+    model_id: string
+    tokenizer_id: string
+    supported_intervals: string[]
+    maximum_sequence_length: number
+    maximum_horizon: number
+    forecast_artifact_count: number
+    evaluation_artifact_count: number
+    last_successful_forecast: {
+      symbol: string
+      interval: string
+      forecast_horizon: number
+      created_at: string
+      uncertainty_available: boolean
+      freshness: string
+      limitations: string[]
+    } | null
+  }
   paper_only: true
   broker_submission: false
 }
@@ -1773,9 +1794,10 @@ export function AIFoundationPanel({ status }: { status: AIStatus | null }) {
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Local Gemma</dt><dd className="mt-1 font-mono">{status?.local_gemma_health ?? 'unavailable'}</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">FinBERT sentiment</dt><dd className="mt-1 font-mono">{status?.finbert?.health ?? 'unavailable'} · {status?.finbert?.sentiment_artifact_count ?? 0} artifacts</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">EmbeddingGemma retrieval</dt><dd className="mt-1 font-mono">{status?.embeddinggemma?.health ?? 'unavailable'} · {status?.embeddinggemma?.source_count ?? 0} sources · {status?.embeddinggemma?.embedding_count ?? 0} embeddings</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Kronos forecasting</dt><dd className="mt-1 font-mono">{status?.kronos?.health ?? 'unavailable'} · {status?.kronos?.forecast_artifact_count ?? 0} forecasts · {status?.kronos?.evaluation_artifact_count ?? 0} evaluations</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Registry</dt><dd className="mt-1 font-mono">{status?.configured_model_count ?? 0} models · {status?.available_provider_count ?? 0} available</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Evidence / artifacts</dt><dd className="mt-1 font-mono">{status?.evidence_ledger_health ?? 'unavailable'} · {status?.artifact_store_health ?? 'unavailable'}</dd></div>
-        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Latest result</dt><dd className="mt-1 break-words font-mono">{status?.last_failure_classification ?? (status?.embeddinggemma?.latest_retrieval ? `${status.embeddinggemma.latest_retrieval.result_count} retrieval results · ${status.embeddinggemma.latest_retrieval.freshness.join(', ') || 'no matches'}` : status?.finbert?.latest_sentiment ? `${status.finbert.latest_sentiment.label} · ${Math.round(status.finbert.latest_sentiment.confidence * 100)}% · ${status.finbert.latest_sentiment.source_identity}` : status?.latest_analysis_summary ?? status?.last_successful_analysis_at ?? 'none')}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Latest result</dt><dd className="mt-1 break-words font-mono">{status?.last_failure_classification ?? (status?.kronos?.last_successful_forecast ? `${status.kronos.last_successful_forecast.symbol} · ${status.kronos.last_successful_forecast.interval} · ${status.kronos.last_successful_forecast.forecast_horizon} points · ${status.kronos.last_successful_forecast.freshness}` : status?.embeddinggemma?.latest_retrieval ? `${status.embeddinggemma.latest_retrieval.result_count} retrieval results · ${status.embeddinggemma.latest_retrieval.freshness.join(', ') || 'no matches'}` : status?.finbert?.latest_sentiment ? `${status.finbert.latest_sentiment.label} · ${Math.round(status.finbert.latest_sentiment.confidence * 100)}% · ${status.finbert.latest_sentiment.source_identity}` : status?.latest_analysis_summary ?? status?.last_successful_analysis_at ?? 'none')}</dd></div>
       </dl>
     </section>
   )
