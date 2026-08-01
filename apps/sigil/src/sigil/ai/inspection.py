@@ -19,6 +19,7 @@ from .kronos import (
     LocalKronosProvider,
 )
 from .ledger import AIEvidenceLedgerError, DurableAIEvidenceLedger
+from .mac_ollama import MacOllamaInspector, MacOllamaProfileConfig
 from .orchestration import (
     DurableOrchestrationStore,
     GovernedOrchestrationArtifact,
@@ -343,6 +344,18 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
     else:
         latest_summary = None if latest is None else latest.structured_payload.summary
     last_failure = failures[-1] if failures else None
+    try:
+        mac_ollama_config = MacOllamaProfileConfig.from_environment(source)
+        mac_ollama = MacOllamaInspector(mac_ollama_config).status()
+    except ValueError:
+        mac_ollama = {
+            "enabled": False,
+            "health": "configuration_invalid",
+            "paper_only": True,
+            "broker_submission": False,
+            "execution_authorized": False,
+            "approval_authority": False,
+        }
     return {
         "schema_version": INSPECTION_SCHEMA_VERSION,
         "enabled": source.get("SIGIL_AI_SERVICE_ENABLED", "").lower() in {"1", "true", "yes"},
@@ -357,6 +370,7 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
         "preferred_model_family": "gemma",
         "configured_local_gemma_model": config.model_id,
         "local_gemma_health": gemma_health,
+        "mac_ollama": mac_ollama,
         "last_successful_analysis_at": None if latest is None else latest.created_at,
         "latest_analysis_summary": latest_summary,
         "last_failure_at": None if last_failure is None else last_failure.ended_at,

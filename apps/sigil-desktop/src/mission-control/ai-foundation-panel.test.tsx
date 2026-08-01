@@ -8,6 +8,23 @@ const healthyStatus: AIStatus = {
   configured_model_count: 1,
   available_provider_count: 1,
   local_gemma_health: 'healthy',
+  mac_ollama: {
+    enabled: true,
+    device_identity: 'mac-local',
+    fleet_role: 'mac',
+    endpoint_classification: 'loopback_http',
+    embedding_adapter: 'ollama',
+    roles: {
+      primary: { configured: true, model_identity: 'huihui_ai/gemma-4-abliterated:12b', health: 'healthy', identity_match: true, readiness: 'ready', reason: null, deprecated: false, enabled: true, admission_state: 'admitted', upstream_revision_evidence: 'unknown', license_evidence: 'unknown' },
+      fast: { configured: true, model_identity: 'huihui_ai/gemma-4-abliterated:e4b', health: 'healthy', identity_match: true, readiness: 'ready', reason: null, deprecated: false, enabled: true, admission_state: 'admitted', upstream_revision_evidence: 'unknown', license_evidence: 'unknown' },
+      embedding: { configured: true, model_identity: 'embeddinggemma:latest', health: 'healthy', identity_match: true, readiness: 'ready', reason: null, deprecated: false, enabled: true, admission_state: 'admitted', upstream_revision_evidence: 'unknown', license_evidence: 'unknown' },
+      fallback: { configured: false, model_identity: 'hermes-llama3.2:3b-64k', health: 'disabled', identity_match: false, readiness: 'not_ready', reason: null, deprecated: true, enabled: false, admission_state: 'rejected', upstream_revision_evidence: 'unknown', license_evidence: 'unknown' }
+    },
+    paper_only: true,
+    broker_submission: false,
+    execution_authorized: false,
+    approval_authority: false
+  },
   evidence_ledger_health: 'healthy',
   artifact_store_health: 'healthy',
   artifact_count: 1,
@@ -133,6 +150,8 @@ describe('AI Foundation status panel', () => {
     expect(screen.getByText('1 models · 1 available')).toBeTruthy()
     expect(screen.getByText('completed · 4 completed · 0 failed')).toBeTruthy()
     expect(screen.getByText('healthy · 3 sources · 4 embeddings')).toBeTruthy()
+    expect(screen.getByText('enabled · loopback_http · mac · paper only')).toBeTruthy()
+    expect(screen.getByText(/fallback rejected · deprecated/)).toBeTruthy()
     expect(screen.getByText('healthy · 1 forecasts · 1 evaluations')).toBeTruthy()
     expect(screen.getByText('healthy · completed · 0 pending input')).toBeTruthy()
     expect(screen.getByText('Buzz unavailable · Atlas available · OpenWorker unavailable')).toBeTruthy()
