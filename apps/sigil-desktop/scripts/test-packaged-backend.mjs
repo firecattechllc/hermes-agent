@@ -160,6 +160,60 @@ try {
   )
   process.stdout.write('PASS: packaged deterministic FinBERT invocation stayed advisory-only\n')
 
+  const disabledEmbeddingGemma = aiStatus.embeddinggemma
+  if (
+    disabledEmbeddingGemma?.enabled !== false ||
+    disabledEmbeddingGemma?.health !== 'disabled' ||
+    disabledEmbeddingGemma?.vector_store_health !== 'empty'
+  ) {
+    throw new Error(`EmbeddingGemma was not safely disabled: ${JSON.stringify(disabledEmbeddingGemma)}`)
+  }
+  process.stdout.write('PASS: packaged EmbeddingGemma and empty vector store start safely\n')
+
+  const unavailableEmbeddingGemma = bridgeRequest(
+    { command: 'ai_status' },
+    {
+      SIGIL_AI_EMBEDDING_GEMMA_ENABLED: 'true',
+      SIGIL_AI_EMBEDDING_GEMMA_MODEL_VERSION: 'packaged-unverified',
+      SIGIL_AI_EMBEDDING_GEMMA_VECTOR_DIMENSION: '3'
+    }
+  ).embeddinggemma
+  if (
+    unavailableEmbeddingGemma?.enabled !== true ||
+    !['configured_unverified', 'unavailable'].includes(unavailableEmbeddingGemma?.health) ||
+    unavailableEmbeddingGemma?.embedding_count !== 0
+  ) {
+    throw new Error(`EmbeddingGemma unavailable status was unsafe: ${JSON.stringify(unavailableEmbeddingGemma)}`)
+  }
+  process.stdout.write('PASS: packaged EmbeddingGemma optional runtime status is bounded\n')
+
+  run(
+    python,
+    [
+      '-c',
+      [
+        'from pathlib import Path',
+        'from sigil.ai import *',
+        'from sigil.ai.registry import canonical_digest',
+        'class Runtime:',
+        " def embed(self, *, texts): return [[1.0, 0.0, 0.0] for _ in texts]",
+        "root = Path(__import__('os').environ['SIGIL_DESKTOP_STATE_DIR']).resolve()",
+        "provider = LocalEmbeddingGemmaProvider(EmbeddingGemmaConfig(enabled=True, model_version='packaged-test', vector_dimension=3), Runtime())",
+        'registry = GovernedModelRegistry((provider.identity,), (provider.registration(),))',
+        "service = GovernedAnalysisService(registry=registry, providers={provider.identity.provider_id: provider}, evidence_ledger=DurableAIEvidenceLedger(root), artifact_store=DurableAnalysisArtifactStore(root), retrieval_store=DurableRetrievalStore(root), enabled=True)",
+        "source = create_retrieval_source(content='Revenue growth improved.', source_type=RetrievalSourceType.RESEARCH_ARTIFACT, source_identity='packaged-source', source_version='v1', corpus_id='packaged-corpus', created_at='2026-08-01T18:00:00Z', observed_at='2026-08-01T18:00:00Z', stale_after=None, privacy_classification=PrivacyTier.LOCAL_ONLY, trust_classification=TrustTier.TRUSTED, language='en', supersedes_source_id=None)",
+        "indexed = service.index_retrieval_source(GovernedIndexingRequest('packaged-index', 'packaged-index-task', source, 1000, '2026-08-01T18:00:00Z'), completed_at='2026-08-01T18:00:01Z')",
+        "query = 'growth evidence'",
+        "retrieved = service.retrieve(GovernedRetrievalRequest('packaged-retrieval', 'packaged-retrieval-task', Responsibility.RESEARCH_RETRIEVAL, 'sha256:' + canonical_digest(query), query, ('packaged-corpus',), (), PrivacyTier.LOCAL_ONLY, TrustTier.TRUSTED, FreshnessRequirement.ANY, 3, 0.0, False, '2026-08-01T18:01:00Z', ('sha256:' + 'a' * 64,)), completed_at='2026-08-01T18:01:01Z')",
+        'assert indexed.succeeded and retrieved.succeeded and len(retrieved.artifact.results) == 1',
+        'assert retrieved.broker_submission is False and retrieved.execution_authorized is False',
+        "assert 'vector' not in str(retrieved.artifact).lower()"
+      ].join('\n')
+    ],
+    { env: environment }
+  )
+  process.stdout.write('PASS: packaged deterministic indexing and retrieval stayed advisory-only\n')
+
   const stoppedSnapshot = bridgeRequest({
     command: 'control_paper_cycle',
     payload: { action: 'stop' }

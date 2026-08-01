@@ -83,3 +83,35 @@ class GovernedSentimentWorkRequest:
             raise ValueError("sentiment handoff requires digest references")
         if self.expected_output_contract != "sigil.ai.output.financial-sentiment.v1":
             raise ValueError("sentiment handoff output contract is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class GovernedRetrievalWorkRequest:
+    """Reference-only Hermes semantic retrieval handoff."""
+
+    request_id: str
+    task_correlation_id: str
+    query_digest: str
+    corpus_ids: tuple[str, ...]
+    source_type_filters: tuple[str, ...]
+    privacy_requirement: PrivacyTier
+    minimum_trust_tier: TrustTier
+    freshness_requirement: str
+    maximum_results: int
+    minimum_score: float
+    evidence_context_digests: tuple[str, ...]
+    responsibility: Responsibility
+    expected_output_contract: str = "sigil.ai.output.semantic-retrieval.v1"
+    fallback_allowed: bool = False
+    paper_only: bool = True
+    broker_submission: bool = False
+
+    def __post_init__(self) -> None:
+        if self.paper_only is not True or self.broker_submission is not False:
+            raise ValueError("governed retrieval handoff cannot receive execution authority")
+        if _SHA256.fullmatch(self.query_digest) is None or any(
+            _SHA256.fullmatch(item) is None for item in self.evidence_context_digests
+        ):
+            raise ValueError("retrieval handoff requires digest references")
+        if self.expected_output_contract != "sigil.ai.output.semantic-retrieval.v1":
+            raise ValueError("retrieval handoff output contract is invalid")

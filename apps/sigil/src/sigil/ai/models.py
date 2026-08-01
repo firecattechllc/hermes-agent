@@ -41,6 +41,7 @@ class Capability(str, Enum):
     SUMMARIZATION = "summarization.v1"
     FINANCIAL_SENTIMENT = "financial_sentiment.v1"
     EMBEDDINGS = "embeddings.v1"
+    SEMANTIC_RETRIEVAL = "semantic_retrieval.v1"
     RETRIEVAL_RERANKING = "retrieval_reranking.v1"
     TIME_SERIES_FORECASTING = "time_series_forecasting.v1"
     MULTIMODAL_ANALYSIS = "multimodal_analysis.v1"
@@ -103,6 +104,10 @@ class Responsibility(str, Enum):
     FINANCIAL_SENTIMENT_ANALYSIS = "financial_sentiment_analysis"
     NEWS_SENTIMENT = "news_sentiment"
     EARNINGS_SENTIMENT = "earnings_sentiment"
+    RESEARCH_RETRIEVAL = "research_retrieval"
+    EVIDENCE_RETRIEVAL = "evidence_retrieval"
+    PROPOSAL_CONTEXT = "proposal_context"
+    AUDIT_CONTEXT = "audit_context"
     ORCHESTRATION_SUPPORT = "orchestration_support"
     AUTHORIZE_CAPITAL = "authorize_capital"
     CHANGE_POLICY = "change_policy"
@@ -118,6 +123,9 @@ class Responsibility(str, Enum):
     PORTFOLIO_MUTATION = "portfolio_mutation"
     CREDENTIAL_ACCESS = "credential_access"
     UNRESTRICTED_SHELL_EXECUTION = "unrestricted_shell_execution"
+    SOURCE_DELETION_WITHOUT_GOVERNED_OPERATOR_ACTION = (
+        "source_deletion_without_governed_operator_action"
+    )
 
 
 PROHIBITED_RESPONSIBILITIES = frozenset(
@@ -136,6 +144,7 @@ PROHIBITED_RESPONSIBILITIES = frozenset(
         Responsibility.PORTFOLIO_MUTATION,
         Responsibility.CREDENTIAL_ACCESS,
         Responsibility.UNRESTRICTED_SHELL_EXECUTION,
+        Responsibility.SOURCE_DELETION_WITHOUT_GOVERNED_OPERATOR_ACTION,
     }
 )
 

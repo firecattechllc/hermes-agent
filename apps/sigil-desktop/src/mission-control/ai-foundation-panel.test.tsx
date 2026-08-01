@@ -27,6 +27,22 @@ const healthyStatus: AIStatus = {
       limitations: ['Advisory only']
     }
   },
+  embeddinggemma: {
+    enabled: true,
+    available: true,
+    health: 'healthy',
+    vector_dimension: 768,
+    corpus_count: 1,
+    source_count: 3,
+    chunk_count: 4,
+    embedding_count: 4,
+    vector_store_health: 'healthy',
+    latest_retrieval: {
+      result_count: 2,
+      freshness: ['current'],
+      limitations: ['Advisory retrieval only']
+    }
+  },
   paper_only: true,
   broker_submission: false
 }
@@ -46,7 +62,8 @@ describe('AI Foundation status panel', () => {
 
     expect(screen.getAllByText('healthy').length).toBeGreaterThan(0)
     expect(screen.getByText('1 models · 1 available')).toBeTruthy()
-    expect(screen.getByText('positive · 82% · news-42')).toBeTruthy()
+    expect(screen.getByText('2 retrieval results · current')).toBeTruthy()
+    expect(screen.getByText('healthy · 3 sources · 4 embeddings')).toBeTruthy()
   })
 
   it('renders the latest structured failure classification', () => {

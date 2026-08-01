@@ -20,8 +20,13 @@ from .finbert import (
     GovernedSentimentArtifact,
     SentimentLabel,
 )
-from .models import Capability, Responsibility
+from .models import Capability, PrivacyTier, Responsibility, TrustTier
 from .registry import canonical_digest
+from .retrieval import (
+    GovernedRetrievalArtifact,
+    RetrievalResultItem,
+    RetrievalSourceType,
+)
 
 _ZERO_HASH = "0" * 64
 
@@ -66,8 +71,9 @@ class DurableAnalysisArtifactStore:
             os.close(descriptor)
 
     def append(
-        self, artifact: GovernedAnalysisArtifact | GovernedSentimentArtifact
-    ) -> GovernedAnalysisArtifact | GovernedSentimentArtifact:
+        self,
+        artifact: GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact,
+    ) -> GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact:
         with self._locked():
             records = self._read_unlocked(recover_truncated_tail=True)
             if any(item.artifact_id == artifact.artifact_id for item in records):
@@ -104,13 +110,17 @@ class DurableAnalysisArtifactStore:
 
     def read_artifacts(
         self, *, recover_truncated_tail: bool = True
-    ) -> tuple[GovernedAnalysisArtifact | GovernedSentimentArtifact, ...]:
+    ) -> tuple[
+        GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact, ...
+    ]:
         with self._locked():
             return self._read_unlocked(recover_truncated_tail=recover_truncated_tail)
 
     def _read_unlocked(
         self, *, recover_truncated_tail: bool
-    ) -> tuple[GovernedAnalysisArtifact | GovernedSentimentArtifact, ...]:
+    ) -> tuple[
+        GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact, ...
+    ]:
         if not self.path.exists():
             return ()
         if self.path.is_symlink() or not self.path.is_file():
@@ -128,7 +138,9 @@ class DurableAnalysisArtifactStore:
                 os.close(descriptor)
             self._fsync_directory()
             raw = raw[:boundary]
-        artifacts: list[GovernedAnalysisArtifact | GovernedSentimentArtifact] = []
+        artifacts: list[
+            GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact
+        ] = []
         identities: set[str] = set()
         previous = _ZERO_HASH
         self._validated_last_hash = _ZERO_HASH
@@ -172,7 +184,7 @@ class DurableAnalysisArtifactStore:
 
     @staticmethod
     def _artifact_payload(
-        artifact: GovernedAnalysisArtifact | GovernedSentimentArtifact,
+        artifact: GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact,
     ) -> dict[str, object]:
         payload = asdict(artifact)
         payload["capability"] = artifact.capability.value
@@ -182,8 +194,34 @@ class DurableAnalysisArtifactStore:
     @staticmethod
     def _decode_artifact(
         payload: object,
-    ) -> GovernedAnalysisArtifact | GovernedSentimentArtifact:
-        if not isinstance(payload, dict) or not isinstance(payload.get("structured_payload"), dict):
+    ) -> GovernedAnalysisArtifact | GovernedSentimentArtifact | GovernedRetrievalArtifact:
+        if not isinstance(payload, dict):
+            raise AnalysisArtifactCorruptionError("artifact payload shape is invalid")
+        if payload.get("capability") == Capability.SEMANTIC_RETRIEVAL.value:
+            return GovernedRetrievalArtifact(
+                **{
+                    **payload,
+                    "capability": Capability(payload["capability"]),
+                    "responsibility": Responsibility(payload["responsibility"]),
+                    "corpus_ids": tuple(payload["corpus_ids"]),
+                    "results": tuple(
+                        RetrievalResultItem(
+                            **{
+                                **item,
+                                "source_type": RetrievalSourceType(item["source_type"]),
+                                "privacy_classification": PrivacyTier(
+                                    item["privacy_classification"]
+                                ),
+                                "trust_classification": TrustTier(item["trust_classification"]),
+                                "evidence_references": tuple(item["evidence_references"]),
+                            }
+                        )
+                        for item in payload["results"]
+                    ),
+                    "limitations": tuple(payload["limitations"]),
+                }
+            )
+        if not isinstance(payload.get("structured_payload"), dict):
             raise AnalysisArtifactCorruptionError("artifact payload shape is invalid")
         structured = payload["structured_payload"]
         if payload.get("capability") == Capability.FINANCIAL_SENTIMENT.value:

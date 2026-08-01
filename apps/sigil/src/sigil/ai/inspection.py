@@ -11,6 +11,13 @@ from .artifact_store import AnalysisArtifactStoreError, DurableAnalysisArtifactS
 from .finbert import FinBERTConfig, GovernedSentimentArtifact, LocalFinBERTProvider
 from .gemma import LocalGemmaConfig, LocalGemmaProvider
 from .ledger import AIEvidenceLedgerError, DurableAIEvidenceLedger
+from .retrieval import (
+    DurableRetrievalStore,
+    EmbeddingGemmaConfig,
+    GovernedRetrievalArtifact,
+    LocalEmbeddingGemmaProvider,
+    RetrievalStoreError,
+)
 
 INSPECTION_SCHEMA_VERSION = 1
 MAX_INSPECTION_LIMIT = 50
@@ -71,6 +78,24 @@ def _read_artifacts(root: Path | None) -> tuple[tuple[object, ...], str, bool]:
         return (), "recoverable_tail" if recoverable else "corrupt", recoverable
 
 
+def _read_retrieval(
+    root: Path | None,
+) -> tuple[tuple[object, ...], tuple[object, ...], tuple[object, ...], str, bool]:
+    directory = None if root is None else root / "governed-ai-retrieval-v1"
+    if directory is None or not (directory / "index.jsonl").exists():
+        return (), (), (), "empty", False
+    if not (directory / "index.lock").exists():
+        return (), (), (), "corrupt", False
+    try:
+        sources, chunks, embeddings = DurableRetrievalStore(root).read_index(
+            recover_truncated_tail=False
+        )
+        return sources, chunks, embeddings, "healthy", False
+    except RetrievalStoreError as error:
+        recoverable = "truncated tail" in str(error)
+        return (), (), (), "recoverable_tail" if recoverable else "corrupt", recoverable
+
+
 def _config(environment: dict[str, str]) -> tuple[LocalGemmaConfig, str]:
     try:
         config = LocalGemmaConfig.from_environment(environment)
@@ -98,21 +123,57 @@ def _finbert_config(
         return FinBERTConfig(), None, "configuration_invalid"
 
 
+def _embedding_config(
+    environment: dict[str, str],
+) -> tuple[EmbeddingGemmaConfig, LocalEmbeddingGemmaProvider | None, str]:
+    try:
+        config = EmbeddingGemmaConfig.from_environment(environment)
+        provider = LocalEmbeddingGemmaProvider(config)
+        health = (
+            "disabled"
+            if not config.enabled
+            else "configured_unverified"
+            if provider.identity.health.value == "healthy"
+            else "unavailable"
+        )
+        return config, provider, health
+    except ValueError:
+        return EmbeddingGemmaConfig(), None, "configuration_invalid"
+
+
 def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
     source = dict(os.environ if environment is None else environment)
     root = _state_root(source)
     evidence, evidence_health, evidence_tail = _read_evidence(root)
     artifacts, artifact_health, artifact_tail = _read_artifacts(root)
+    sources, chunks, embeddings, retrieval_health, retrieval_tail = _read_retrieval(root)
     config, gemma_health = _config(source)
     finbert_config, finbert_provider, finbert_health = _finbert_config(source)
+    embedding_config, embedding_provider, embedding_health = _embedding_config(source)
     failures = [item for item in evidence if getattr(item, "failure_classification", None)]
-    providers = (1 if config.model_id else 0) + (1 if finbert_config.enabled else 0)
-    available = sum(health == "healthy" for health in (gemma_health, finbert_health))
+    providers = (
+        (1 if config.model_id else 0)
+        + (1 if finbert_config.enabled else 0)
+        + (1 if embedding_config.enabled else 0)
+    )
+    available = sum(
+        health == "healthy" for health in (gemma_health, finbert_health, embedding_health)
+    )
     latest = artifacts[-1] if artifacts else None
     latest_sentiment = next(
         (item for item in reversed(artifacts) if isinstance(item, GovernedSentimentArtifact)),
         None,
     )
+    latest_retrieval = next(
+        (item for item in reversed(artifacts) if isinstance(item, GovernedRetrievalArtifact)),
+        None,
+    )
+    if isinstance(latest, GovernedRetrievalArtifact):
+        latest_summary = f"{len(latest.results)} retrieval results"
+    elif isinstance(latest, GovernedSentimentArtifact):
+        latest_summary = latest.structured_payload.label.value
+    else:
+        latest_summary = None if latest is None else latest.structured_payload.summary
     last_failure = failures[-1] if failures else None
     return {
         "schema_version": INSPECTION_SCHEMA_VERSION,
@@ -129,15 +190,7 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
         "configured_local_gemma_model": config.model_id,
         "local_gemma_health": gemma_health,
         "last_successful_analysis_at": None if latest is None else latest.created_at,
-        "latest_analysis_summary": None
-        if latest is None
-        else str(
-            getattr(
-                latest.structured_payload,
-                "summary",
-                getattr(latest.structured_payload, "label", "unavailable"),
-            )
-        ),
+        "latest_analysis_summary": latest_summary,
         "last_failure_at": None if last_failure is None else last_failure.ended_at,
         "last_failure_classification": None
         if last_failure is None
@@ -146,7 +199,7 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
         "artifact_store_health": artifact_health,
         "evidence_record_count": len(evidence),
         "artifact_count": len(artifacts),
-        "recoverable_tail_detected": evidence_tail or artifact_tail,
+        "recoverable_tail_detected": evidence_tail or artifact_tail or retrieval_tail,
         "finbert": {
             "enabled": finbert_config.enabled,
             "model_id": finbert_config.model_id,
@@ -175,6 +228,34 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
             ),
             "available": bool(finbert_provider and finbert_health == "healthy"),
         },
+        "embeddinggemma": {
+            "enabled": embedding_config.enabled,
+            "model_id": embedding_config.model_id,
+            "model_version": embedding_config.model_version,
+            "health": embedding_health,
+            "available": bool(embedding_provider and embedding_health == "healthy"),
+            "vector_dimension": embedding_config.vector_dimension,
+            "corpus_count": len({item.corpus_id for item in sources}),
+            "source_count": len(sources),
+            "chunk_count": len(chunks),
+            "embedding_count": len(embeddings),
+            "vector_store_health": retrieval_health,
+            "recoverable_corruption": retrieval_tail,
+            "last_successful_indexing": None if not embeddings else embeddings[-1].created_at,
+            "last_successful_retrieval": None
+            if latest_retrieval is None
+            else latest_retrieval.created_at,
+            "latest_retrieval": None
+            if latest_retrieval is None
+            else {
+                "result_count": len(latest_retrieval.results),
+                "freshness": sorted({item.freshness_state for item in latest_retrieval.results}),
+                "limitations": list(latest_retrieval.limitations[:5]),
+            },
+            "last_failure_classification": None
+            if last_failure is None
+            else last_failure.failure_classification,
+        },
         "paper_only": True,
         "execution_authorized": False,
         "broker_submission": False,
@@ -193,6 +274,9 @@ def ai_registry_status(environment: dict[str, str] | None = None) -> dict[str, A
     finbert_config, finbert_provider, finbert_health = _finbert_config(source)
     if finbert_config.enabled and finbert_provider is not None:
         models.append((finbert_provider.registration(), finbert_health))
+    embedding_config, embedding_provider, embedding_health = _embedding_config(source)
+    if embedding_config.enabled and embedding_provider is not None:
+        models.append((embedding_provider.registration(), embedding_health))
     return {
         "schema_version": 1,
         "entries": [
@@ -246,6 +330,12 @@ def _artifact_summary(artifact) -> dict[str, Any]:
             "negative_score": artifact.structured_payload.negative_score,
             "source_identity": artifact.structured_payload.source_identity,
             "freshness": artifact.stale_after,
+        }
+    if isinstance(artifact, GovernedRetrievalArtifact):
+        summary["retrieval"] = {
+            "result_count": len(artifact.results),
+            "corpus_ids": list(artifact.corpus_ids),
+            "freshness": sorted({item.freshness_state for item in artifact.results}),
         }
     return summary
 
@@ -305,6 +395,31 @@ def ai_artifact_get(payload: object, environment: dict[str, str] | None = None) 
             "source_digest": match.structured_payload.source_digest,
             "analyzed_at": match.structured_payload.analyzed_at,
             "limitations": list(match.structured_payload.limitations),
+        }
+    elif isinstance(match, GovernedRetrievalArtifact):
+        structured_payload = {
+            "corpus_ids": list(match.corpus_ids),
+            "result_count": len(match.results),
+            "results": [
+                {
+                    "rank": item.rank,
+                    "score": item.score,
+                    "source_id": item.source_id,
+                    "source_identity": item.source_identity,
+                    "source_type": item.source_type.value,
+                    "source_digest": item.source_digest,
+                    "chunk_id": item.chunk_id,
+                    "chunk_digest": item.chunk_digest,
+                    "observed_at": item.observed_at,
+                    "freshness_state": item.freshness_state,
+                    "privacy_classification": item.privacy_classification.name.lower(),
+                    "trust_classification": item.trust_classification.name.lower(),
+                    "excerpt": item.excerpt,
+                    "evidence_references": list(item.evidence_references),
+                }
+                for item in match.results
+            ],
+            "limitations": list(match.limitations),
         }
     else:
         structured_payload = {
