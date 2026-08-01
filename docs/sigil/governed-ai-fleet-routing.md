@@ -52,7 +52,13 @@ Read-only inspection exposes bounded node counts, Titan/Mac/Prime state, capabil
 
 Fleet disabled, empty, offline, stale, corrupt, skewed, incompatible, ambiguous, or cancellation-pending states cannot block desktop/backend startup, runtime snapshots, local AI, paper ledgers, proposal review, audit, Mission Control, or packaged launch.
 
-## Certification
+## Certification foundation and remaining live-node gates
+
+Phase 9 provides a locally validated certification foundation; it is not a claim
+of completed live-node certification. Deterministic tests and offline declaration
+preflight establish implementation readiness only. Full certification remains
+blocked until the authenticated live-node checks below are completed and durable,
+sanitized evidence is committed for review.
 
 Deterministic CI uses mock nodes/transports for authenticated and spoofed identity, duplicate registration, Titan/local-first, Mac escalation, Prime backup, exact compatibility, privacy/trust/resources, maintenance/draining/load, stale/skewed health, transport integrity/replay, failover, ambiguity, cancellation, restart/corruption, Phase 8 integration, inspection, packaging, and safety invariants.
 
