@@ -115,12 +115,42 @@ function DataNotice({ snapshot }: { snapshot: SigilSnapshot }) {
 
 function MetricStrip({ snapshot }: { snapshot: SigilSnapshot }) {
   const metrics = [
-    { label: 'System health', value: snapshot.systemHealth, detail: 'Local governance checks', tone: 'success' },
-    { label: 'Masked account', value: snapshot.maskedAccountId, detail: 'Credentials never displayed', tone: 'muted' },
-    { label: 'Cash', value: snapshot.cash, detail: 'Paper buying power', tone: 'info' },
-    { label: 'Portfolio', value: snapshot.portfolioValue, detail: 'Simulated market value', tone: 'info' },
-    { label: 'Strategies', value: String(snapshot.activeStrategies), detail: 'Active', tone: 'muted' },
-    { label: 'Approvals', value: String(snapshot.pendingApprovals), detail: 'Pending', tone: 'warning' },
+    {
+      label: 'System health',
+      value: snapshot.systemHealth,
+      detail: 'Local governance checks',
+      tone: 'success'
+    },
+    {
+      label: 'Masked account',
+      value: snapshot.maskedAccountId,
+      detail: 'Credentials never displayed',
+      tone: 'muted'
+    },
+    {
+      label: 'Paper cash',
+      value: snapshot.cash,
+      detail: 'Available simulated buying power',
+      tone: 'info'
+    },
+    {
+      label: 'Portfolio value',
+      value: snapshot.portfolioValue,
+      detail: 'Persisted simulated market value',
+      tone: 'info'
+    },
+    {
+      label: 'Active strategies',
+      value: String(snapshot.activeStrategies),
+      detail: 'Governed strategy count',
+      tone: 'muted'
+    },
+    {
+      label: 'Pending approvals',
+      value: String(snapshot.pendingApprovals),
+      detail: 'Operator review required',
+      tone: snapshot.pendingApprovals > 0 ? 'warning' : 'success'
+    },
     {
       label: 'Kill switch',
       value: snapshot.killSwitch.toUpperCase(),
@@ -130,20 +160,43 @@ function MetricStrip({ snapshot }: { snapshot: SigilSnapshot }) {
   ] as const
 
   return (
-    <dl className="grid border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
-      {metrics.map(metric => (
-        <div
-          className="min-w-0 border-b border-(--ui-stroke-tertiary) px-4 py-2.5 last:border-b-0 sm:border-r lg:border-b-0"
-          key={metric.label}
-        >
-          <dt className="text-[0.625rem] font-medium uppercase tracking-[0.12em] text-(--ui-text-tertiary)">
-            {metric.label}
-          </dt>
-          <dd className="mt-1 truncate font-mono text-xs font-semibold">{metric.value}</dd>
-          <dd className="mt-0.5 truncate text-[0.6875rem] text-(--ui-text-tertiary)">{metric.detail}</dd>
-        </div>
-      ))}
-    </dl>
+    <section
+      aria-label="Mission Control core metrics"
+      className={cn('py-5', PAGE_INSET_X)}
+      data-testid="mission-control-metrics"
+    >
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
+        {metrics.map(metric => (
+          <dl
+            className="
+              sigil-beta-panel
+              group
+              min-w-0
+              px-4 py-4
+              transition-colors
+              hover:border-primary/25
+              hover:bg-(--ui-bg-tertiary)
+            "
+            key={metric.label}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <dt className="sigil-beta-label text-(--ui-text-tertiary)">
+                {metric.label}
+              </dt>
+              <StatusLabel tone={metric.tone}>{metric.tone}</StatusLabel>
+            </div>
+
+            <dd className="sigil-beta-data mt-4 truncate text-base font-semibold text-(--ui-text-primary)">
+              {metric.value}
+            </dd>
+
+            <dd className="mt-2 min-h-8 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)">
+              {metric.detail}
+            </dd>
+          </dl>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -200,29 +253,42 @@ function RuntimeVisibilityCard({
   return (
     <section
       aria-labelledby="runtime-visibility-title"
-      className="border-b border-(--ui-stroke-tertiary)"
+      className={cn('pb-5', PAGE_INSET_X)}
       data-testid="runtime-visibility"
     >
-      <div className={cn('py-4', PAGE_INSET_X)}>
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="sigil-beta-panel overflow-hidden">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-5 py-4">
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="runtime-visibility-title">
-              Governed runtime status
+            <p className="sigil-beta-label text-primary">Governed runtime</p>
+            <h2
+              className="mt-2 text-lg font-semibold tracking-[-0.01em] text-(--ui-text-primary)"
+              id="runtime-visibility-title"
+            >
+              Runtime visibility
             </h2>
             <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
-              Paper-only · {visibility.automationMode}
+              Paper-only operation · {visibility.automationMode}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <StatusLabel tone={stateTone}>{visibility.operationalState.toUpperCase()}</StatusLabel>
-            <StatusLabel tone={healthTone}>{visibility.health.toUpperCase()}</StatusLabel>
-            <StatusLabel tone={visibility.connectionState === 'connected' ? 'success' : 'warning'}>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusLabel tone={stateTone}>
+              {visibility.operationalState.toUpperCase()}
+            </StatusLabel>
+            <StatusLabel tone={healthTone}>
+              {visibility.health.toUpperCase()}
+            </StatusLabel>
+            <StatusLabel
+              tone={visibility.connectionState === 'connected' ? 'success' : 'warning'}
+            >
               {visibility.connectionState}
             </StatusLabel>
           </div>
         </div>
 
-        <dl className="mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) sm:grid-cols-2 xl:grid-cols-4">
+        <div className="px-5 py-5">
+
+        <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
             ['Completed cycles', String(visibility.counts.cycles), `Last: ${snapshot.automationLastCycleAt ?? 'Never'}`],
             [
@@ -247,10 +313,19 @@ function RuntimeVisibilityCard({
                 : 'No execution'
             ]
           ].map(([label, value, detail]) => (
-            <div className="bg-(--ui-bg-secondary) p-3" key={label}>
-              <dt className="text-[0.625rem] uppercase tracking-[0.1em] text-(--ui-text-tertiary)">{label}</dt>
-              <dd className="mt-1 break-words font-mono text-xs font-semibold">{value}</dd>
-              <dd className="mt-1 break-words text-[0.6875rem] text-(--ui-text-tertiary)">{detail}</dd>
+            <div
+              className="rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) p-4"
+              key={label}
+            >
+              <dt className="sigil-beta-label text-(--ui-text-tertiary)">
+                {label}
+              </dt>
+              <dd className="sigil-beta-data mt-3 break-words text-sm font-semibold text-(--ui-text-primary)">
+                {value}
+              </dd>
+              <dd className="mt-2 break-words text-[0.6875rem] leading-4 text-(--ui-text-tertiary)">
+                {detail}
+              </dd>
             </div>
           ))}
         </dl>
@@ -307,6 +382,7 @@ function RuntimeVisibilityCard({
               ))}
             </ol>
           </div>
+        </div>
         </div>
       </div>
     </section>

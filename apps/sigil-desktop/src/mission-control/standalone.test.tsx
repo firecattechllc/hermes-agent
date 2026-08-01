@@ -583,7 +583,7 @@ describe('standalone Sigil Mission Control', () => {
     render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
 
     const card = await screen.findByTestId('runtime-visibility')
-    expect(card.textContent).toContain('Governed runtime status')
+    expect(card.textContent).toContain('Runtime visibility')
     expect(card.textContent).toContain('PAUSED')
     expect(card.textContent).toContain('HEALTHY')
     expect(card.textContent).toContain('Completed cycles')
