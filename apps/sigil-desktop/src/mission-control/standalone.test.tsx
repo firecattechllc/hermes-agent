@@ -364,6 +364,7 @@ describe('standalone Sigil Mission Control', () => {
       const governedSearch = screen.getByRole('textbox', {
         name: 'Search governed instruments'
       })
+
       fireEvent.change(governedSearch, { target: { value: 'AAPL' } })
 
       await waitFor(() => {
@@ -474,6 +475,7 @@ describe('standalone Sigil Mission Control', () => {
 
   it('confirmation-gates simulated proposal approval and records local audit evidence', async () => {
     const simulator = new MockSigilOperatorAdapter('disconnected')
+
     const adapter = {
       readSnapshot: () => simulator.readSnapshot(),
       applySimulatedAction: (action: Parameters<typeof simulator.applySimulatedAction>[0]) =>
@@ -507,6 +509,7 @@ describe('standalone Sigil Mission Control', () => {
 
   it('confirmation-gates simulated proposal rejection without broker submission', async () => {
     const simulator = new MockSigilOperatorAdapter('disconnected')
+
     const adapter = {
       readSnapshot: () => simulator.readSnapshot(),
       applySimulatedAction: (action: Parameters<typeof simulator.applySimulatedAction>[0]) =>

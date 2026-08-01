@@ -252,6 +252,135 @@
   border-color: var(--sigil-border-strong);
 }
 
+.sigil-beta-shell :is(button, a, summary, input, select):focus-visible {
+  outline: 2px solid var(--sigil-primary-bright);
+  outline-offset: 2px;
+}
+
+.sigil-beta-shell :is(button, summary):active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.sigil-proposal-card {
+  position: relative;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.sigil-proposal-card::before {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 2px;
+  background: var(--sigil-primary);
+  content: "";
+  opacity: 0.55;
+}
+
+.sigil-decision-row {
+  box-shadow: inset 2px 0 0 transparent;
+}
+
+.sigil-decision-row:hover,
+.sigil-decision-row[aria-pressed="true"] {
+  box-shadow: inset 2px 0 0 var(--sigil-primary);
+}
+
+.sigil-runtime-metric,
+.sigil-provider-metrics > div {
+  min-width: 0;
+}
+
+.sigil-runtime-detail > div {
+  min-width: 0;
+  border: 1px solid var(--sigil-border);
+  border-radius: 4px;
+  background: var(--sigil-surface-low);
+  padding: 1rem;
+}
+
+.sigil-audit-preview {
+  position: relative;
+}
+
+.sigil-audit-preview::before {
+  position: absolute;
+  top: 0.9rem;
+  bottom: 0.9rem;
+  left: 0.1875rem;
+  width: 1px;
+  background: var(--sigil-border-strong);
+  content: "";
+}
+
+.sigil-audit-preview li::before {
+  position: absolute;
+  top: 0.9rem;
+  left: 0;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border: 1px solid var(--sigil-primary-bright);
+  border-radius: 50%;
+  background: var(--sigil-surface-low);
+  box-shadow: 0 0 0 3px var(--sigil-surface-low);
+  content: "";
+}
+
+.sigil-audit-event {
+  position: relative;
+  border: 1px solid var(--sigil-border);
+  border-bottom: 0;
+  background: var(--sigil-surface);
+  padding: 0.875rem 1rem;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.sigil-audit-event:last-child {
+  border-bottom: 1px solid var(--sigil-border);
+}
+
+.sigil-audit-event:hover,
+.sigil-audit-event[open] {
+  border-color: var(--sigil-border-strong);
+  background: var(--sigil-surface-raised);
+}
+
+.sigil-audit-event summary::after {
+  position: absolute;
+  top: 0.8rem;
+  right: 0.75rem;
+  color: var(--sigil-text-muted);
+  content: "+";
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.sigil-audit-event summary {
+  padding-right: 1.25rem;
+}
+
+.sigil-audit-event[open] summary::after {
+  content: "−";
+}
+
+.sigil-audit-evidence {
+  border: 1px solid var(--sigil-border);
+  border-left: 2px solid var(--sigil-primary);
+  border-radius: 3px;
+  background: var(--sigil-background);
+  padding: 0.875rem 1rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sigil-provider-heading,
+.sigil-provider-market {
+  background: linear-gradient(90deg, rgb(20 184 166 / 3%), transparent 42%);
+}
+
 /* Compact, application-wide scrollbars */
 .sigil-beta-shell ::-webkit-scrollbar {
   width: 6px;
@@ -327,6 +456,40 @@
     .sigil-beta-panel {
     min-height: auto;
   }
+
+  .sigil-beta-shell [data-testid="provider-health"] {
+    margin-inline: 0.75rem;
+  }
+
+  .sigil-proposal-card > div:first-child,
+  .sigil-provider-heading > div:last-child {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sigil-proposal-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .sigil-decision-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sigil-proposal-actions button,
+  .sigil-provider-heading button {
+    justify-content: center;
+    min-height: 2.5rem;
+  }
+
+  .sigil-audit-event summary {
+    gap: 0.375rem;
+  }
+
+  .sigil-audit-event summary > span {
+    overflow-wrap: anywhere;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -337,5 +500,9 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .sigil-beta-shell :is(button, summary):active:not(:disabled) {
+    transform: none;
   }
 }

@@ -286,8 +286,7 @@ function RuntimeVisibilityCard({
         </div>
 
         <div className="px-5 py-5">
-
-        <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <dl className="sigil-runtime-metrics grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
             ['Completed cycles', String(visibility.counts.cycles), `Last: ${snapshot.automationLastCycleAt ?? 'Never'}`],
             [
@@ -313,7 +312,7 @@ function RuntimeVisibilityCard({
             ]
           ].map(([label, value, detail]) => (
             <div
-              className="rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) p-4"
+              className="sigil-runtime-metric rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) p-4"
               key={label}
             >
               <dt className="sigil-beta-label text-(--ui-text-tertiary)">
@@ -327,10 +326,10 @@ function RuntimeVisibilityCard({
               </dd>
             </div>
           ))}
-        </dl>
+          </dl>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          <div>
+          <div className="sigil-runtime-detail mt-4 grid gap-4 xl:grid-cols-2">
+          <div className="sigil-runtime-safety">
             <h3 className="text-[0.625rem] font-semibold uppercase tracking-[0.1em]">Safety and next action</h3>
             <p className="mt-2 text-xs">{visibility.nextAction}</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -362,14 +361,14 @@ function RuntimeVisibilityCard({
               ))}
             </ul>
           </div>
-          <div>
+          <div className="sigil-runtime-audit">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-[0.625rem] font-semibold uppercase tracking-[0.1em]">Recent audit timeline</h3>
               <Button onClick={onOpenAudit} size="xs" variant="outline">View all</Button>
             </div>
-            <ol className="mt-2 divide-y divide-(--ui-stroke-tertiary)">
+            <ol className="sigil-audit-preview mt-2">
               {recentAudit.map(event => (
-                <li className="py-2 text-[0.6875rem]" key={event.id}>
+                <li className="relative py-2 pl-5 text-[0.6875rem]" key={event.id}>
                   <div className="flex items-start justify-between gap-3">
                     <span>{event.summary}</span>
                     <StatusLabel tone="muted">{event.status}</StatusLabel>
@@ -381,7 +380,7 @@ function RuntimeVisibilityCard({
               ))}
             </ol>
           </div>
-        </div>
+          </div>
         </div>
       </div>
     </section>
@@ -436,9 +435,9 @@ function ProposalDetails({
   proposal: Proposal
 }) {
   return (
-    <article className="border-b border-(--ui-stroke-tertiary) py-4 last:border-b-0">
+    <article className="sigil-proposal-card sigil-beta-panel mb-3 overflow-hidden p-4 last:mb-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold">{proposal.symbol}</h3>
             <StatusLabel tone={proposal.side === 'BUY' ? 'info' : 'warning'}>{proposal.side}</StatusLabel>
@@ -453,7 +452,7 @@ function ProposalDetails({
           </p>
           <p className="mt-1 font-mono text-[0.625rem] text-(--ui-text-quaternary)">{proposal.id}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="sigil-proposal-actions flex gap-2">
           <Button
             disabled={actionLocked || proposal.status !== 'pending'}
             onClick={() => onAction({ type: 'reject-proposal', proposalId: proposal.id })}
@@ -471,12 +470,12 @@ function ProposalDetails({
           </Button>
         </div>
       </div>
-      <div className="mt-3 grid gap-3 text-[0.6875rem] md:grid-cols-2">
-        <div>
+      <div className="mt-4 grid gap-px overflow-hidden rounded-[3px] border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-[0.6875rem] md:grid-cols-2">
+        <div className="bg-(--ui-bg-primary) p-3">
           <div className="font-medium text-(--ui-text-secondary)">Evidence references</div>
           <div className="mt-1 font-mono text-(--ui-text-tertiary)">{proposal.evidenceReferences.join(' · ')}</div>
         </div>
-        <div>
+        <div className="bg-(--ui-bg-primary) p-3">
           <div className="font-medium text-(--ui-text-secondary)">Risk results</div>
           <ul className="mt-1 space-y-0.5 text-(--ui-text-tertiary)">
             {proposal.riskResults.map(result => (
@@ -883,10 +882,10 @@ function AuditTable({ events }: { events: AuditEvent[] }) {
           title={events.length === 0 ? 'No audit evidence' : 'No matching evidence'}
         />
       ) : (
-        <div className="divide-y divide-(--ui-stroke-tertiary)">
+        <div className="sigil-audit-table">
           {filtered.map(event => (
-            <details className="group py-3" key={event.id}>
-              <summary className="grid cursor-pointer list-none gap-2 text-xs md:grid-cols-[1fr_1fr_1fr_2fr_auto]">
+            <details className="sigil-audit-event group" key={event.id}>
+              <summary className="grid cursor-pointer list-none gap-2 text-xs md:grid-cols-[1fr_1fr_1fr_2fr_auto] md:items-center">
                 <span className="font-mono text-[0.6875rem]">{formatEasternDateTime(event.timestamp)}</span>
                 <span className="font-mono text-[0.6875rem] text-(--ui-text-tertiary)">{event.orderId}</span>
                 <span className="font-mono text-[0.6875rem] text-(--ui-text-tertiary)">{event.evidenceReference}</span>
@@ -897,7 +896,7 @@ function AuditTable({ events }: { events: AuditEvent[] }) {
                   {event.status}
                 </StatusLabel>
               </summary>
-              <pre className="mt-3 overflow-x-auto border-l border-(--ui-stroke-tertiary) pl-4 text-[0.6875rem] leading-relaxed text-(--ui-text-secondary)">
+              <pre className="sigil-audit-evidence mt-3 overflow-x-auto text-[0.6875rem] leading-relaxed text-(--ui-text-secondary)">
                 {JSON.stringify(event.details, null, 2)}
               </pre>
             </details>
@@ -963,7 +962,7 @@ function ProviderPanel({
       className="border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)"
       data-testid="provider-health"
     >
-      <div className={cn('flex flex-wrap items-center justify-between gap-3 py-3', PAGE_INSET_X)}>
+      <div className={cn('sigil-provider-heading flex flex-wrap items-center justify-between gap-3 py-4', PAGE_INSET_X)}>
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="provider-health-title">
             Read-only provider health
@@ -991,7 +990,7 @@ function ProviderPanel({
         </div>
       ) : null}
       {alpacaMarketData ? (
-        <div className={cn('border-t border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}>
+        <div className={cn('sigil-provider-market border-t border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 className="text-xs font-semibold">Alpaca Market Data</h3>
@@ -1027,11 +1026,11 @@ function ProviderPanel({
             {alpacaControlMessage ??
               'Asset refresh is read-only. Delayed-SIP and streaming IEX controls are unavailable in this build.'}
           </p>
-          <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-            <div><dt className="text-(--ui-text-tertiary)">Asset catalog</dt><dd>{alpacaMarketData.asset_catalog.accepted_count} accepted · {alpacaMarketData.asset_catalog.excluded_count} excluded · {alpacaMarketData.asset_catalog.conflict_count} conflicts</dd></div>
-            <div><dt className="text-(--ui-text-tertiary)">Catalog freshness</dt><dd>{alpacaMarketData.asset_catalog.stale ? 'Cached / stale' : `${catalogAgeSeconds}s old`}</dd></div>
-            <div><dt className="text-(--ui-text-tertiary)">Delayed SIP scan</dt><dd>{alpacaMarketData.delayed_sip.scanned_count}/{alpacaMarketData.delayed_sip.universe_total} · batch {alpacaMarketData.delayed_sip.current_batch}/{alpacaMarketData.delayed_sip.total_batches}</dd></div>
-            <div><dt className="text-(--ui-text-tertiary)">Live IEX capacity</dt><dd>{alpacaMarketData.live_iex.active_symbol_count}/{alpacaMarketData.live_iex.maximum_symbol_count} symbols · {alpacaMarketData.live_iex.stale ? 'stale/unavailable' : 'current'}</dd></div>
+          <dl className="sigil-provider-metrics mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-xs sm:grid-cols-2 lg:grid-cols-4">
+            <div className="bg-(--ui-bg-primary) p-3"><dt className="sigil-beta-label text-(--ui-text-tertiary)">Asset catalog</dt><dd className="mt-2 leading-5">{alpacaMarketData.asset_catalog.accepted_count} accepted · {alpacaMarketData.asset_catalog.excluded_count} excluded · {alpacaMarketData.asset_catalog.conflict_count} conflicts</dd></div>
+            <div className="bg-(--ui-bg-primary) p-3"><dt className="sigil-beta-label text-(--ui-text-tertiary)">Catalog freshness</dt><dd className="mt-2 leading-5">{alpacaMarketData.asset_catalog.stale ? 'Cached / stale' : `${catalogAgeSeconds}s old`}</dd></div>
+            <div className="bg-(--ui-bg-primary) p-3"><dt className="sigil-beta-label text-(--ui-text-tertiary)">Delayed SIP scan</dt><dd className="mt-2 leading-5">{alpacaMarketData.delayed_sip.scanned_count}/{alpacaMarketData.delayed_sip.universe_total} · batch {alpacaMarketData.delayed_sip.current_batch}/{alpacaMarketData.delayed_sip.total_batches}</dd></div>
+            <div className="bg-(--ui-bg-primary) p-3"><dt className="sigil-beta-label text-(--ui-text-tertiary)">Live IEX capacity</dt><dd className="mt-2 leading-5">{alpacaMarketData.live_iex.active_symbol_count}/{alpacaMarketData.live_iex.maximum_symbol_count} symbols · {alpacaMarketData.live_iex.stale ? 'stale/unavailable' : 'current'}</dd></div>
           </dl>
           <p className="mt-3 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
             Subscribed: {alpacaMarketData.live_iex.subscribed_symbols.join(', ') || 'none'} · Last message: {alpacaMarketData.live_iex.last_message_at ?? 'none'} · Provider: {alpacaMarketData.provider_state} · Error: {alpacaMarketData.asset_catalog.last_error ?? 'none'}
@@ -2535,7 +2534,7 @@ export function SigilOperatorView({
                 </div>
                 <Pipeline compact stages={snapshot.stages} />
                 <div className="mt-5 grid gap-4 2xl:grid-cols-[1.35fr_1fr]">
-                  <section aria-labelledby="pending-proposals-title" className="sigil-beta-panel overflow-hidden">
+                  <section aria-labelledby="pending-proposals-title" className="sigil-beta-panel sigil-decision-queue overflow-hidden">
                     <div className="flex items-center justify-between gap-3 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-3">
                       <div>
                         <p className="sigil-beta-label text-primary">Decision queue</p>
@@ -2550,7 +2549,7 @@ export function SigilOperatorView({
                         {snapshot.pendingApprovals} awaiting review
                       </span>
                     </div>
-                    <div className="px-4 py-2">
+                    <div className="sigil-proposal-list px-4 py-2">
                     {snapshot.proposals
                       .filter(proposal => proposal.status === 'pending')
                       .slice(0, 2)
@@ -2558,7 +2557,7 @@ export function SigilOperatorView({
                         <button
                           aria-pressed={selectedProposal?.id === proposal.id}
                           className={cn(
-                            'my-2 grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) px-3 py-3 text-left transition-colors hover:border-primary/25 hover:bg-(--ui-bg-tertiary)',
+                            'sigil-decision-row my-2 grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) px-3 py-3 text-left transition-colors hover:border-primary/25 hover:bg-(--ui-bg-tertiary)',
                             selectedProposal?.id === proposal.id && 'border-primary/40 bg-primary/6'
                           )}
                           key={proposal.id}

@@ -111,6 +111,7 @@ describe('GovernedNewsPanel single-flight actions', () => {
     const status = deferred<JsonObject>()
     const advisory = deferred<JsonObject>()
     const statusCalls = api.getGovernedNewsStatus.mock.calls.length
+
     const advisoryCalls =
       api.getGovernedNewsAdvisorySummary.mock.calls.length
 
@@ -155,6 +156,7 @@ describe('GovernedNewsPanel single-flight actions', () => {
     const collect = screen.getByRole('button', {
       name: 'Scan governed universe'
     })
+
     const refresh = screen.getByRole('button', {
       name: 'Refresh evidence'
     })
