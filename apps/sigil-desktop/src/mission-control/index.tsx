@@ -27,6 +27,7 @@ import type {
   AssetCatalogStatus,
   AuditEvent,
   MarketUniverseQuote,
+  MarketUniverseQuoteResult,
   MarketUniverseSearchResult,
   MarketUniverseStatus,
   PaperExecutionStatus,
@@ -1240,7 +1241,7 @@ function MarketUniversePanel({
   }, [results])
 
   useEffect(() => {
-    const api = window.sigilDesktop?.getMarketUniverseQuotes
+    const api = desktopApi()?.getMarketUniverseQuotes
     const symbols = rankedResults.slice(0, 20).map(item => item.symbol)
 
     if (!api || symbols.length === 0) {
@@ -1872,6 +1873,11 @@ interface MissionControlDesktopApi {
     payload: Readonly<Record<string, unknown>>
   ) => Promise<
     { ok: true; result: MarketUniverseSearchResult } | { ok: false; error: string; message: string }
+  >
+  getMarketUniverseQuotes?: (
+    payload: Readonly<Record<string, unknown>>
+  ) => Promise<
+    { ok: true; result: MarketUniverseQuoteResult } | { ok: false; error: string; message: string }
   >
   getAssetCatalogStatus?: () => Promise<
     { ok: true; result: AssetCatalogStatus } | { ok: false; error: string; message: string }
