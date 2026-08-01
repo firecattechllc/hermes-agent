@@ -13,6 +13,16 @@ import sys
 from datetime import UTC, datetime
 from typing import Any, Final
 
+from sigil.ai.inspection import (
+    AIInspectionValidationError,
+    ai_artifact_get,
+    ai_artifact_status,
+    ai_evidence_status,
+    ai_recent_artifacts,
+    ai_recent_failures,
+    ai_registry_status,
+    ai_status,
+)
 from sigil.market_universe import UniverseValidationError
 
 from .alpaca_market_data import alpaca_market_data_status, control_alpaca_market_data
@@ -35,8 +45,14 @@ from .autonomous_paper import (
     paper_execution_status,
     reconcile_paper_orders,
 )
-from .market_universe import market_universe_search, market_universe_status
+from .governed_news_bridge import (
+    governed_alpaca_news_collect,
+    governed_news_advisory_summary,
+    governed_news_status,
+    governed_news_timeline,
+)
 from .market_quotes import market_universe_quotes
+from .market_universe import market_universe_search, market_universe_status
 from .production_research import (
     emergency_paper_liquidation,
     production_research_collection,
@@ -47,12 +63,6 @@ from .production_research import (
     request_paper_promotion,
     shadow_mode_disable,
     shadow_mode_enable,
-)
-from .governed_news_bridge import (
-    governed_alpaca_news_collect,
-    governed_news_advisory_summary,
-    governed_news_status,
-    governed_news_timeline,
 )
 from .providers import provider_snapshot
 from .runtime import (
@@ -71,6 +81,13 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "control_paper_authorization",
     "reset_paper_runtime",
     "provider_snapshot",
+    "ai_status",
+    "ai_registry_status",
+    "ai_evidence_status",
+    "ai_artifact_status",
+    "ai_recent_artifacts",
+    "ai_artifact_get",
+    "ai_recent_failures",
     "governed_news_status",
     "governed_news_timeline",
     "governed_news_advisory_summary",
@@ -383,6 +400,32 @@ def handle_request(request: object) -> dict[str, Any]:
 
     if command == "provider_snapshot":
         return {"ok": True, "result": provider_snapshot()}
+
+    if command == "ai_status":
+        return {"ok": True, "result": ai_status()}
+
+    if command == "ai_registry_status":
+        return {"ok": True, "result": ai_registry_status()}
+
+    if command == "ai_artifact_status":
+        return {"ok": True, "result": ai_artifact_status()}
+
+    if command in {
+        "ai_evidence_status",
+        "ai_recent_artifacts",
+        "ai_artifact_get",
+        "ai_recent_failures",
+    }:
+        try:
+            handlers = {
+                "ai_evidence_status": ai_evidence_status,
+                "ai_recent_artifacts": ai_recent_artifacts,
+                "ai_artifact_get": ai_artifact_get,
+                "ai_recent_failures": ai_recent_failures,
+            }
+            return {"ok": True, "result": handlers[command](request.get("payload"))}
+        except AIInspectionValidationError as error:
+            return error_response("invalid_ai_inspection_request", str(error))
 
     if command == "market_universe_status":
         return {"ok": True, "result": market_universe_status()}

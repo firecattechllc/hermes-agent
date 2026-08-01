@@ -90,6 +90,35 @@ try {
     'PASS: runtime_snapshot bridge returned valid JSON with ok=true\n'
   )
 
+  const aiStatus = bridgeRequest({ command: 'ai_status' })
+  if (
+    aiStatus.paper_only !== true ||
+    aiStatus.execution_authorized !== false ||
+    aiStatus.broker_submission !== false ||
+    aiStatus.secrets_exposed !== false
+  ) {
+    throw new Error(`ai_status violated its inspection boundary: ${JSON.stringify(aiStatus)}`)
+  }
+  process.stdout.write('PASS: ai_status preserved advisory-only authority\n')
+
+  const recentArtifacts = bridgeRequest({
+    command: 'ai_recent_artifacts',
+    payload: { limit: 1 }
+  })
+  if (!Array.isArray(recentArtifacts.artifacts) || recentArtifacts.artifacts.length !== 0) {
+    throw new Error(`ai_recent_artifacts was not safely empty: ${JSON.stringify(recentArtifacts)}`)
+  }
+  process.stdout.write('PASS: ai_recent_artifacts returned a bounded safe result\n')
+
+  const artifactResult = bridgeRequest({
+    command: 'ai_artifact_get',
+    payload: { artifact_id: `analysis-artifact-${'0'.repeat(64)}` }
+  })
+  if (artifactResult.found !== false || artifactResult.artifact !== null) {
+    throw new Error(`ai_artifact_get did not fail closed: ${JSON.stringify(artifactResult)}`)
+  }
+  process.stdout.write('PASS: ai_artifact_get returned deterministic not-found\n')
+
   const stoppedSnapshot = bridgeRequest({
     command: 'control_paper_cycle',
     payload: { action: 'stop' }

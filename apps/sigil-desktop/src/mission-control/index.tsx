@@ -1710,9 +1710,50 @@ type ProviderResponse =
   | { ok: true; result: SigilProviderSnapshot }
   | { ok: false; error: string; message: string }
 
+export type AIStatus = {
+  enabled: boolean
+  service_state: string
+  configured_model_count: number
+  available_provider_count: number
+  local_gemma_health: string
+  evidence_ledger_health: string
+  artifact_store_health: string
+  artifact_count: number
+  last_successful_analysis_at: string | null
+  latest_analysis_summary?: string | null
+  last_failure_classification: string | null
+  paper_only: true
+  broker_submission: false
+}
+
+export function AIFoundationPanel({ status }: { status: AIStatus | null }) {
+  return (
+    <section aria-labelledby="ai-foundation-title" className={cn('border-b border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="ai-foundation-title">AI Foundation</h2>
+          <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">AI analysis is advisory only.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusLabel tone={status?.enabled ? 'success' : 'muted'}>{status?.service_state ?? 'unavailable'}</StatusLabel>
+          <StatusLabel tone="danger">No execution authority</StatusLabel>
+          <StatusLabel tone="muted">Paper only</StatusLabel>
+        </div>
+      </div>
+      <dl className="mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-xs sm:grid-cols-2 lg:grid-cols-4">
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Local Gemma</dt><dd className="mt-1 font-mono">{status?.local_gemma_health ?? 'unavailable'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Registry</dt><dd className="mt-1 font-mono">{status?.configured_model_count ?? 0} models · {status?.available_provider_count ?? 0} available</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Evidence / artifacts</dt><dd className="mt-1 font-mono">{status?.evidence_ledger_health ?? 'unavailable'} · {status?.artifact_store_health ?? 'unavailable'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Latest result</dt><dd className="mt-1 break-words font-mono">{status?.last_failure_classification ?? status?.latest_analysis_summary ?? status?.last_successful_analysis_at ?? 'none'}</dd></div>
+      </dl>
+    </section>
+  )
+}
+
 interface MissionControlDesktopApi {
   getRuntimeSnapshot?: () => Promise<unknown>
   getProviderSnapshot?: () => Promise<ProviderResponse>
+  getAIStatus?: () => Promise<{ ok: true; result: AIStatus } | { ok: false; error: string; message: string }>
   getAlpacaMarketDataStatus?: () => Promise<
     { ok: true; result: AlpacaMarketDataStatus } | { ok: false; error: string; message: string }
   >
@@ -1805,6 +1846,7 @@ export function SigilOperatorView({
   const [providerSnapshot, setProviderSnapshot] = useState<SigilProviderSnapshot | null>(null)
   const [providerLoading, setProviderLoading] = useState(false)
   const [providerError, setProviderError] = useState<string | null>(null)
+  const [aiStatus, setAIStatus] = useState<AIStatus | null>(null)
   const [alpacaMarketData, setAlpacaMarketData] = useState<AlpacaMarketDataStatus | null>(null)
   const [alpacaControlAction, setAlpacaControlAction] = useState<string | null>(null)
   const [alpacaControlMessage, setAlpacaControlMessage] = useState<string | null>(null)
@@ -2047,6 +2089,34 @@ export function SigilOperatorView({
 
     return () => window.clearInterval(providerTimer)
   }, [refreshProviders])
+
+  useEffect(() => {
+    const request = desktopApi()?.getAIStatus
+
+    if (!request) {
+      return
+    }
+
+    let cancelled = false
+
+    const refresh = (): void => {
+      void request()
+        .then(response => {
+          if (!cancelled && response.ok) {
+            setAIStatus(response.result)
+          }
+        })
+        .catch(() => undefined)
+    }
+
+    refresh()
+    const timer = window.setInterval(refresh, 30_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
 
   useEffect(() => {
     controlAlpaca('refresh_status')
@@ -2511,6 +2581,7 @@ export function SigilOperatorView({
                 onRefresh={refreshProviders}
                 snapshot={providerSnapshot}
               />
+              <AIFoundationPanel status={aiStatus} />
               <AutonomousPaperPanel
                 onAction={setPendingPaperExecutionAction}
                 status={paperExecution}
