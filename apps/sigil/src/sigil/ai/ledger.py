@@ -70,6 +70,7 @@ class AIEvidenceRecordType(str, Enum):
     PROVIDER_RESULT_SUCCEEDED = "provider_result_succeeded"
     PROVIDER_RESULT_FAILED = "provider_result_failed"
     PROVIDER_HEALTH_REJECTED = "provider_health_rejected"
+    ANALYSIS_OUTPUT_REJECTED = "analysis_output_rejected"
 
 
 @dataclass(frozen=True, slots=True)

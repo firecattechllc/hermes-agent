@@ -270,6 +270,12 @@ class LocalGemmaProvider:
                     Responsibility.ANALYSIS,
                     Responsibility.EXPLANATION,
                     Responsibility.RESEARCH,
+                    Responsibility.RESEARCH_ANALYSIS,
+                    Responsibility.PROPOSAL_SUPPORT,
+                    Responsibility.EVIDENCE_SUMMARIZATION,
+                    Responsibility.RISK_ANALYSIS,
+                    Responsibility.MARKET_CONTEXT,
+                    Responsibility.ORCHESTRATION_SUPPORT,
                 }
             ),
         )

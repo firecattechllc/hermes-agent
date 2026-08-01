@@ -1,5 +1,21 @@
 """Governed, model-neutral AI provider foundation for Sigil."""
 
+from .analysis import (
+    ADVISORY_RESPONSIBILITIES,
+    AnalysisValidationError,
+    GenericAnalysisPayload,
+    GovernedAnalysisArtifact,
+    GovernedAnalysisRequest,
+    GovernedOutputSchema,
+    build_analysis_artifact,
+    validate_generic_analysis,
+)
+from .artifact_store import (
+    AnalysisArtifactConflictError,
+    AnalysisArtifactCorruptionError,
+    AnalysisArtifactStoreError,
+    DurableAnalysisArtifactStore,
+)
 from .evidence import InvocationEvidence, build_invocation_evidence
 from .gemma import (
     GemmaConfigurationError,
@@ -47,27 +63,47 @@ from .routing import (
     RoutingFailureClass,
     RoutingRequest,
 )
+from .service import (
+    AnalysisFailureClass,
+    GovernedAnalysisResponse,
+    GovernedAnalysisService,
+    GovernedAnalysisStatus,
+)
 
 __all__ = [
+    "ADVISORY_RESPONSIBILITIES",
     "AIEvidenceConflictError",
     "AIEvidenceCorruptionError",
     "AIEvidenceLedgerError",
     "AIEvidenceRecordType",
+    "AnalysisArtifactConflictError",
+    "AnalysisArtifactCorruptionError",
+    "AnalysisArtifactStoreError",
+    "AnalysisFailureClass",
+    "AnalysisValidationError",
     "CandidateEvaluation",
     "Capability",
     "CostClass",
     "DeterministicProvider",
     "DeterministicProviderMode",
     "DurableAIEvidenceLedger",
+    "DurableAnalysisArtifactStore",
     "ExecutionLocation",
     "GemmaConfigurationError",
     "GemmaHealth",
     "GemmaTransportError",
     "GemmaTransportFailure",
+    "GenericAnalysisPayload",
     "GovernedAIEvidenceRecord",
+    "GovernedAnalysisArtifact",
+    "GovernedAnalysisRequest",
+    "GovernedAnalysisResponse",
+    "GovernedAnalysisService",
+    "GovernedAnalysisStatus",
     "GovernedModelRegistry",
     "GovernedModelRouter",
     "GovernedModelWorkRequest",
+    "GovernedOutputSchema",
     "InputType",
     "InvocationEvidence",
     "LocalGemmaConfig",
@@ -87,5 +123,7 @@ __all__ = [
     "RoutingRequest",
     "TrustTier",
     "append_routing_decision",
+    "build_analysis_artifact",
     "build_invocation_evidence",
+    "validate_generic_analysis",
 ]

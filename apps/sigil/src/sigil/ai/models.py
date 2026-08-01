@@ -95,12 +95,26 @@ class Responsibility(str, Enum):
     FORECASTING = "forecasting"
     CODE_ASSISTANCE = "code_assistance"
     ORCHESTRATION_PLANNING = "orchestration_planning"
+    RESEARCH_ANALYSIS = "research_analysis"
+    PROPOSAL_SUPPORT = "proposal_support"
+    EVIDENCE_SUMMARIZATION = "evidence_summarization"
+    RISK_ANALYSIS = "risk_analysis"
+    MARKET_CONTEXT = "market_context"
+    ORCHESTRATION_SUPPORT = "orchestration_support"
     AUTHORIZE_CAPITAL = "authorize_capital"
     CHANGE_POLICY = "change_policy"
     APPROVE_PROPOSAL = "approve_proposal"
     SUBMIT_BROKER_ORDER = "submit_broker_order"
     BYPASS_OPERATOR_CONFIRMATION = "bypass_operator_confirmation"
     FABRICATE_MISSING_EVIDENCE = "fabricate_missing_evidence"
+    CAPITAL_AUTHORIZATION = "capital_authorization"
+    PROPOSAL_APPROVAL = "proposal_approval"
+    POLICY_CHANGE = "policy_change"
+    BROKER_SUBMISSION = "broker_submission"
+    ORDER_EXECUTION = "order_execution"
+    PORTFOLIO_MUTATION = "portfolio_mutation"
+    CREDENTIAL_ACCESS = "credential_access"
+    UNRESTRICTED_SHELL_EXECUTION = "unrestricted_shell_execution"
 
 
 PROHIBITED_RESPONSIBILITIES = frozenset(
@@ -111,6 +125,14 @@ PROHIBITED_RESPONSIBILITIES = frozenset(
         Responsibility.SUBMIT_BROKER_ORDER,
         Responsibility.BYPASS_OPERATOR_CONFIRMATION,
         Responsibility.FABRICATE_MISSING_EVIDENCE,
+        Responsibility.CAPITAL_AUTHORIZATION,
+        Responsibility.PROPOSAL_APPROVAL,
+        Responsibility.POLICY_CHANGE,
+        Responsibility.BROKER_SUBMISSION,
+        Responsibility.ORDER_EXECUTION,
+        Responsibility.PORTFOLIO_MUTATION,
+        Responsibility.CREDENTIAL_ACCESS,
+        Responsibility.UNRESTRICTED_SHELL_EXECUTION,
     }
 )
 
