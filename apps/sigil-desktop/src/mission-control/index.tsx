@@ -1,8 +1,6 @@
 import { PAGE_INSET_X } from '@hermes-desktop/app/layout-constants'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { formatEasternDateTime } from '../lib/date-time'
-
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
@@ -19,6 +17,7 @@ import {
   LocalHermesEngine,
   type SigilHermesEngine
 } from '../hermes-engine'
+import { formatEasternDateTime } from '../lib/date-time'
 
 import { desktopSigilOperatorAdapter } from './desktop-adapter'
 import { GovernedNewsPanel } from './governed-news-panel'
@@ -1218,12 +1217,15 @@ function MarketUniversePanel({
         if (normalizedSymbol === normalizedQuery) {
           return 0
         }
+
         if (normalizedSymbol.startsWith(normalizedQuery)) {
           return 1
         }
+
         if (normalizedName.startsWith(normalizedQuery)) {
           return 2
         }
+
         if (normalizedName.includes(normalizedQuery)) {
           return 3
         }
@@ -1448,10 +1450,12 @@ function MarketUniversePanel({
           <div className="divide-y divide-(--ui-stroke-tertiary)">
             {rankedResults.map(item => {
               const quote = quotes[item.symbol]
+
               const changePositive =
                 quote?.change_percent !== null &&
                 quote?.change_percent !== undefined &&
                 quote.change_percent > 0
+
               const changeNegative =
                 quote?.change_percent !== null &&
                 quote?.change_percent !== undefined &&
@@ -1816,17 +1820,21 @@ export function SigilOperatorView({
   const [pendingPaperExecutionAction, setPendingPaperExecutionAction] = useState<
     'deactivate' | null
   >(null)
+
   const [paperExecutionActionInFlight, setPaperExecutionActionInFlight] = useState<
     'deactivate' | null
   >(null)
+
   const paperExecutionActionInFlightRef = useRef(false)
 
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [cycleActionInFlight, setCycleActionInFlight] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [pendingAuthorizationAction, setPendingAuthorizationAction] = useState<'grant' | 'revoke' | null>(null)
+
   const [authorizationActionInFlight, setAuthorizationActionInFlight] = useState<
     'grant' | 'revoke' | null
   >(null)
+
   const [pendingPaperReset, setPendingPaperReset] = useState(false)
   const [paperResetInFlight, setPaperResetInFlight] = useState(false)
   const [controlError, setControlError] = useState<string | null>(null)
@@ -2184,18 +2192,25 @@ export function SigilOperatorView({
       className="sigil-beta-shell flex h-full min-h-0 flex-col text-[0.8125rem]"
       data-testid="sigil-operator"
     >
-      <header className="shrink-0 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-chrome)">
+      <header className="shrink-0 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-chrome)/95 backdrop-blur-xl">
         <div
           className={cn(
-            'flex min-h-14 flex-wrap items-center justify-between gap-4 py-3',
+            'flex min-h-16 flex-wrap items-center justify-between gap-5 py-3.5',
             PAGE_INSET_X
           )}
         >
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-base font-semibold tracking-[-0.01em] text-(--ui-text-primary)">
-                Sigil
-              </h1>
+          <div className="flex min-w-0 items-center gap-3">
+            <div
+              aria-hidden
+              className="grid size-10 shrink-0 place-items-center rounded-[6px] border border-primary/30 bg-primary/10 shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]"
+            >
+              <Codicon className="text-primary" name="pulse" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-base font-semibold tracking-[-0.01em] text-(--ui-text-primary)">
+                  Sigil
+                </h1>
               <span className="sigil-beta-label rounded-[4px] border border-primary/35 bg-primary/8 px-2 py-1 text-primary">
                 {RELEASE_STAGE}
               </span>
@@ -2203,12 +2218,13 @@ export function SigilOperatorView({
                 Mission Control
               </span>
             </div>
-            <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
-              Governed financial intelligence and local paper operations
-            </p>
+              <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+                Governed financial intelligence and local paper operations
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
             <span className="sigil-beta-data text-[0.6875rem] text-(--ui-text-secondary)">
               Health · {snapshot.systemHealth === 'Governance healthy' ? '99.8%' : snapshot.systemHealth}
             </span>
@@ -2433,7 +2449,7 @@ export function SigilOperatorView({
       <nav
         aria-label="Sigil sections"
         className={cn(
-          'flex shrink-0 gap-1 overflow-x-auto border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-chrome) py-2',
+          'flex shrink-0 gap-1 overflow-x-auto border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-chrome)/95 py-2.5 backdrop-blur-xl',
           PAGE_INSET_X
         )}
       >
@@ -2441,7 +2457,7 @@ export function SigilOperatorView({
           <button
             aria-current={section === item ? 'page' : undefined}
             className={cn(
-              'shrink-0 rounded-[4px] border px-3 py-2 text-[0.6875rem] font-semibold uppercase tracking-[0.06em] transition-colors',
+              'shrink-0 rounded-[4px] border px-3.5 py-2 text-[0.6875rem] font-semibold uppercase tracking-[0.06em] transition-all duration-150',
               section === item
                 ? 'border-primary/35 bg-primary/10 text-primary'
                 : 'border-transparent text-(--ui-text-tertiary) hover:border-(--ui-stroke-tertiary) hover:bg-(--ui-bg-secondary) hover:text-(--ui-text-primary)'
@@ -2456,23 +2472,31 @@ export function SigilOperatorView({
       </nav>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {section === 'overview' ? (
-          <div className="flex min-h-full flex-col xl:flex-row">
+          <div className="flex min-h-full flex-col 2xl:flex-row">
             <div className="min-w-0 flex-1">
-              <div className={cn('border-b border-(--ui-stroke-tertiary) py-6', PAGE_INSET_X)}>
-                <div className="flex flex-wrap items-end justify-between gap-4">
+              <div
+                className={cn(
+                  'border-b border-(--ui-stroke-tertiary) bg-[radial-gradient(circle_at_82%_10%,rgb(20_184_166/0.08),transparent_22rem)] py-7',
+                  PAGE_INSET_X
+                )}
+              >
+                <div className="flex flex-wrap items-end justify-between gap-6">
                   <div>
                     <p className="sigil-beta-label text-primary">Operational overview</p>
-                    <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-(--ui-text-primary)">
+                    <h2 className="mt-2 text-[1.75rem] font-semibold leading-tight tracking-[-0.035em] text-(--ui-text-primary)">
                       Mission Control
                     </h2>
-                    <p className="mt-2 max-w-3xl text-xs leading-5 text-(--ui-text-tertiary)">
+                    <p className="mt-2 max-w-3xl text-xs leading-5 text-(--ui-text-secondary)">
                       Verified runtime state, provider health, governed paper controls,
                       pending decisions, and immutable evidence.
                     </p>
                   </div>
 
-                  <div className="sigil-beta-data rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-3 py-2 text-[0.6875rem] text-(--ui-text-secondary)">
-                    Last verified · {formatEasternDateTime(snapshot.lastUpdated)}
+                  <div className="grid min-w-[15rem] gap-1 rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)/90 px-4 py-3 shadow-[0_12px_32px_rgb(0_0_0/0.12)]">
+                    <span className="sigil-beta-label text-(--ui-text-tertiary)">Runtime snapshot</span>
+                    <span className="sigil-beta-data text-[0.6875rem] text-(--ui-text-secondary)">
+                      Last verified · {formatEasternDateTime(snapshot.lastUpdated)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -2511,7 +2535,7 @@ export function SigilOperatorView({
                 </div>
                 <Pipeline compact stages={snapshot.stages} />
                 <div className="mt-5 grid gap-4 2xl:grid-cols-[1.35fr_1fr]">
-                  <section className="sigil-beta-panel overflow-hidden" aria-labelledby="pending-proposals-title">
+                  <section aria-labelledby="pending-proposals-title" className="sigil-beta-panel overflow-hidden">
                     <div className="flex items-center justify-between gap-3 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-3">
                       <div>
                         <p className="sigil-beta-label text-primary">Decision queue</p>
@@ -2561,7 +2585,7 @@ export function SigilOperatorView({
                     </div>
                   </section>
 
-                  <section className="sigil-beta-panel overflow-hidden" aria-labelledby="launch-control-title">
+                  <section aria-labelledby="launch-control-title" className="sigil-beta-panel overflow-hidden">
                     <div className="border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-3">
                       <p className="sigil-beta-label text-primary">Governed authority</p>
                       <h2
