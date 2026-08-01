@@ -369,6 +369,134 @@ describe('standalone Sigil Mission Control', () => {
     }
   })
 
+  it('fails provider and catalog refreshes closed without exposing credentials', async () => {
+    const original = window.sigilDesktop
+
+    window.sigilDesktop = {
+      productName: 'Sigil',
+      persistenceNamespace: 'test',
+      brokerSubmissionAvailable: false,
+      getBackendStatus: async () => ({
+        ok: false,
+        error: 'unused',
+        message: 'unused'
+      }),
+      explainProposal: async () => ({
+        ok: false,
+        error: 'unused',
+        message: 'unused'
+      }),
+      getProviderSnapshot: async () => ({
+        ok: false,
+        error: 'provider_unavailable',
+        message: 'Provider snapshot unavailable'
+      }),
+      refreshAssetCatalog: async () => ({
+        ok: false,
+        error: 'catalog_refresh_failed',
+        message: 'Asset catalog refresh failed safely'
+      })
+    }
+
+    try {
+      render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
+      await screen.findByTestId('sigil-operator')
+
+      expect(
+        await screen.findByText(
+          'Provider refresh degraded safely: Provider snapshot unavailable'
+        )
+      ).toBeTruthy()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh providers' }))
+
+      expect(
+        await screen.findByText(
+          'Provider refresh degraded safely: Provider snapshot unavailable'
+        )
+      ).toBeTruthy()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh catalog' }))
+
+      expect(
+        await screen.findByText('Asset catalog refresh failed safely')
+      ).toBeTruthy()
+
+      expect(screen.getByText('Catalog unavailable')).toBeTruthy()
+      expect(screen.queryByText(/api[_ -]?key|secret|credential value/i)).toBeNull()
+      expect(screen.queryByText(/submit order/i)).toBeNull()
+      expect(window.sigilDesktop.brokerSubmissionAvailable).toBe(false)
+    } finally {
+      window.sigilDesktop = original
+    }
+  })
+
+  it('confirmation-gates simulated proposal approval and records local audit evidence', async () => {
+    const simulator = new MockSigilOperatorAdapter('disconnected')
+    const adapter = {
+      readSnapshot: () => simulator.readSnapshot(),
+      applySimulatedAction: (action: Parameters<typeof simulator.applySimulatedAction>[0]) =>
+        simulator.applySimulatedAction(action)
+    }
+
+    render(<SigilOperatorView adapter={adapter} />)
+    await screen.findByTestId('sigil-operator')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Proposals' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Enable simulated operator actions' })
+    )
+
+    const approve = screen.getAllByRole('button', { name: 'Approve' })[0]
+    fireEvent.click(approve)
+
+    expect(screen.getByText('Confirm simulated approval')).toBeTruthy()
+    expect(
+      screen.getByText(/does not authorize or submit an order/i)
+    ).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm approval' }))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('approved').length).toBeGreaterThan(0)
+    })
+
+    expect(screen.queryByText(/submit order/i)).toBeNull()
+  })
+
+  it('confirmation-gates simulated proposal rejection without broker submission', async () => {
+    const simulator = new MockSigilOperatorAdapter('disconnected')
+    const adapter = {
+      readSnapshot: () => simulator.readSnapshot(),
+      applySimulatedAction: (action: Parameters<typeof simulator.applySimulatedAction>[0]) =>
+        simulator.applySimulatedAction(action)
+    }
+
+    render(<SigilOperatorView adapter={adapter} />)
+    await screen.findByTestId('sigil-operator')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Proposals' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Enable simulated operator actions' })
+    )
+
+    const reject = screen.getAllByRole('button', { name: 'Reject' })[0]
+    fireEvent.click(reject)
+
+    expect(screen.getByText('Confirm simulated rejection')).toBeTruthy()
+    expect(
+      screen.getByText(/reject PRP-20260725-0042 in the local simulator/i)
+    ).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm rejection' }))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('rejected').length).toBeGreaterThan(0)
+    })
+
+    expect(screen.queryByText(/submit order/i)).toBeNull()
+  })
+
   it('confirmation-gates local paper automation controls', async () => {
     const adapter = new MockSigilOperatorAdapter()
 
@@ -526,16 +654,67 @@ describe('standalone Sigil Mission Control', () => {
     expect(screen.getAllByText('SIMULATED').length).toBeGreaterThan(0)
   })
 
-  it('confirmation-gates the local-only paper reset', async () => {
-    render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
+  it('confirmation-gates monthly paper authorization revocation and pauses automation', async () => {
+    const adapter = new MockSigilOperatorAdapter()
+
+    render(<SigilOperatorView adapter={adapter} />)
     await screen.findByTestId('sigil-operator')
+
+    expect(screen.getByText(/Paper month 2026-07 · active/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+
+    expect(screen.getByText('Confirm authorization revocation')).toBeTruthy()
+    expect(
+      screen.getByText(/running automation will pause/i)
+    ).toBeTruthy()
+    expect(
+      screen.getByText(/simulated fills will be denied/i)
+    ).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke authorization' }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Paper month 2026-07 · revoked/)).toBeTruthy()
+    })
+
+    expect(screen.getByText(/automation paused/i)).toBeTruthy()
+    expect(screen.queryByText(/submit order/i)).toBeNull()
+  })
+
+  it('confirmation-gates the local-only paper reset', async () => {
+    const adapter = new MockSigilOperatorAdapter()
+
+    render(<SigilOperatorView adapter={adapter} />)
+    await screen.findByTestId('sigil-operator')
+
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     fireEvent.click(screen.getByRole('button', { name: 'Reset local paper portfolio' }))
 
     expect(screen.getByText('Confirm local paper portfolio reset')).toBeTruthy()
-    expect(screen.getByText(/settings, local provider credentials, source files/i)).toBeTruthy()
+    expect(
+      screen.getByText(/settings, local provider credentials, source files/i)
+    ).toBeTruthy()
+    expect(
+      screen.getByText(/all broker restrictions remain unchanged/i)
+    ).toBeTruthy()
+
     fireEvent.click(screen.getByRole('button', { name: 'Reset empty paper ledger' }))
 
     expect(await screen.findByText('No paper holdings')).toBeTruthy()
+
+    const resetSnapshot = await adapter.readSnapshot()
+
+    expect(resetSnapshot.positions).toHaveLength(0)
+    expect(resetSnapshot.proposals).toHaveLength(0)
+    expect(resetSnapshot.receipts).toHaveLength(0)
+    expect(resetSnapshot.pendingApprovals).toBe(0)
+    expect(resetSnapshot.automationState).toBe('stopped')
+    expect(resetSnapshot.automationCycleCount).toBe(0)
+    expect(resetSnapshot.paperAuthorization?.status).toBe('active')
+    expect(resetSnapshot.environment).toBe('paper')
+    expect(resetSnapshot.simulation).toBe(true)
+    expect(resetSnapshot.runtimeVisibility?.brokerSubmissionAvailable).toBe(false)
+    expect(screen.queryByText(/submit order/i)).toBeNull()
   })
 })
