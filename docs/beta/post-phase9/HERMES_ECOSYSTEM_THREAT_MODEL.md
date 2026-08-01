@@ -1,13 +1,12 @@
 # Hermes Ecosystem Threat Model
 
-## Provisional status and certification risk
+## Stage 1 status and certification boundary
 
-Phase 9 implementation is locally validated, but live-node certification remains
-unproven in committed evidence. This provisional Stage 0 threat model authorizes
-no implementation, installation, or runtime activation. Beginning a post–Phase 9
-runtime stage before authenticated connectivity, a real read-only task,
-cancellation/reconciliation, bounded failover, and durable evidence round-trip
-are recorded is itself a release-blocking threat.
+Phase 9 live-node certification is complete and merged. Stage 1 is authorized
+only for registry metadata, validation, lifecycle evidence, and read-only
+inspection. It authorizes no external implementation, installation, worker,
+dispatch, or runtime activation. Stage 2 and all later stages remain
+unimplemented and disabled.
 
 ## Assets
 
@@ -29,7 +28,7 @@ release/rollback artifacts.
 
 | Threat | Control |
 |---|---|
-| Local tests are mistaken for live-node certification | Keep Stage 0 provisional and prohibit runtime stages until all Phase 9 live gates have committed evidence. |
+| Registry tests are mistaken for integration certification | Keep every integration disabled; require separate stage-specific live evidence before any future activation decision. |
 | External membership grants execution | Require an independent Hermes admission decision for every job. |
 | Adapter becomes a second orchestrator | Single immutable Hermes job ID; reject duplicate harness ownership. |
 | Unpinned or replaced dependency | Reject production registry entries without exact commit/release and dependency evidence. |

@@ -1842,8 +1842,70 @@ export type AIStatus = {
     execution_authorized: false
     broker_submission: false
   }
+  integration_registry?: {
+    enabled: boolean
+    state: 'disabled' | 'empty' | 'healthy' | 'degraded' | 'invalid'
+    store_health: string
+    reason: string | null
+    schema_version: number
+    registry_revision: string
+    entry_count: number
+    counts_by_lifecycle: Record<string, number>
+    counts_by_category: Record<string, number>
+    pinned_count: number
+    unpinned_count: number
+    valid_count: number
+    invalid_count: number
+    certified_count: number
+    quarantined_count: number
+    deprecated_count: number
+    latest_lifecycle_evidence_identity: string | null
+    paper_only: true
+    broker_submission: false
+    activation_authorized: false
+    installation_authorized: false
+    approval_authority: false
+  }
   paper_only: true
   broker_submission: false
+}
+
+export function IntegrationRegistryPanel({ status }: { status: AIStatus['integration_registry'] | null | undefined }) {
+  const lifecycle = status
+    ? Object.entries(status.counts_by_lifecycle)
+      .filter(([, count]) => count > 0)
+      .map(([state, count]) => `${state} ${count}`)
+      .join(' · ') || 'No entries'
+    : 'Unavailable'
+
+  const reason = status?.reason ?? (status?.entry_count === 0 ? 'No tracked integration entries.' : null)
+  const tone: SigilTone = status?.state === 'invalid' ? 'danger' : status?.state === 'healthy' ? 'success' : 'muted'
+
+  return (
+    <section aria-labelledby="integration-registry-title" className={cn('border-b border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)} data-testid="integration-registry-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="integration-registry-title">Integration Registry</h2>
+          <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">Pinned governance metadata · read-only inspection</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusLabel tone={tone}>{status?.state ?? 'unavailable'}</StatusLabel>
+          <StatusLabel tone="muted">Paper only</StatusLabel>
+          <StatusLabel tone="danger">Broker disabled</StatusLabel>
+          <StatusLabel tone="danger">No activation authority</StatusLabel>
+        </div>
+      </div>
+      <dl className="mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-xs sm:grid-cols-2 lg:grid-cols-4">
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Registry revision</dt><dd className="mt-1 break-all font-mono">{status?.registry_revision ?? 'unavailable'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Entries / validation</dt><dd className="mt-1 font-mono">{status?.entry_count ?? 0} entries · {status?.valid_count ?? 0} valid · {status?.invalid_count ?? 0} invalid</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Pinning</dt><dd className="mt-1 font-mono">{status?.pinned_count ?? 0} pinned · {status?.unpinned_count ?? 0} unpinned</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Certified / quarantine</dt><dd className="mt-1 font-mono">{status?.certified_count ?? 0} certified · {status?.quarantined_count ?? 0} quarantined · {status?.deprecated_count ?? 0} deprecated</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3 sm:col-span-2"><dt className="text-(--ui-text-tertiary)">Lifecycle</dt><dd className="mt-1 break-words font-mono">{lifecycle}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3 sm:col-span-2"><dt className="text-(--ui-text-tertiary)">Authority</dt><dd className="mt-1 break-words font-mono">installation denied · activation denied · approval denied · paper only · broker disabled</dd></div>
+        {reason ? <div className="min-w-0 bg-(--ui-bg-secondary) p-3 sm:col-span-2 lg:col-span-4"><dt className="text-(--ui-text-tertiary)">Registry state reason</dt><dd className="mt-1 break-words font-mono">{reason}</dd></div> : null}
+      </dl>
+    </section>
+  )
 }
 
 export function AIFoundationPanel({ status }: { status: AIStatus | null }) {
@@ -2721,6 +2783,7 @@ export function SigilOperatorView({
                 snapshot={providerSnapshot}
               />
               <AIFoundationPanel status={aiStatus} />
+              <IntegrationRegistryPanel status={aiStatus?.integration_registry} />
               <AutonomousPaperPanel
                 onAction={setPendingPaperExecutionAction}
                 status={paperExecution}

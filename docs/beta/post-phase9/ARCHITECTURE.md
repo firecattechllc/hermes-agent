@@ -1,12 +1,12 @@
 # Architecture Summary
 
-## Provisional status
+## Stage 1 status
 
-Phase 9 implementation is locally validated, but its live-node certification is
-not proven by committed evidence. This is provisional Stage 0 architecture
-planning only. It grants no implementation or installation authority, and no
-post–Phase 9 runtime integration may activate before the live-node gates are
-completed and recorded.
+Phase 9 live-node certification is complete and merged. Stage 1 is authorized
+only for a descriptive, disabled-by-default integration registry with read-only
+Mission Control projection. It grants no implementation authority to external
+integrations and no installation or activation authority. The Stage 2 worker/job
+contract and every later stage remain unimplemented and disabled.
 
 Hermes is the control plane. WebUI and Sigil Mission Control are operator
 surfaces; Buzz is collaboration; Paperclip is organization and assignments;

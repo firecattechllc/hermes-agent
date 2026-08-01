@@ -101,6 +101,23 @@ try {
   }
   process.stdout.write('PASS: ai_status preserved advisory-only authority\n')
 
+  const integrationRegistry = aiStatus.integration_registry
+  if (
+    integrationRegistry?.enabled !== false ||
+    integrationRegistry?.state !== 'disabled' ||
+    integrationRegistry?.store_health !== 'empty' ||
+    integrationRegistry?.entry_count !== 0 ||
+    integrationRegistry?.unpinned_count !== 0 ||
+    integrationRegistry?.paper_only !== true ||
+    integrationRegistry?.broker_submission !== false ||
+    integrationRegistry?.activation_authorized !== false ||
+    integrationRegistry?.installation_authorized !== false ||
+    integrationRegistry?.approval_authority !== false
+  ) {
+    throw new Error(`Integration registry did not start empty and denied: ${JSON.stringify(integrationRegistry)}`)
+  }
+  process.stdout.write('PASS: packaged integration registry starts disabled, empty, and non-authoritative\n')
+
   const disabledOrchestration = aiStatus.orchestration
   if (
     disabledOrchestration?.enabled !== false ||

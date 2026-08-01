@@ -1,10 +1,13 @@
 # Rollback and Recovery
 
-## Provisional status
+## Stage 1 status
 
-Phase 9 is locally validated but lacks committed live-node certification. This
-Stage 0 recovery design is provisional planning only and does not authorize an
-installation, removal, credential action, service operation, or activation.
+Phase 9 live-node certification is complete and merged. Stage 1 is authorized
+only for atomic registry replacement, fail-closed loading, hash-linked lifecycle
+evidence, and read-only inspection. Registry rollback restores a prior reviewed
+registry revision; it does not authorize installation, removal, credential
+action, service operation, or activation. Later stages remain unimplemented and
+disabled.
 
 Every stage records its parent commit, pinned external versions, configuration
 before/after digest, installed dependencies, data migrations, evidence locations,

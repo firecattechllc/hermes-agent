@@ -8,6 +8,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from sigil.integration_registry import integration_registry_status
+
 from .artifact_store import AnalysisArtifactStoreError, DurableAnalysisArtifactStore
 from .finbert import FinBERTConfig, GovernedSentimentArtifact, LocalFinBERTProvider
 from .fleet import DurableFleetStore, FleetStoreError
@@ -563,6 +565,7 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
             "broker_submission": False,
         },
         "fleet": _fleet_status(fleet_records, fleet_health, fleet_tail, fleet_enabled),
+        "integration_registry": integration_registry_status(source),
         "paper_only": True,
         "execution_authorized": False,
         "broker_submission": False,

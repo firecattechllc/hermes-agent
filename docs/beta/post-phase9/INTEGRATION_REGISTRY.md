@@ -1,10 +1,13 @@
 # Integration Registry Contract
 
-## Provisional status
+## Stage 1 status
 
-Phase 9 is locally validated but lacks committed live-node certification. This
-Stage 0 registry contract is provisional planning only; no entry exists at
-runtime, and no listing authorizes installation or activation.
+Phase 9 live-node certification is complete and merged. Stage 1 is authorized
+for the deterministic governed registry schema, lifecycle validation, durable
+revision identity, append-only lifecycle evidence, and read-only inspection.
+The runtime registry starts empty, remains disabled by default, and no listing or
+lifecycle state authorizes installation or activation. Stage 2 and all later
+stages remain unimplemented and disabled.
 
 Each future entry records project name, repository URL, pinned commit/release,
 category, maturity, license, maintainer/activity evidence, credentials, network
