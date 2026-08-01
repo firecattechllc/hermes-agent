@@ -364,18 +364,13 @@ describe('standalone Sigil Mission Control', () => {
       const governedSearch = screen.getByRole('textbox', {
         name: 'Search governed instruments'
       })
-      const searchButton = screen.getByRole('button', { name: 'Search' })
-
       fireEvent.change(governedSearch, { target: { value: 'AAPL' } })
 
-      expect(marketUniverseSearches).toHaveLength(1)
-
-      fireEvent.click(searchButton)
-
       await waitFor(() => {
-        expect(marketUniverseSearches).toHaveLength(2)
+        expect(marketUniverseSearches.length).toBeGreaterThanOrEqual(2)
       })
-      expect(marketUniverseSearches[1]).toMatchObject({
+
+      expect(marketUniverseSearches.at(-1)).toMatchObject({
         query: 'AAPL',
         universe: 'master',
         limit: 50,
@@ -388,8 +383,6 @@ describe('standalone Sigil Mission Control', () => {
       fireEvent.change(governedSearch, {
         target: { value: 'ZZZZINVALID' }
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Search' }))
-
       expect(await screen.findByText('No matching instruments')).toBeTruthy()
       expect(
         screen.getByText(

@@ -1114,6 +1114,20 @@ function MarketUniversePanel({
     onSearch(nextQuery, nextUniverse)
   }
 
+  useEffect(() => {
+    const normalizedQuery = query.trim()
+
+    if (!normalizedQuery || !status?.target_capacity_validated) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      onSearch(normalizedQuery, universe)
+    }, 300)
+
+    return () => window.clearTimeout(timer)
+  }, [onSearch, query, status?.target_capacity_validated, universe])
+
   const rankedResults = useMemo(() => {
     const rows = results?.results ?? []
     const normalizedQuery = results?.query.trim().toUpperCase() ?? ''
@@ -1287,22 +1301,23 @@ function MarketUniversePanel({
           </p>
         </>
       ) : null}
-      <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-        <SearchField
-          aria-label="Search governed instruments"
-          containerClassName="min-w-0"
-          onChange={setQuery}
-          placeholder="Search ticker or company name"
-          value={query}
-        />
-        <Button
-          disabled={loading || !query.trim() || !status?.target_capacity_validated}
-          onClick={() => applySearch(query)}
-          size="sm"
+      <div className="mt-4 grid gap-2 lg:grid-cols-[minmax(0,1fr)_12rem]">
+        <div
+          onKeyDown={event => {
+            if (event.key === 'Enter' && query.trim()) {
+              event.preventDefault()
+              applySearch(query)
+            }
+          }}
         >
-          <Codicon name="search" />
-          {loading ? 'Searching…' : 'Search'}
-        </Button>
+          <SearchField
+            aria-label="Search governed instruments"
+            containerClassName="min-w-0"
+            onChange={setQuery}
+            placeholder="Search ticker or company name"
+            value={query}
+          />
+        </div>
         <select
           aria-label="Filter governed universe"
           className="border border-(--ui-stroke-secondary) bg-(--ui-bg-secondary) px-2 text-xs"
@@ -1320,7 +1335,12 @@ function MarketUniversePanel({
         </select>
       </div>
       {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
-      {loading ? <div className="mt-3"><Loader label="Searching governed universe" /></div> : null}
+      {loading ? (
+        <div className="mt-3 flex items-center gap-2 text-xs text-(--ui-text-tertiary)">
+          <Loader label="Searching governed universe" />
+          Searching catalog…
+        </div>
+      ) : null}
       {!status?.target_capacity_validated ? (
         <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
           Catalog unavailable — refresh the asset catalog before searching.
@@ -1415,9 +1435,26 @@ function MarketUniversePanel({
                   </div>
 
                   <div>
-                    <p className="text-xs font-medium">{quote?.source ?? 'Price unavailable'}</p>
+                    <div className="flex items-center gap-2">
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'size-1.5 rounded-full',
+                          quote?.freshness === 'live' && 'bg-emerald-500',
+                          quote?.freshness === 'delayed' && 'bg-amber-500',
+                          quote?.freshness === 'stale' && 'bg-amber-500',
+                          (!quote || quote.freshness === 'unavailable' || quote.freshness === 'unknown') &&
+                            'bg-(--ui-text-quaternary)'
+                        )}
+                      />
+                      <p className="text-xs font-medium">
+                        {quote?.freshness === 'stale'
+                          ? 'After hours / stale'
+                          : quote?.source ?? 'Price unavailable'}
+                      </p>
+                    </div>
                     <p className="mt-1 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
-                      {quoteAge(quote)}
+                      {quote?.source ?? 'No quote source'} · {quoteAge(quote)}
                     </p>
                   </div>
                 </div>
