@@ -57,6 +57,7 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "governed_alpaca_news_collect",
         "market_universe_status",
         "market_universe_search",
+        "market_universe_quotes",
         "alpaca_market_data_status",
         "control_alpaca_market_data",
         "asset_catalog_status",
