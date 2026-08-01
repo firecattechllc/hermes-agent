@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sigil Mission Control - Reconciliation</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#304f00",
+                        "outline": "#86948a",
+                        "on-secondary": "#003731",
+                        "background": "#121415",
+                        "surface-container-low": "#1a1c1d",
+                        "error": "#ffb4ab",
+                        "surface-container": "#1e2021",
+                        "secondary-container": "#04b4a2",
+                        "on-surface-variant": "#bbcabf",
+                        "surface-bright": "#38393a",
+                        "tertiary": "#91db2a",
+                        "primary": "#4edea3",
+                        "on-primary-fixed": "#002113",
+                        "on-tertiary": "#1f3700",
+                        "error-container": "#93000a",
+                        "on-secondary-fixed": "#00201c",
+                        "outline-variant": "#3c4a42",
+                        "tertiary-fixed": "#acf847",
+                        "surface-container-highest": "#333536",
+                        "on-error-container": "#ffdad6",
+                        "on-primary-container": "#00422b",
+                        "primary-container": "#10b981",
+                        "on-secondary-container": "#003f38",
+                        "on-primary": "#003824",
+                        "surface-variant": "#333536",
+                        "tertiary-container": "#72b400",
+                        "surface-dim": "#121415",
+                        "primary-fixed": "#6ffbbe",
+                        "on-background": "#e2e2e3",
+                        "on-tertiary-fixed": "#102000",
+                        "inverse-surface": "#e2e2e3",
+                        "surface-tint": "#4edea3",
+                        "inverse-primary": "#006c49",
+                        "inverse-on-surface": "#2f3132",
+                        "on-primary-fixed-variant": "#005236",
+                        "on-secondary-fixed-variant": "#005048",
+                        "on-error": "#690005",
+                        "secondary-fixed": "#71f8e4",
+                        "surface": "#121415",
+                        "on-tertiary-container": "#254000",
+                        "secondary": "#4fdbc8",
+                        "surface-container-lowest": "#0c0e0f",
+                        "primary-fixed-dim": "#4edea3",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "surface-container-high": "#282a2b",
+                        "on-surface": "#e2e2e3",
+                        "tertiary-fixed-dim": "#91db2a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "xs": "4px",
+                        "lg": "24px",
+                        "xl": "32px",
+                        "md": "16px",
+                        "margin-desktop": "24px",
+                        "margin-mobile": "16px",
+                        "sm": "8px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-sm": ["Inter"],
+                        "data-md": ["JetBrains Mono"],
+                        "data-lg": ["JetBrains Mono"],
+                        "body-sm": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "data-sm": ["JetBrains Mono"],
+                        "label-caps": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "data-md": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "data-lg": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "data-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.06em", "fontWeight": "700" }]
+                    }
+                },
+            },
+        }
+    </script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md min-h-screen flex antialiased overflow-hidden">
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-full flex flex-col py-md px-sm border-r border-outline-variant dark:border-outline-variant bg-surface-container dark:bg-surface-container docked left-0 h-full w-64 z-40 hidden md:flex">
+<div class="mb-lg px-sm">
+<h1 class="text-headline-sm font-headline-sm font-bold text-primary dark:text-primary">Sigil v3.5</h1>
+<p class="text-body-sm text-on-surface-variant font-body-sm">Environment: Paper</p>
+</div>
+<button class="bg-primary-container text-on-primary-container font-data-md font-medium rounded h-10 mb-lg mx-sm hover:bg-primary-fixed transition-colors">
+            New Mission
+        </button>
+<div class="flex-1 overflow-y-auto">
+<ul class="space-y-1 px-sm">
+<li><a class="flex items-center gap-3 px-sm py-2 rounded text-body-md font-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest transition-colors" href="#"><span class="material-symbols-outlined" data-icon="dashboard">dashboard</span> Overview</a></li>
+<li><a class="flex items-center gap-3 px-sm py-2 rounded text-body-md font-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest transition-colors" href="#"><span class="material-symbols-outlined" data-icon="account_balance_wallet">account_balance_wallet</span> Portfolio</a></li>
+<li><a class="flex items-center gap-3 px-sm py-2 rounded text-body-md font-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest transition-colors" href="#"><span class="material-symbols-outlined" data-icon="description">description</span> Proposals</a></li>
+<li><a class="flex items-center gap-3 px-sm py-2 rounded text-body-md font-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest transition-colors" href="#"><span class="material-symbols-outlined" data-icon="rocket_launch">rocket_launch</span> Launch</a></li>
+<li><a class="flex items-center gap-3 px-sm py-2 rounded text-body-md font-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest transition-colors" href="#"><span class="material-symbols-outlined" data-icon="terminal">terminal</span> Executions</a></li>
+<li><a class="flex items-center gap-3 px-sm py-2 bg-secondary-container dark:bg-secondary-container text-on-secondary-container dark:text-on-secondary-container rounded-lg text-body-md font-body-md translate-x-1 transition-transform duration-200" href="#"><span class="material-symbols-outlined" data-icon="account_tree">account_tree</span> Reconciliation</a></li>
+<li><a class="flex items-center gap-3 px-sm py-2 rounded text-body-md font-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest transition-colors" href="#"><span class="material-symbols-outlined" data-icon="policy">policy</span> Audit</a></li>
+<li><a class="flex items-center gap-3 px-sm py-2 rounded text-body-md font-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest transition-colors" href="#"><span class="material-symbols-outlined" data-icon="newspaper">newspaper</span> News</a></li>
+<li><a class="flex items-center gap-3 px-sm py-2 rounded text-body-md font-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest transition-colors" href="#"><span class="material-symbols-outlined" data-icon="settings">settings</span> Settings</a></li>
+</ul>
+</div>
+<div class="mt-auto pt-lg border-t border-outline-variant px-sm">
+<ul class="space-y-1">
+<li><a class="flex items-center gap-3 px-sm py-2 rounded text-body-md font-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest transition-colors" href="#"><span class="material-symbols-outlined" data-icon="sensors">sensors</span> System Health</a></li>
+<li><a class="flex items-center gap-3 px-sm py-2 rounded text-body-md font-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest transition-colors" href="#"><span class="material-symbols-outlined" data-icon="contact_support">contact_support</span> Support</a></li>
+</ul>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-64 flex flex-col h-screen overflow-hidden bg-background">
+<!-- TopNavBar (Mobile only context, simplified for this specific view based on SideNav precedence) -->
+<header class="flex justify-between items-center w-full px-lg h-12 z-50 bg-background border-b border-outline-variant dark:border-outline-variant md:hidden">
+<div class="text-headline-md font-headline-md font-bold text-primary dark:text-primary tracking-tight">Sigil</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-on-surface">menu</span>
+</div>
+</header>
+<!-- Page Header -->
+<div class="px-lg py-md border-b border-outline-variant bg-surface flex justify-between items-end flex-shrink-0">
+<div>
+<h2 class="text-headline-lg font-headline-lg text-on-surface">Reconciliation</h2>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-error text-[18px]">warning</span>
+<span class="text-body-sm font-body-sm text-error">Critical Discrepancy Detected</span>
+<span class="text-on-surface-variant text-body-sm font-body-sm mx-2">|</span>
+<span class="text-body-sm font-body-sm text-on-surface-variant">Last sync: 2s ago</span>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 border border-outline-variant rounded text-on-surface text-data-md font-data-md hover:bg-surface-container-highest transition-colors">Force Sync</button>
+<button class="px-4 py-2 bg-primary-container text-on-primary-container rounded text-data-md font-data-md hover:bg-primary-fixed transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">gavel</span> Resolve Holds
+                </button>
+</div>
+</div>
+<!-- Scrollable Content -->
+<div class="flex-1 overflow-y-auto p-lg grid grid-cols-12 gap-lg content-start">
+<!-- Context Image Panel -->
+<div class="col-span-12 xl:col-span-8 bg-surface border border-outline-variant rounded-lg overflow-hidden flex flex-col">
+<div class="p-sm border-b border-outline-variant bg-surface-container-low flex justify-between items-center">
+<span class="text-label-caps font-label-caps text-on-surface-variant">System Topology Snapshot</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[16px]">fullscreen</span>
+</div>
+<div class="w-full aspect-[1.60] bg-surface-container-lowest relative">
+<img alt="Structural context map for reconciliation" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDA4Idy3kaDGjiDVwh3xBd6TylJxKjXvItVJSoFLCTFdeoSAsjQWdi5AegqRP2BkeUcrpcFLRuLcJcXNV4fcMOYKp4vknUeAXOQXqS_XG9x91xzeV-qMvCqtsflJrKN10epYk7-Xm4KdDVjiNshDYiZvtctg72GwJszPiVeT60w0HJXTKUklr3EudGSCmI99XOA9oV0ork8z1c6AgRpyU8mTkqOhhf2-SLFcOB4PSVQ4h-a5bma_MSHTob3p_R6kOh9tIA"/>
+<!-- Overlay indicators could go here -->
+<div class="absolute top-4 right-4 flex gap-2">
+<div class="bg-surface/80 backdrop-blur border border-outline-variant px-3 py-1 rounded text-data-sm font-data-sm text-error flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-error animate-pulse"></div> Node 4 Mismatch
+                         </div>
+</div>
+</div>
+</div>
+<!-- Status & Blocking Conditions Panel -->
+<div class="col-span-12 xl:col-span-4 flex flex-col gap-lg">
+<!-- Status Card -->
+<div class="bg-surface border border-outline-variant rounded-lg p-md flex flex-col gap-4">
+<div class="flex justify-between items-center">
+<span class="text-label-caps font-label-caps text-on-surface-variant">Global Status</span>
+<div class="px-2 py-1 bg-error/10 text-error border border-error/20 rounded-sm text-label-caps font-label-caps flex items-center gap-1">
+                            BLOCKED
+                        </div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<div class="text-body-sm font-body-sm text-on-surface-variant mb-1">Expected TVL</div>
+<div class="text-headline-sm font-headline-sm text-on-surface font-data-md">$142,450.00</div>
+</div>
+<div>
+<div class="text-body-sm font-body-sm text-on-surface-variant mb-1">Observed TVL</div>
+<div class="text-headline-sm font-headline-sm text-error font-data-md">$142,150.00</div>
+</div>
+</div>
+<div class="h-px w-full bg-outline-variant"></div>
+<div class="flex justify-between items-center text-body-sm font-body-sm">
+<span class="text-on-surface-variant">Delta</span>
+<span class="text-error font-data-md">-$300.00 (0.21%)</span>
+</div>
+</div>
+<!-- Blocking Conditions -->
+<div class="bg-surface border border-outline-variant rounded-lg flex flex-col flex-1">
+<div class="p-sm border-b border-outline-variant bg-surface-container-low">
+<span class="text-label-caps font-label-caps text-error flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">block</span> Blocking Conditions
+                        </span>
+</div>
+<div class="p-0 overflow-y-auto max-h-[300px]">
+<div class="p-md border-b border-outline-variant hover:bg-surface-container-highest transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-2">
+<span class="text-data-md font-data-md text-on-surface">Missing Vault Receipt</span>
+<span class="text-label-caps font-label-caps text-error bg-error/10 px-2 py-1 rounded-sm">CRITICAL</span>
+</div>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-3">TxHash 0x4a...f92 observed on-chain but no corresponding internal receipt generated for Vault Alpha.</p>
+<button class="text-primary text-body-sm font-body-sm hover:underline flex items-center gap-1">
+                                Investigate Trace <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+<div class="p-md border-b border-outline-variant hover:bg-surface-container-highest transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-2">
+<span class="text-data-md font-data-md text-on-surface">Oracle Price Stale</span>
+<span class="text-label-caps font-label-caps text-tertiary bg-tertiary/10 px-2 py-1 rounded-sm">WARNING</span>
+</div>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Price feed for asset XYZ is older than 5 minutes. Valuation uncertain.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Discrepancy Data Table -->
+<div class="col-span-12 bg-surface border border-outline-variant rounded-lg overflow-hidden flex flex-col">
+<div class="p-sm border-b border-outline-variant bg-surface-container-low flex justify-between items-center">
+<span class="text-label-caps font-label-caps text-on-surface-variant">Asset Level Discrepancies</span>
+<div class="flex gap-2">
+<button class="text-on-surface-variant hover:text-on-surface p-1"><span class="material-symbols-outlined text-[18px]">filter_list</span></button>
+<button class="text-on-surface-variant hover:text-on-surface p-1"><span class="material-symbols-outlined text-[18px]">download</span></button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-outline-variant bg-surface">
+<th class="p-sm text-label-caps font-label-caps text-on-surface-variant font-medium">Asset</th>
+<th class="p-sm text-label-caps font-label-caps text-on-surface-variant font-medium">Location</th>
+<th class="p-sm text-label-caps font-label-caps text-on-surface-variant font-medium text-right">Expected</th>
+<th class="p-sm text-label-caps font-label-caps text-on-surface-variant font-medium text-right">Observed</th>
+<th class="p-sm text-label-caps font-label-caps text-on-surface-variant font-medium text-right">Diff</th>
+<th class="p-sm text-label-caps font-label-caps text-on-surface-variant font-medium text-center">Action</th>
+</tr>
+</thead>
+<tbody class="text-data-sm font-data-sm">
+<tr class="border-b border-outline-variant hover:bg-surface-container-highest transition-colors group">
+<td class="p-sm text-on-surface flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-bright flex items-center justify-center text-xs">E</div> ETH
+                                </td>
+<td class="p-sm text-on-surface-variant">Vault Alpha</td>
+<td class="p-sm text-right text-on-surface">45.0000</td>
+<td class="p-sm text-right text-error">44.8000</td>
+<td class="p-sm text-right text-error font-medium">-0.2000</td>
+<td class="p-sm text-center">
+<button class="text-primary hover:text-primary-fixed">Review</button>
+</td>
+</tr>
+<tr class="border-b border-outline-variant hover:bg-surface-container-highest transition-colors group">
+<td class="p-sm text-on-surface flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-bright flex items-center justify-center text-xs">U</div> USDC
+                                </td>
+<td class="p-sm text-on-surface-variant">Hot Wallet 1</td>
+<td class="p-sm text-right text-on-surface">12,500.00</td>
+<td class="p-sm text-right text-on-surface">12,500.00</td>
+<td class="p-sm text-right text-on-surface-variant">0.00</td>
+<td class="p-sm text-center">
+<span class="text-on-surface-variant">-</span>
+</td>
+</tr>
+<tr class="border-b border-outline-variant hover:bg-surface-container-highest transition-colors group">
+<td class="p-sm text-on-surface flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-bright flex items-center justify-center text-xs">B</div> BTC
+                                </td>
+<td class="p-sm text-on-surface-variant">Cold Storage</td>
+<td class="p-sm text-right text-on-surface">2.5000</td>
+<td class="p-sm text-right text-tertiary">2.5010</td>
+<td class="p-sm text-right text-tertiary font-medium">+0.0010</td>
+<td class="p-sm text-center">
+<button class="text-primary hover:text-primary-fixed">Review</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</main>
+</body></html>
