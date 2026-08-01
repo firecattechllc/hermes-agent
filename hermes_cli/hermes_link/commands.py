@@ -6,13 +6,27 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 from .client import HermesLinkClient
 from .models import HermesLinkEnvelope, MessageType, new_message_id
+from .security import CredentialRegistry
 
 
 def _client() -> HermesLinkClient:
     base_url = os.environ.get("HERMES_LINK_TITAN_URL", "http://127.0.0.1:9320")
+    registry_path = os.environ.get("HERMES_LINK_CREDENTIAL_REGISTRY")
+    if registry_path:
+        coordinator = os.environ.get("HERMES_LINK_COORDINATOR_NODE_ID")
+        target = os.environ.get("HERMES_LINK_TARGET_NODE_ID")
+        if not coordinator or not target:
+            raise ValueError("signed Hermes Link node identities are not configured")
+        return HermesLinkClient(
+            base_url,
+            credential_registry=CredentialRegistry.load(Path(registry_path)),
+            coordinator_node_id=coordinator,
+            target_node_id=target,
+        )
     token = os.environ.get("HERMES_LINK_TOKEN")
     if not token:
         raise ValueError("HERMES_LINK_TOKEN is not configured")

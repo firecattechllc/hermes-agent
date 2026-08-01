@@ -1,0 +1,22 @@
+{
+  "local_node_id": "node-prime",
+  "coordinator_node_id": "node-mac",
+  "node_role": "little_sister",
+  "bind_host": "127.0.0.1",
+  "bind_port": 9320,
+  "state_root": "/var/lib/hermes-link",
+  "credential_registry_path": "/etc/hermes-link/credentials.json",
+  "maximum_payload_bytes": 32768,
+  "maximum_clock_skew_seconds": 120,
+  "maximum_task_timeout_ms": 10000,
+  "maximum_output_chars": 4096,
+  "maximum_concurrency": 1,
+  "network_allowed": false,
+  "shell_allowed": false,
+  "filesystem_allowed": false,
+  "credentials_available_to_tasks": false,
+  "broker_available": false,
+  "portfolio_available": false,
+  "recursive_workers_allowed": false,
+  "worker_task_types": ["research_preparation", "deterministic_calculation"]
+}
