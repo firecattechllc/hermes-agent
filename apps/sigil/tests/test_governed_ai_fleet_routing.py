@@ -232,6 +232,33 @@ def test_node_registration_authentication_and_security_defaults() -> None:
         replace(titan.identity, transport_identity="http://renderer-defined")
 
 
+def test_authenticated_worker_only_node_can_register_without_fabricated_model() -> None:
+    prime = registration(FleetNodeRole.PRIME, models=())
+    assert prime.models == ()
+    assert prime.supported_task_types == frozenset({WorkerTaskType.RESEARCH_PREPARATION})
+    with pytest.raises(FleetValidationError):
+        replace(prime, supported_task_types=frozenset())
+    _, router, health = fleet(prime)
+    decision = router.route(
+        routing_request(required_task_type=WorkerTaskType.RESEARCH_PREPARATION),
+        health,
+        decided_at=NOW,
+    )
+    assert decision.selected_node_id == "node-prime"
+    assert decision.selected_model_id is None and decision.selected_provider_id is None
+    constrained = router.route(
+        routing_request(
+            required_task_type=WorkerTaskType.RESEARCH_PREPARATION,
+            required_model_id="gemma-3-12b",
+            fallback_permission=True,
+        ),
+        health,
+        decided_at=NOW,
+    )
+    assert constrained.selected_node_id is None
+    assert constrained.considered_nodes[0].reasons == ("capability_or_model_mismatch",)
+
+
 def test_unknown_or_unauthenticated_node_fails_closed() -> None:
     identity = replace(
         registration(FleetNodeRole.TITAN).identity, enabled=False, authenticated=False
@@ -291,6 +318,20 @@ def test_vector_dimension_and_corpus_revision_compatibility() -> None:
     assert router.route(request, health, decided_at=NOW).selected_node_id == "node-titan"
     with pytest.raises(NoEligibleFleetNodeError):
         router.route(replace(request, required_vector_dimension=1024), health, decided_at=NOW)
+
+
+def test_exact_safe_ollama_model_path_is_preserved() -> None:
+    value = FleetModelInventory(
+        "ollama",
+        "qllama/bge-small-en-v1.5:latest",
+        None,
+        frozenset({Capability.SEMANTIC_RETRIEVAL}),
+        384,
+        DIGEST,
+    )
+    assert value.model_id == "qllama/bge-small-en-v1.5:latest"
+    with pytest.raises(FleetValidationError):
+        replace(value, model_id="../../unsafe")
 
 
 def test_privacy_trust_maintenance_draining_and_resource_filters() -> None:

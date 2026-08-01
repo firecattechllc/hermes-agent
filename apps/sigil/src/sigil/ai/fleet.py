@@ -40,6 +40,7 @@ MAX_HEARTBEAT_AGE_SECONDS = 180
 MAX_REMOTE_PAYLOAD_CHARS = 16_384
 _SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 _SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,127}$")
+_MODEL_ID = re.compile(r"^[a-z0-9][a-z0-9._:/-]{0,127}$")
 _SENSITIVE = ("api_key", "authorization", "bearer ", "password", "secret", "token=")
 _ZERO_HASH = "0" * 64
 
@@ -201,9 +202,10 @@ class FleetModelInventory:
 
     def __post_init__(self) -> None:
         validate_identifier(self.provider_id, "provider_id")
-        validate_identifier(self.model_id, "model_id")
-        if self.tokenizer_id is not None:
-            validate_identifier(self.tokenizer_id, "tokenizer_id")
+        if _MODEL_ID.fullmatch(self.model_id) is None:
+            raise FleetValidationError("fleet model identity is invalid")
+        if self.tokenizer_id is not None and _MODEL_ID.fullmatch(self.tokenizer_id) is None:
+            raise FleetValidationError("fleet tokenizer identity is invalid")
         if not self.capabilities or (
             self.vector_dimension is not None and self.vector_dimension < 1
         ):
@@ -243,7 +245,7 @@ class FleetNodeRegistration:
 
     def __post_init__(self) -> None:
         if (
-            not self.models
+            (not self.models and not self.supported_task_types)
             or not 1 <= self.maximum_concurrency <= 16
             or not 100 <= self.maximum_task_duration_ms <= 300_000
             or not 1 <= self.maximum_input_chars <= MAX_REMOTE_PAYLOAD_CHARS
@@ -347,6 +349,7 @@ class FleetRoutingRequest:
     input_digests: tuple[str, ...]
     evidence_context_digests: tuple[str, ...]
     requested_at: str
+    required_task_type: WorkerTaskType | None = None
     schema_version: int = FLEET_SCHEMA_VERSION
     paper_only: bool = True
     broker_submission: bool = False
@@ -356,13 +359,14 @@ class FleetRoutingRequest:
         validate_identifier(self.task_correlation_id, "task_correlation_id")
         if self.responsibility in PROHIBITED_RESPONSIBILITIES:
             raise FleetValidationError("fleet request responsibility is prohibited")
+        if self.required_provider_id is not None:
+            validate_identifier(self.required_provider_id, "provider_id")
         for value, field in (
-            (self.required_provider_id, "provider_id"),
             (self.required_model_id, "model_id"),
             (self.required_tokenizer_id, "tokenizer_id"),
         ):
-            if value is not None:
-                validate_identifier(value, field)
+            if value is not None and _MODEL_ID.fullmatch(value) is None:
+                raise FleetValidationError(f"fleet {field} constraint is invalid")
         if (
             self.required_corpus_revision is not None
             and _SHA256.fullmatch(self.required_corpus_revision) is None
@@ -808,11 +812,22 @@ class GovernedFleetRouter:
         decided_at: str,
     ) -> FleetRoutingDecision:
         considerations: list[FleetNodeConsideration] = []
-        eligible: list[tuple[tuple[int, int, str], FleetNodeRegistration, FleetModelInventory]] = []
+        eligible: list[
+            tuple[tuple[int, int, str], FleetNodeRegistration, FleetModelInventory | None]
+        ] = []
         for node in sorted(self.registry.registrations, key=lambda item: item.identity.node_id):
             reasons: list[str] = []
             heartbeat = health.get(node.identity.node_id)
             model = next((item for item in node.models if self._model_matches(item, request)), None)
+            worker_match = (
+                request.required_task_type is not None
+                and request.required_task_type in node.supported_task_types
+                and request.required_provider_id is None
+                and request.required_model_id is None
+                and request.required_tokenizer_id is None
+                and request.required_vector_dimension is None
+                and request.required_corpus_revision is None
+            )
             if node.identity.node_id in request.excluded_node_ids:
                 reasons.append("operator_excluded")
             if not node.enabled or not node.identity.authenticated:
@@ -846,7 +861,7 @@ class GovernedFleetRouter:
                 and not node.resource_enforcement_verified
             ):
                 reasons.append("resource_enforcement_unverified")
-            if model is None:
+            if model is None and not worker_match:
                 reasons.append("capability_or_model_mismatch")
             load = node.current_load if heartbeat is None else heartbeat.current_load
             considerations.append(
@@ -860,7 +875,7 @@ class GovernedFleetRouter:
                     load,
                 )
             )
-            if not reasons and model is not None:
+            if not reasons and (model is not None or worker_match):
                 role_rank = self._ROLE_ORDER[node.identity.node_role]
                 if (
                     request.preferred_node_roles
@@ -1074,7 +1089,7 @@ class FleetExecutionCoordinator:
             request.orchestration_id,
             request.step_id,
             decision.selected_node_id,
-            WorkerTaskType.RESEARCH_PREPARATION,
+            request.required_task_type or WorkerTaskType.RESEARCH_PREPARATION,
             request.required_capability,
             request.input_digests,
             "sigil.ai.output.remote-specialist.v1",

@@ -35,8 +35,8 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--node-role", required=True, choices=("titan", "mac", "prime"))
     value.add_argument("--authenticated-identity-ref", required=True)
     value.add_argument("--transport-identity", required=True)
-    value.add_argument("--provider-id", required=True)
-    value.add_argument("--model-id", required=True)
+    value.add_argument("--provider-id")
+    value.add_argument("--model-id")
     value.add_argument("--observed-at", required=True)
     value.add_argument("--node-timestamp", required=True)
     return value
@@ -44,6 +44,8 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     arguments = parser().parse_args()
+    if (arguments.provider_id is None) != (arguments.model_id is None):
+        parser().error("--provider-id and --model-id must be supplied together")
     role = FleetNodeRole(arguments.node_role)
     identity = FleetNodeIdentity(
         arguments.node_id,
@@ -63,15 +65,21 @@ def main() -> int:
         True,
         True,
     )
-    model = FleetModelInventory(
-        arguments.provider_id,
-        arguments.model_id,
-        None,
-        frozenset({Capability.REASONING}),
+    models = (
+        ()
+        if arguments.model_id is None
+        else (
+            FleetModelInventory(
+                arguments.provider_id,
+                arguments.model_id,
+                None,
+                frozenset({Capability.REASONING}),
+            ),
+        )
     )
     registration = FleetNodeRegistration(
         identity,
-        (model,),
+        models,
         frozenset({WorkerTaskType.RESEARCH_PREPARATION}),
         MemoryClass.MEDIUM,
         CPUClass.STANDARD,
@@ -91,7 +99,7 @@ def main() -> int:
         arguments.node_timestamp,
         FleetNodeState.HEALTHY,
         registration.capabilities,
-        (model.model_id,),
+        tuple(model.model_id for model in models),
         0,
         0,
         0,
@@ -108,8 +116,8 @@ def main() -> int:
         "node_role": role.value,
         "identity_reference_digest": f"sha256:{canonical_digest(identity.authenticated_identity_ref)}",
         "transport_identity_digest": f"sha256:{canonical_digest(identity.transport_identity)}",
-        "model_id": model.model_id,
-        "provider_id": model.provider_id,
+        "model_id": None if not models else models[0].model_id,
+        "provider_id": None if not models else models[0].provider_id,
         "freshness_at_observation": health.freshness(coordinator_time=arguments.observed_at),
         "resource_enforcement_verified": registration.resource_enforcement_verified,
         "network_contact_attempted": False,
