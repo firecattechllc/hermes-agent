@@ -1,6 +1,8 @@
 import { PAGE_INSET_X } from '@hermes-desktop/app/layout-constants'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { formatEasternDateTime } from '../lib/date-time'
+
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
@@ -225,8 +227,8 @@ function RuntimeVisibilityCard({
             ['Completed cycles', String(visibility.counts.cycles), `Last: ${snapshot.automationLastCycleAt ?? 'Never'}`],
             [
               'Next scheduled cycle',
-              snapshot.automationState === 'running'
-                ? snapshot.automationNextCycleAt ?? 'No cycle scheduled'
+              snapshot.automationState === 'running' && snapshot.automationNextCycleAt
+                ? formatEasternDateTime(snapshot.automationNextCycleAt)
                 : 'No cycle scheduled',
               snapshot.automationState === 'running'
                 ? timeUntil(snapshot.automationNextCycleAt)
@@ -299,7 +301,7 @@ function RuntimeVisibilityCard({
                     <StatusLabel tone="muted">{event.status}</StatusLabel>
                   </div>
                   <div className="mt-1 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
-                    {event.timestamp} · proposal {event.proposalId} · order {event.orderId} · {event.evidenceReference}
+                    {formatEasternDateTime(event.timestamp)} · proposal {event.proposalId} · order {event.orderId} · {event.evidenceReference}
                   </div>
                 </li>
               ))}
@@ -563,7 +565,7 @@ function ExecutionTable({ snapshot }: { snapshot: SigilSnapshot }) {
           {snapshot.receipts.map(receipt => (
             <tr className="border-b border-(--ui-stroke-tertiary) last:border-b-0" key={receipt.id}>
               <td className="px-3 py-3 font-mono text-[0.6875rem]">
-                <span className="block">{receipt.timestamp}</span>
+                <span className="block">{formatEasternDateTime(receipt.timestamp)}</span>
                 <span className="mt-1 block text-[0.625rem] text-(--ui-text-quaternary)">{receipt.id}</span>
               </td>
               <td className="px-3 py-3">
@@ -691,7 +693,7 @@ function PaperPortfolio({
                       <span className="block">{position.unrealizedPnl}</span>
                       <span className="mt-1 block text-[0.625rem] text-(--ui-text-tertiary)">
                         {position.valuationStatus === 'fresh'
-                          ? `${position.markPrice ?? 'Marked'} · ${position.markTimestamp ?? 'timestamp unavailable'}`
+                          ? `${position.markPrice ?? 'Marked'} · ${position.markTimestamp ? formatEasternDateTime(position.markTimestamp) : 'timestamp unavailable'}`
                           : `${position.valuationStatus} mark`}
                       </span>
                     </td>
@@ -757,7 +759,7 @@ function PaperPortfolio({
                     <StatusLabel tone="muted">SIMULATED</StatusLabel>
                   </div>
                   <p className="mt-1 font-mono text-[0.625rem] text-(--ui-text-tertiary)">
-                    {receipt.timestamp}
+                    {formatEasternDateTime(receipt.timestamp)}
                   </p>
                 </div>
                 <div><span className="text-(--ui-text-tertiary)">Qty</span><strong className="mt-1 block font-mono">{receipt.quantity}</strong></div>
@@ -810,7 +812,7 @@ function AuditTable({ events }: { events: AuditEvent[] }) {
           {filtered.map(event => (
             <details className="group py-3" key={event.id}>
               <summary className="grid cursor-pointer list-none gap-2 text-xs md:grid-cols-[1fr_1fr_1fr_2fr_auto]">
-                <span className="font-mono text-[0.6875rem]">{event.timestamp}</span>
+                <span className="font-mono text-[0.6875rem]">{formatEasternDateTime(event.timestamp)}</span>
                 <span className="font-mono text-[0.6875rem] text-(--ui-text-tertiary)">{event.orderId}</span>
                 <span className="font-mono text-[0.6875rem] text-(--ui-text-tertiary)">{event.evidenceReference}</span>
                 <span>{event.summary}</span>
@@ -2218,7 +2220,7 @@ export function SigilOperatorView({
               Paper automation {snapshot.automationState ?? 'stopped'}
             </StatusLabel>
             <span className="font-mono text-(--ui-text-tertiary)">
-              {snapshot.automationCycleCount ?? 0} cycles · refreshed {snapshot.lastUpdated}
+              {snapshot.automationCycleCount ?? 0} cycles · refreshed {formatEasternDateTime(snapshot.lastUpdated)}
             </span>
           </div>
           <div className="flex gap-2">
