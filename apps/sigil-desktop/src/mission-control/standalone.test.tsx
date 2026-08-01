@@ -621,15 +621,38 @@ describe('standalone Sigil Mission Control', () => {
   })
 
   it('confirmation-gates the local-only paper reset', async () => {
-    render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
+    const adapter = new MockSigilOperatorAdapter()
+
+    render(<SigilOperatorView adapter={adapter} />)
     await screen.findByTestId('sigil-operator')
+
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     fireEvent.click(screen.getByRole('button', { name: 'Reset local paper portfolio' }))
 
     expect(screen.getByText('Confirm local paper portfolio reset')).toBeTruthy()
-    expect(screen.getByText(/settings, local provider credentials, source files/i)).toBeTruthy()
+    expect(
+      screen.getByText(/settings, local provider credentials, source files/i)
+    ).toBeTruthy()
+    expect(
+      screen.getByText(/all broker restrictions remain unchanged/i)
+    ).toBeTruthy()
+
     fireEvent.click(screen.getByRole('button', { name: 'Reset empty paper ledger' }))
 
     expect(await screen.findByText('No paper holdings')).toBeTruthy()
+
+    const resetSnapshot = await adapter.readSnapshot()
+
+    expect(resetSnapshot.positions).toHaveLength(0)
+    expect(resetSnapshot.proposals).toHaveLength(0)
+    expect(resetSnapshot.receipts).toHaveLength(0)
+    expect(resetSnapshot.pendingApprovals).toBe(0)
+    expect(resetSnapshot.automationState).toBe('stopped')
+    expect(resetSnapshot.automationCycleCount).toBe(0)
+    expect(resetSnapshot.paperAuthorization?.status).toBe('active')
+    expect(resetSnapshot.environment).toBe('paper')
+    expect(resetSnapshot.simulation).toBe(true)
+    expect(resetSnapshot.runtimeVisibility?.brokerSubmissionAvailable).toBe(false)
+    expect(screen.queryByText(/submit order/i)).toBeNull()
   })
 })
