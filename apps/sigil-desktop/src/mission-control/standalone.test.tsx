@@ -71,6 +71,8 @@ describe('standalone Sigil Mission Control', () => {
   it('renders refreshable read-only provider data without credential fields', async () => {
     const original = window.sigilDesktop
 
+    const marketUniverseSearches: Readonly<Record<string, unknown>>[] = []
+
     const alpacaStatus = {
       configured: true,
       authenticated: true,
@@ -224,35 +226,44 @@ describe('standalone Sigil Mission Control', () => {
           execution_authorized: false
         }
       }),
-      searchMarketUniverse: async payload => ({
-        ok: true,
-        result: {
-          query: String(payload.query ?? ''),
-          universe: String(payload.universe ?? 'master'),
-          total: 1,
-          offset: 0,
-          limit: 50,
-          has_more: false,
-          results: [{
-            instrument_id: 'SIGIL-1',
-            symbol: 'MSFT',
-            name: 'Microsoft Corporation',
-            exchange: 'XNAS',
-            asset_class: 'equity',
-            lifecycle_status: 'active',
-            reconciliation_status: 'validated',
-            monitoring_tier: 'proposal_eligible',
-            aliases: ['MSFT'],
-            sector: 'Technology',
-            broker_tradable: true,
-            actively_researched: true,
-            proposal_eligible: true,
-            exclusion_reasons: []
-          }],
-          broker_submission_available: false,
-          execution_authorized: false
+      searchMarketUniverse: async payload => {
+        marketUniverseSearches.push(payload)
+
+        const query = String(payload.query ?? '')
+        const hasMatch = query !== 'ZZZZINVALID'
+
+        return {
+          ok: true,
+          result: {
+            query,
+            universe: String(payload.universe ?? 'master'),
+            total: hasMatch ? 1 : 0,
+            offset: 0,
+            limit: 50,
+            has_more: false,
+            results: hasMatch
+              ? [{
+                  instrument_id: 'SIGIL-1',
+                  symbol: 'MSFT',
+                  name: 'Microsoft Corporation',
+                  exchange: 'XNAS',
+                  asset_class: 'equity',
+                  lifecycle_status: 'active',
+                  reconciliation_status: 'validated',
+                  monitoring_tier: 'proposal_eligible',
+                  aliases: ['MSFT'],
+                  sector: 'Technology',
+                  broker_tradable: true,
+                  actively_researched: true,
+                  proposal_eligible: true,
+                  exclusion_reasons: []
+                }]
+              : [],
+            broker_submission_available: false,
+            execution_authorized: false
+          }
         }
-      }),
+      },
       paperExecution: async operation => ({
         ok: true,
         result: {
@@ -349,6 +360,36 @@ describe('standalone Sigil Mission Control', () => {
       expect(screen.getByText('Full Alpaca asset catalog discovered')).toBeTruthy()
       expect(screen.getByText(/Source: Alpaca Paper Trading Assets API/)).toBeTruthy()
       expect(screen.getByText(/Market-data coverage is partial under IEX/)).toBeTruthy()
+
+      const governedSearch = screen.getByRole('textbox', {
+        name: 'Search governed instruments'
+      })
+      fireEvent.change(governedSearch, { target: { value: 'AAPL' } })
+
+      await waitFor(() => {
+        expect(marketUniverseSearches.length).toBeGreaterThanOrEqual(2)
+      })
+
+      expect(marketUniverseSearches.at(-1)).toMatchObject({
+        query: 'AAPL',
+        universe: 'master',
+        limit: 50,
+        offset: 0
+      })
+      expect(
+        screen.getAllByText('Microsoft Corporation').length
+      ).toBeGreaterThan(0)
+
+      fireEvent.change(governedSearch, {
+        target: { value: 'ZZZZINVALID' }
+      })
+      expect(await screen.findByText('No matching instruments')).toBeTruthy()
+      expect(
+        screen.getByText(
+          'No governed instruments matched “ZZZZINVALID” in the selected universe.'
+        )
+      ).toBeTruthy()
+
       const execution = await screen.findByTestId('autonomous-paper-execution')
       expect(execution.textContent).toContain('50 / 12984')
       expect(execution.textContent).toContain('awaiting fresh data')

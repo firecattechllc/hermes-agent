@@ -333,6 +333,28 @@ export interface MarketUniverseInstrument {
   exclusion_reasons: string[]
 }
 
+export interface MarketUniverseQuote {
+  symbol: string
+  price: number | null
+  change: number | null
+  change_percent: number | null
+  previous_close?: number | null
+  observed_at: string | null
+  age_seconds: number | null
+  freshness: 'live' | 'delayed' | 'stale' | 'unknown' | 'unavailable'
+  source: string
+  reason: string | null
+}
+
+export interface MarketUniverseQuoteResult {
+  feed: string
+  generated_at: string
+  quotes: MarketUniverseQuote[]
+  broker_submission_available: false
+  execution_authorized: false
+  data_only: true
+}
+
 export interface MarketUniverseSearchResult {
   query: string
   universe: string

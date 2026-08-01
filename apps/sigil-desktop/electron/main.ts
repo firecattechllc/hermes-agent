@@ -26,6 +26,7 @@ export const SIGIL_GOVERNED_NEWS_ADVISORY_CHANNEL = 'sigil:get-governed-news-adv
 export const SIGIL_GOVERNED_ALPACA_NEWS_COLLECT_CHANNEL = 'sigil:collect-governed-alpaca-news'
 export const SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL = 'sigil:get-market-universe-status'
 export const SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL = 'sigil:search-market-universe'
+export const SIGIL_MARKET_UNIVERSE_QUOTES_CHANNEL = 'sigil:get-market-universe-quotes'
 export const SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL = 'sigil:get-alpaca-market-data-status'
 export const SIGIL_ALPACA_MARKET_DATA_CONTROL_CHANNEL = 'sigil:control-alpaca-market-data'
 export const SIGIL_ASSET_CATALOG_STATUS_CHANNEL = 'sigil:get-asset-catalog-status'
@@ -411,6 +412,7 @@ export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_GOVERNED_ALPACA_NEWS_COLLECT_CHANNEL)
   ipcMain.removeHandler(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL)
+  ipcMain.removeHandler(SIGIL_MARKET_UNIVERSE_QUOTES_CHANNEL)
   ipcMain.removeHandler(SIGIL_ASSET_CATALOG_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_ASSET_CATALOG_REFRESH_CHANNEL)
   ipcMain.removeHandler(SIGIL_RESEARCH_UNIVERSE_STATUS_CHANNEL)
@@ -469,6 +471,9 @@ export function registerSigilIpc(): void {
   ipcMain.handle(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL, () => runBridgeRequest({ command: 'market_universe_status' }))
   ipcMain.handle(SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL, (_event, payload: Readonly<Record<string, unknown>>) =>
     runBridgeRequest({ command: 'market_universe_search', payload })
+  )
+  ipcMain.handle(SIGIL_MARKET_UNIVERSE_QUOTES_CHANNEL, (_event, payload: Readonly<Record<string, unknown>>) =>
+    runBridgeRequest({ command: 'market_universe_quotes', payload })
   )
   ipcMain.handle(SIGIL_ALPACA_MARKET_DATA_STATUS_CHANNEL, () =>
     runBridgeRequest({ command: 'alpaca_market_data_status' })
