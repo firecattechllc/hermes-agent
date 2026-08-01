@@ -117,6 +117,7 @@ def _initial_state(now: datetime) -> dict[str, Any]:
             "status": "connected",
             "last_refresh_at": timestamp,
             "degraded_services": [],
+            "market_data_status": "unverified",
         },
         "environment": "paper",
         "simulation": True,
@@ -1449,6 +1450,20 @@ def runtime_snapshot(*, now: datetime | None = None) -> dict[str, Any]:
         evaluate_runtime_health(state)
         _run_due_cycle(state_path, state, observed_at)
         evaluate_runtime_health(state)
+        from .production_research import _service as _production_research_service
+
+        provider_status = str(
+            _production_research_service().status()["progress"].get(
+                "provider_status", "unverified"
+            )
+        )
+        market_data_ready = provider_status == "available"
+        state["connection"]["market_data_status"] = (
+            "ready" if market_data_ready else provider_status
+        )
+        state["connection"]["degraded_services"] = (
+            [] if market_data_ready or provider_status == "unverified" else ["market_data"]
+        )
         state["runtime_visibility"] = _runtime_visibility(state, observed_at)
         state["revision"] = int(state["revision"]) + 1
         state["generated_at"] = _timestamp(observed_at)

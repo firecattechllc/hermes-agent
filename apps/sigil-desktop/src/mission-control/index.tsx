@@ -926,6 +926,19 @@ function ProviderPanel({
   onRefresh: () => void
   snapshot: SigilProviderSnapshot | null
 }) {
+  const alpacaHealth = snapshot?.alpaca.health
+
+  const accountAuthenticated =
+    alpacaHealth?.account.successful ?? alpacaMarketData?.authenticated ?? false
+
+  const marketDataReady = alpacaHealth
+    ? alpacaHealth.latest_quote.successful && alpacaHealth.historical_bars.successful
+    : alpacaMarketData?.provider_state === 'ready'
+
+  const marketDataLabel = alpacaHealth
+    ? marketDataReady ? 'ready' : 'unavailable'
+    : alpacaMarketData?.provider_state.replaceAll('_', ' ') ?? 'unavailable'
+
   const [freshnessNow, setFreshnessNow] = useState(() => Date.now())
   const [freshnessObservedAt, setFreshnessObservedAt] = useState(() => Date.now())
 
@@ -995,11 +1008,11 @@ function ProviderPanel({
             <div>
               <h3 className="text-xs font-semibold">Alpaca Market Data</h3>
               <div className="mt-2 flex flex-wrap gap-2">
-                <StatusLabel tone={alpacaMarketData.configured ? 'success' : 'muted'}>
-                  {alpacaMarketData.authenticated ? 'Authenticated' : 'Unconfigured'}
+                <StatusLabel tone={accountAuthenticated ? 'success' : 'muted'}>
+                  {accountAuthenticated ? 'Authenticated' : 'Account unavailable'}
                 </StatusLabel>
-                <StatusLabel tone={alpacaMarketData.provider_state === 'ready' ? 'success' : 'warning'}>
-                  Market data {alpacaMarketData.provider_state.replaceAll('_', ' ')}
+                <StatusLabel tone={marketDataReady ? 'success' : 'warning'}>
+                  Market data {marketDataLabel}
                 </StatusLabel>
                 <StatusLabel tone="warning">15-minute delayed SIP</StatusLabel>
                 <StatusLabel tone="info">live partial-market IEX</StatusLabel>
@@ -1049,6 +1062,11 @@ function ProviderPanel({
               <div>
                 <h3 className="text-xs font-semibold">Alpaca catalog provider status</h3>
                 <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">{snapshot.alpaca.message}</p>
+                {snapshot.alpaca.health ? (
+                  <p className="mt-2 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+                    Credentials {snapshot.alpaca.health.credentials_configured ? 'configured' : 'missing'} · Account {snapshot.alpaca.health.account.successful ? 'authenticated' : snapshot.alpaca.health.account.error_category} · Quote {snapshot.alpaca.health.latest_quote.successful ? 'ready' : snapshot.alpaca.health.latest_quote.error_category} · History {snapshot.alpaca.health.historical_bars.successful ? 'ready' : snapshot.alpaca.health.historical_bars.error_category} · Feed {snapshot.alpaca.health.feed}
+                  </p>
+                ) : null}
                 {snapshot.alpaca.universe ? (
                   <>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -1616,7 +1634,7 @@ function AutonomousPaperPanel({
           ['Candidates', String(progress.candidates_produced), `${progress.proposals_produced} proposals`],
           ['Rejected', String(progress.proposals_rejected), reasons.map(([reason, count]) => `${reason}: ${count}`).join(' · ') || 'None'],
           ['Paper exposure', `$${status.deployed_paper_capital}`, `$${status.remaining_governed_allocation} governed allocation remains`],
-          ['Broker state', status.broker_submission ? 'Paper mutations enabled' : 'No mutation authority', `${status.open_positions} positions · ${status.open_orders} open orders`]
+          ['External broker', status.broker_submission ? 'Paper submission enabled' : 'Submission disabled', `${status.open_positions} positions · ${status.open_orders} open orders · local monthly paper authority is separate`]
         ].map(([label, value, detail]) => (
           <div className="min-w-0 bg-(--ui-bg-secondary) p-3" key={label}>
             <div className="text-[0.625rem] uppercase text-(--ui-text-tertiary)">{label}</div>

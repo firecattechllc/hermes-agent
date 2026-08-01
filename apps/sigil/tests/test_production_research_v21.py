@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from sigil.desktop_bridge import production_research as desktop_production_research
 from sigil.market_data.alpaca import AlpacaConfig
 from sigil.production_research import (
     AlpacaProductionDataClient,
@@ -55,6 +56,20 @@ def test_effective_market_data_configuration_rejects_non_paper_urls(monkeypatch)
     monkeypatch.setenv("APCA_API_BASE_URL", "https://api.alpaca.markets")
     with pytest.raises(RuntimeError, match="unexpected_trading_environment"):
         AlpacaConfig.from_environment()
+
+
+def test_desktop_production_client_uses_governed_credential_resolver(monkeypatch):
+    monkeypatch.setattr(
+        desktop_production_research,
+        "alpaca_credentials",
+        lambda: ("file-key", "file-secret"),
+    )
+
+    client = desktop_production_research._data_client()
+
+    assert client.key_id == "file-key"
+    assert client.secret_key == "file-secret"
+    assert client.base_url == "https://data.alpaca.markets"
 
 
 @pytest.mark.parametrize(

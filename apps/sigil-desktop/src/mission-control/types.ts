@@ -117,6 +117,13 @@ export interface SigilProviderSnapshot {
   alpaca: {
     status: 'connected' | 'degraded' | 'not_configured'
     message: string
+    health?: {
+      credentials_configured: boolean
+      account: { successful: boolean; http_status: number | null; error_category: string | null }
+      latest_quote: { successful: boolean; http_status: number | null; error_category: string | null }
+      historical_bars: { successful: boolean; http_status: number | null; error_category: string | null }
+      feed: string
+    }
     universe?: {
       scope: string
       total: number

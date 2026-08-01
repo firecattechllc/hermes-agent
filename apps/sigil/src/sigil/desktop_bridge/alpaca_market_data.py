@@ -6,10 +6,15 @@ from typing import Any
 
 from sigil.asset_catalog import AssetCatalogService
 from sigil.market_data import AlpacaMarketDataRouter
+from sigil.market_data.alpaca import AlpacaConfig
 
+from .providers import alpaca_credentials
 from .runtime import _state_directory
 
-_router = AlpacaMarketDataRouter()
+
+def _router() -> AlpacaMarketDataRouter:
+    key, secret = alpaca_credentials()
+    return AlpacaMarketDataRouter(config=AlpacaConfig(key, secret))
 
 
 def _catalog_projection(
@@ -33,7 +38,7 @@ def _catalog_projection(
 
 
 def alpaca_market_data_status() -> dict[str, Any]:
-    projection = _router.projection()
+    projection = _router().projection()
     projection["asset_catalog"] = _catalog_projection()
     return projection
 
@@ -50,7 +55,7 @@ def control_alpaca_market_data(payload: object) -> dict[str, Any]:
         "disconnect_live_iex", "refresh_status",
     }:
         raise ValueError("Unsupported data-only Alpaca control")
-    projection = _router.projection()
+    projection = _router().projection()
     projection["asset_catalog"] = _catalog_projection(catalog)
     projection["control_action"] = action
     return projection

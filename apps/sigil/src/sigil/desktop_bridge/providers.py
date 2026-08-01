@@ -28,6 +28,8 @@ ALLOWED_KEYS = frozenset(
         "SIGIL_BROKER_SUBMISSION_ENABLED",
     }
 )
+ALPACA_PAPER_BASE_URL = "https://paper-api.alpaca.markets"
+ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
 ACCOUNT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", re.ASCII)
 
 
@@ -78,6 +80,68 @@ def load_credentials(path: Path | None = None) -> dict[str, str]:
     return result
 
 
+def alpaca_credentials(path: Path | None = None) -> tuple[str | None, str | None]:
+    """Resolve Alpaca credentials without returning them across the bridge."""
+
+    canonical_pairs = (
+        (os.environ.get("APCA_API_KEY_ID"), os.environ.get("APCA_API_SECRET_KEY")),
+        (
+            os.environ.get("SIGIL_ALPACA_API_KEY_ID"),
+            os.environ.get("SIGIL_ALPACA_API_SECRET_KEY"),
+        ),
+    )
+    for key, secret in canonical_pairs:
+        if key and secret:
+            return key, secret
+    try:
+        credentials = load_credentials() if path is None else load_credentials(path)
+    except RuntimeError:
+        credentials = {}
+    file_key = credentials.get("SIGIL_ALPACA_API_KEY_ID")
+    file_secret = credentials.get("SIGIL_ALPACA_API_SECRET_KEY")
+    if file_key and file_secret:
+        return file_key, file_secret
+    return os.environ.get("ALPACA_API_KEY"), os.environ.get("ALPACA_SECRET_KEY")
+
+
+def _alpaca_probe(
+    url: str,
+    headers: dict[str, str],
+    *,
+    opener: Callable[[Request, float], object] | None,
+) -> tuple[dict[str, object], object | None]:
+    """Perform one GET probe and retain only sanitized health metadata."""
+
+    request = Request(url, headers={**headers, "Accept": "application/json"}, method="GET")
+    open_request = opener or (
+        lambda req, timeout: build_opener(_NoRedirect()).open(req, timeout=timeout)
+    )
+    try:
+        response = open_request(request, TIMEOUT_SECONDS)
+        status = int(response.getcode())  # type: ignore[attr-defined]
+        raw = response.read(MAX_RESPONSE_BYTES + 1)  # type: ignore[attr-defined]
+        if len(raw) > MAX_RESPONSE_BYTES:
+            return {"successful": False, "http_status": status, "error_category": "response_too_large"}, None
+        payload = json.loads(raw) if raw else {}
+    except HTTPError as error:
+        if error.code in {401, 403}:
+            category = "authentication_failed"
+        elif error.code == 429:
+            category = "rate_limited"
+        elif error.code >= 500:
+            category = "provider_error"
+        else:
+            category = "provider_request_rejected"
+        return {"successful": False, "http_status": int(error.code), "error_category": category}, None
+    except (URLError, TimeoutError, OSError):
+        return {"successful": False, "http_status": None, "error_category": "provider_unavailable"}, None
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return {"successful": False, "http_status": None, "error_category": "malformed_response"}, None
+    if not 200 <= status < 300:
+        return {"successful": False, "http_status": status, "error_category": "provider_request_rejected"}, None
+    return {"successful": True, "http_status": status, "error_category": None}, payload
+
+
 def _json_request(
     url: str,
     *,
@@ -109,11 +173,44 @@ def _json_request(
 
 
 def _alpaca(credentials: dict[str, str], opener: Callable[[Request, float], object] | None) -> dict[str, Any]:
-    del opener
     key = credentials.get("SIGIL_ALPACA_API_KEY_ID")
     secret = credentials.get("SIGIL_ALPACA_API_SECRET_KEY")
     if not key or not secret:
-        return {"status": "not_configured", "message": "Local credentials are not configured.", "symbols": []}
+        return {
+            "status": "not_configured",
+            "message": "Local credentials are not configured.",
+            "symbols": [],
+            "health": {
+                "credentials_configured": False,
+                "account": {"successful": False, "http_status": None, "error_category": "not_configured"},
+                "latest_quote": {"successful": False, "http_status": None, "error_category": "not_configured"},
+                "historical_bars": {"successful": False, "http_status": None, "error_category": "not_configured"},
+                "feed": "iex",
+            },
+        }
+    headers = {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
+    account, _account_payload = _alpaca_probe(
+        f"{ALPACA_PAPER_BASE_URL}/v2/account", headers, opener=opener
+    )
+    quote, _quote_payload = _alpaca_probe(
+        f"{ALPACA_DATA_BASE_URL}/v2/stocks/AAPL/quotes/latest?feed=iex",
+        headers,
+        opener=opener,
+    )
+    history, _history_payload = _alpaca_probe(
+        f"{ALPACA_DATA_BASE_URL}/v2/stocks/AAPL/bars?timeframe=1Day&limit=60&feed=iex&adjustment=all",
+        headers,
+        opener=opener,
+    )
+    health = {
+        "credentials_configured": True,
+        "account": account,
+        "latest_quote": quote,
+        "historical_bars": history,
+        "feed": "iex",
+    }
+    market_data_ready = bool(quote["successful"] and history["successful"])
+    account_ready = bool(account["successful"])
     try:
         from sigil.asset_catalog import AssetCatalogService
 
@@ -126,15 +223,16 @@ def _alpaca(credentials: dict[str, str], opener: Callable[[Request, float], obje
         return {
             "status": (
                 "connected"
-                if cache_state == "fresh"
+                if cache_state == "fresh" and market_data_ready and account_ready
                 else "degraded"
             ),
             "message": (
-                "Governed Alpaca paper asset catalog is available."
-                if total
-                else "Governed Alpaca paper asset catalog is unavailable."
+                "Account authentication and read-only market data are ready."
+                if market_data_ready and account_ready
+                else "Account and market-data health are reported separately; one or more probes failed."
             ),
             "symbols": [],
+            "health": health,
             "universe": {
                 "scope": "Full Alpaca asset catalog discovered" if total else "Catalog unavailable",
                 "total": total,
@@ -161,6 +259,7 @@ def _alpaca(credentials: dict[str, str], opener: Callable[[Request, float], obje
             "status": "degraded",
             "message": str(error),
             "symbols": [],
+            "health": health,
             "universe": {
                 "scope": "Catalog unavailable",
                 "total": 0,
