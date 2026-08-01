@@ -369,6 +369,39 @@ describe('standalone Sigil Mission Control', () => {
     }
   })
 
+  it('confirmation-gates simulated proposal approval and records local audit evidence', async () => {
+    const simulator = new MockSigilOperatorAdapter('disconnected')
+    const adapter = {
+      readSnapshot: () => simulator.readSnapshot(),
+      applySimulatedAction: (action: Parameters<typeof simulator.applySimulatedAction>[0]) =>
+        simulator.applySimulatedAction(action)
+    }
+
+    render(<SigilOperatorView adapter={adapter} />)
+    await screen.findByTestId('sigil-operator')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Proposals' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Enable simulated operator actions' })
+    )
+
+    const approve = screen.getAllByRole('button', { name: 'Approve' })[0]
+    fireEvent.click(approve)
+
+    expect(screen.getByText('Confirm simulated approval')).toBeTruthy()
+    expect(
+      screen.getByText(/does not authorize or submit an order/i)
+    ).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm approval' }))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('approved').length).toBeGreaterThan(0)
+    })
+
+    expect(screen.queryByText(/submit order/i)).toBeNull()
+  })
+
   it('confirmation-gates local paper automation controls', async () => {
     const adapter = new MockSigilOperatorAdapter()
 
