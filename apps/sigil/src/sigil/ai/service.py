@@ -18,7 +18,13 @@ from .artifact_store import (
     DurableAnalysisArtifactStore,
 )
 from .evidence import build_invocation_evidence
-from .handoff import GovernedModelWorkRequest
+from .finbert import (
+    GovernedSentimentArtifact,
+    GovernedSentimentRequest,
+    build_sentiment_artifact,
+    validate_finbert_output,
+)
+from .handoff import GovernedModelWorkRequest, GovernedSentimentWorkRequest
 from .ledger import (
     AIEvidenceLedgerError,
     AIEvidenceRecordType,
@@ -27,6 +33,7 @@ from .ledger import (
     append_routing_decision,
     evidence_identity,
 )
+from .models import CostClass, ExecutionLocation, TrustTier
 from .provider import (
     ModelProvider,
     ProviderFailure,
@@ -50,7 +57,7 @@ class AnalysisFailureClass(str):
 @dataclass(frozen=True, slots=True)
 class GovernedAnalysisResponse:
     request_id: str
-    artifact: GovernedAnalysisArtifact | None
+    artifact: GovernedAnalysisArtifact | GovernedSentimentArtifact | None
     routing_evidence_id: str | None
     invocation_evidence_id: str | None
     failure_classification: str | None
@@ -316,6 +323,226 @@ class GovernedAnalysisService:
             requested_at=requested_at,
         )
         return self.analyze(request, completed_at=completed_at)
+
+    def analyze_sentiment(
+        self, request: GovernedSentimentRequest, *, completed_at: str
+    ) -> GovernedAnalysisResponse:
+        """Route, invoke, validate, evidence, and persist advisory sentiment."""
+        if not self.enabled:
+            return self._failure(request, AnalysisFailureClass.SERVICE_DISABLED, "service disabled")
+        route_request = RoutingRequest(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            evidence_correlation_id=f"sentiment-{request.request_id}",
+            responsibility=request.responsibility,
+            required_capabilities=frozenset({request.capability}),
+            preferred_model_family="finbert",
+            privacy_requirement=request.privacy_requirement,
+            maximum_cost_class=CostClass.FREE,
+            execution_location_preference=(ExecutionLocation.LOCAL,),
+            minimum_trust_tier=TrustTier.TRUSTED,
+            timeout_ms=request.timeout_ms,
+            fallback_allowed=request.fallback_permission,
+        )
+        decision = GovernedModelRouter(self.registry).route(
+            route_request, decision_timestamp=request.requested_at
+        )
+        selected_model = next(
+            (item for item in self.registry.models if item.model_id == decision.selected_model_id),
+            None,
+        )
+        try:
+            append_routing_decision(
+                self.evidence_ledger,
+                request=route_request,
+                decision=decision,
+                model_version=None if selected_model is None else selected_model.version,
+                execution_location=None
+                if selected_model is None
+                else selected_model.execution_location,
+            )
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+            )
+        if not decision.succeeded or selected_model is None:
+            classification = (
+                AnalysisFailureClass.ROUTING_REJECTED
+                if decision.failure_class is None
+                else decision.failure_class.value
+            )
+            return self._failure(
+                request, classification, "sentiment routing rejected", decision.evidence_identity
+            )
+        invocation = ProviderInvocation(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            model_id=selected_model.model_id,
+            registry_revision=self.registry.revision,
+            capability=request.capability,
+            input_payload={
+                "source_text": request.source_text,
+                "source_identity": request.source_identity,
+                "source_digest": request.input_digest,
+                "source_type": request.source_type.value,
+                "language": request.language,
+                "evidence_context_digests": list(request.evidence_context_digests),
+            },
+            timeout_ms=request.timeout_ms,
+            started_at=request.requested_at,
+            ended_at=completed_at,
+        )
+        try:
+            self._append_attempt(
+                invocation,
+                selected_model.provider_id,
+                selected_model.version,
+                selected_model.execution_location,
+            )
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+                decision.evidence_identity,
+            )
+        provider = self.providers.get(selected_model.provider_id)
+        result = (
+            self._unavailable_result(invocation, selected_model.execution_location)
+            if provider is None
+            else provider.invoke(invocation)
+        )
+        if not self._result_matches(
+            result,
+            invocation,
+            selected_model.provider_id,
+            selected_model.execution_location,
+        ):
+            result = self._malformed_result(
+                invocation, selected_model.provider_id, selected_model.execution_location
+            )
+        try:
+            self._append_result(result, invocation, selected_model.version)
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        if not result.succeeded or result.output is None:
+            classification = (
+                AnalysisFailureClass.PROVIDER_UNAVAILABLE
+                if result.failure is None
+                else result.failure.classification.value
+            )
+            return self._failure(
+                request,
+                classification,
+                "FinBERT invocation failed",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        try:
+            payload = validate_finbert_output(
+                result.output,
+                request=request,
+                expected_model_id=selected_model.model_id,
+                expected_model_version=selected_model.version,
+            )
+            if result.evidence.output_digest is None:
+                raise AnalysisValidationError("provider output evidence digest is missing")
+        except (AnalysisValidationError, ValueError):
+            try:
+                rejected_id = self._append_output_rejection(
+                    request, invocation, selected_model.version, result
+                )
+            except AIEvidenceLedgerError:
+                return self._failure(
+                    request,
+                    AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                    "evidence ledger unavailable",
+                    decision.evidence_identity,
+                    result.evidence.evidence_identity,
+                )
+            return self._failure(
+                request,
+                AnalysisFailureClass.OUTPUT_VALIDATION_FAILED,
+                "FinBERT output rejected",
+                decision.evidence_identity,
+                rejected_id,
+            )
+        artifact = build_sentiment_artifact(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            provider_id=selected_model.provider_id,
+            model_id=selected_model.model_id,
+            model_version=selected_model.version,
+            capability=request.capability,
+            responsibility=request.responsibility,
+            created_at=completed_at,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            input_digest=request.input_digest,
+            output_digest=result.evidence.output_digest,
+            structured_payload=payload,
+            citations=request.evidence_context_digests,
+            confidence=payload.confidence,
+            limitations=payload.limitations,
+            stale_after=None,
+        )
+        try:
+            self.artifact_store.append(artifact)
+        except AnalysisArtifactStoreError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.ARTIFACT_PERSISTENCE_FAILED,
+                "artifact store unavailable",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        self._last_failure = None
+        return GovernedAnalysisResponse(
+            request_id=request.request_id,
+            artifact=artifact,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            failure_classification=None,
+            routing_summary=("fallback selected" if decision.fallback else "FinBERT selected"),
+            limitations=payload.limitations,
+        )
+
+    def analyze_hermes_sentiment(
+        self,
+        work: GovernedSentimentWorkRequest,
+        *,
+        source_text: str,
+        language: str,
+        requested_at: str,
+        completed_at: str,
+    ) -> GovernedAnalysisResponse:
+        """Resolve a reference-only Hermes handoff inside backend authority."""
+        from .finbert import SentimentSourceType
+
+        request = GovernedSentimentRequest(
+            request_id=work.request_id,
+            task_correlation_id=work.task_correlation_id,
+            responsibility=work.responsibility,
+            input_digest=work.source_digest,
+            evidence_context_digests=work.evidence_references,
+            source_type=SentimentSourceType(work.source_type),
+            source_identity=work.source_identity,
+            source_text=source_text,
+            language=language,
+            requested_at=requested_at,
+            timeout_ms=work.timeout_ms,
+            privacy_requirement=work.privacy_requirement,
+            fallback_permission=work.fallback_allowed,
+        )
+        return self.analyze_sentiment(request, completed_at=completed_at)
 
     def status(self) -> GovernedAnalysisStatus:
         try:

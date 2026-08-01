@@ -65,12 +65,12 @@ try {
   ], { env: environment })
   process.stdout.write('PASS: imported packaged sigil module\n')
 
-  function bridgeRequest(request) {
+  function bridgeRequest(request, environmentOverrides = {}) {
     const output = run(
       python,
       ['-m', 'sigil.desktop_bridge.runner'],
       {
-        env: environment,
+        env: { ...environment, ...environmentOverrides },
         input: `${JSON.stringify(request)}\n`
       }
     )
@@ -118,6 +118,47 @@ try {
     throw new Error(`ai_artifact_get did not fail closed: ${JSON.stringify(artifactResult)}`)
   }
   process.stdout.write('PASS: ai_artifact_get returned deterministic not-found\n')
+
+  const disabledFinBERT = aiStatus.finbert
+  if (disabledFinBERT?.enabled !== false || disabledFinBERT?.health !== 'disabled') {
+    throw new Error(`FinBERT was not safely disabled: ${JSON.stringify(disabledFinBERT)}`)
+  }
+  process.stdout.write('PASS: packaged FinBERT status is disabled by default\n')
+
+  const unavailableFinBERT = bridgeRequest(
+    { command: 'ai_status' },
+    {
+      SIGIL_AI_FINBERT_ENABLED: 'true',
+      SIGIL_AI_FINBERT_MODEL: 'prosusai.finbert',
+      SIGIL_AI_FINBERT_MODEL_VERSION: 'packaged-unverified'
+    }
+  ).finbert
+  if (
+    unavailableFinBERT?.enabled !== true ||
+    !['configured_unverified', 'unavailable'].includes(unavailableFinBERT?.health) ||
+    unavailableFinBERT?.sentiment_artifact_count !== 0
+  ) {
+    throw new Error(`FinBERT unavailable status was unsafe: ${JSON.stringify(unavailableFinBERT)}`)
+  }
+  process.stdout.write('PASS: packaged FinBERT optional runtime status is bounded\n')
+
+  run(
+    python,
+    [
+      '-c',
+      [
+        'from sigil.ai import Capability, FinBERTConfig, LocalFinBERTProvider, ProviderInvocation',
+        'class Runtime:',
+        " def predict(self, *, text): return {'positive': 0.7, 'neutral': 0.2, 'negative': 0.1}",
+        "provider = LocalFinBERTProvider(FinBERTConfig(enabled=True, model_version='packaged-test'), Runtime())",
+        "result = provider.invoke(ProviderInvocation('packaged-request', 'packaged-task', provider.model_id, 'sha256:' + 'a' * 64, Capability.FINANCIAL_SENTIMENT, {'source_text': 'Revenue improved.', 'source_identity': 'packaged-source', 'source_digest': 'sha256:' + 'b' * 64}, 1000, '2026-08-01T18:00:00Z', '2026-08-01T18:00:01Z'))",
+        "assert result.succeeded and result.output['label'] == 'positive'",
+        "assert result.broker_submission is False and result.paper_only is True"
+      ].join('\n')
+    ],
+    { env: environment }
+  )
+  process.stdout.write('PASS: packaged deterministic FinBERT invocation stayed advisory-only\n')
 
   const stoppedSnapshot = bridgeRequest({
     command: 'control_paper_cycle',

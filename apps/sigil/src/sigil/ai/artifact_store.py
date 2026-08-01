@@ -15,6 +15,11 @@ from .analysis import (
     GenericAnalysisPayload,
     GovernedAnalysisArtifact,
 )
+from .finbert import (
+    FinBERTSentimentPayload,
+    GovernedSentimentArtifact,
+    SentimentLabel,
+)
 from .models import Capability, Responsibility
 from .registry import canonical_digest
 
@@ -60,7 +65,9 @@ class DurableAnalysisArtifactStore:
             fcntl.flock(descriptor, fcntl.LOCK_UN)
             os.close(descriptor)
 
-    def append(self, artifact: GovernedAnalysisArtifact) -> GovernedAnalysisArtifact:
+    def append(
+        self, artifact: GovernedAnalysisArtifact | GovernedSentimentArtifact
+    ) -> GovernedAnalysisArtifact | GovernedSentimentArtifact:
         with self._locked():
             records = self._read_unlocked(recover_truncated_tail=True)
             if any(item.artifact_id == artifact.artifact_id for item in records):
@@ -97,13 +104,13 @@ class DurableAnalysisArtifactStore:
 
     def read_artifacts(
         self, *, recover_truncated_tail: bool = True
-    ) -> tuple[GovernedAnalysisArtifact, ...]:
+    ) -> tuple[GovernedAnalysisArtifact | GovernedSentimentArtifact, ...]:
         with self._locked():
             return self._read_unlocked(recover_truncated_tail=recover_truncated_tail)
 
     def _read_unlocked(
         self, *, recover_truncated_tail: bool
-    ) -> tuple[GovernedAnalysisArtifact, ...]:
+    ) -> tuple[GovernedAnalysisArtifact | GovernedSentimentArtifact, ...]:
         if not self.path.exists():
             return ()
         if self.path.is_symlink() or not self.path.is_file():
@@ -121,7 +128,7 @@ class DurableAnalysisArtifactStore:
                 os.close(descriptor)
             self._fsync_directory()
             raw = raw[:boundary]
-        artifacts: list[GovernedAnalysisArtifact] = []
+        artifacts: list[GovernedAnalysisArtifact | GovernedSentimentArtifact] = []
         identities: set[str] = set()
         previous = _ZERO_HASH
         self._validated_last_hash = _ZERO_HASH
@@ -164,17 +171,38 @@ class DurableAnalysisArtifactStore:
         return getattr(self, "_validated_last_hash", _ZERO_HASH)
 
     @staticmethod
-    def _artifact_payload(artifact: GovernedAnalysisArtifact) -> dict[str, object]:
+    def _artifact_payload(
+        artifact: GovernedAnalysisArtifact | GovernedSentimentArtifact,
+    ) -> dict[str, object]:
         payload = asdict(artifact)
         payload["capability"] = artifact.capability.value
         payload["responsibility"] = artifact.responsibility.value
         return payload
 
     @staticmethod
-    def _decode_artifact(payload: object) -> GovernedAnalysisArtifact:
+    def _decode_artifact(
+        payload: object,
+    ) -> GovernedAnalysisArtifact | GovernedSentimentArtifact:
         if not isinstance(payload, dict) or not isinstance(payload.get("structured_payload"), dict):
             raise AnalysisArtifactCorruptionError("artifact payload shape is invalid")
         structured = payload["structured_payload"]
+        if payload.get("capability") == Capability.FINANCIAL_SENTIMENT.value:
+            return GovernedSentimentArtifact(
+                **{
+                    **payload,
+                    "capability": Capability(payload["capability"]),
+                    "responsibility": Responsibility(payload["responsibility"]),
+                    "structured_payload": FinBERTSentimentPayload(
+                        **{
+                            **structured,
+                            "label": SentimentLabel(structured["label"]),
+                            "limitations": tuple(structured["limitations"]),
+                        }
+                    ),
+                    "citations": tuple(payload["citations"]),
+                    "limitations": tuple(payload["limitations"]),
+                }
+            )
         return GovernedAnalysisArtifact(
             **{
                 **payload,

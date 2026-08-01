@@ -17,6 +17,21 @@ from .artifact_store import (
     DurableAnalysisArtifactStore,
 )
 from .evidence import InvocationEvidence, build_invocation_evidence
+from .finbert import (
+    FINBERT_RESPONSIBILITIES,
+    FinBERTConfig,
+    FinBERTSentimentPayload,
+    FinBERTValidationError,
+    GovernedSentimentArtifact,
+    GovernedSentimentRequest,
+    LocalFinBERTProvider,
+    SentimentAggregation,
+    SentimentLabel,
+    SentimentSourceType,
+    aggregate_sentiment,
+    build_sentiment_artifact,
+    validate_finbert_output,
+)
 from .gemma import (
     GemmaConfigurationError,
     GemmaHealth,
@@ -25,7 +40,7 @@ from .gemma import (
     LocalGemmaConfig,
     LocalGemmaProvider,
 )
-from .handoff import GovernedModelWorkRequest
+from .handoff import GovernedModelWorkRequest, GovernedSentimentWorkRequest
 from .ledger import (
     AIEvidenceConflictError,
     AIEvidenceCorruptionError,
@@ -72,6 +87,7 @@ from .service import (
 
 __all__ = [
     "ADVISORY_RESPONSIBILITIES",
+    "FINBERT_RESPONSIBILITIES",
     "AIEvidenceConflictError",
     "AIEvidenceCorruptionError",
     "AIEvidenceLedgerError",
@@ -89,6 +105,9 @@ __all__ = [
     "DurableAIEvidenceLedger",
     "DurableAnalysisArtifactStore",
     "ExecutionLocation",
+    "FinBERTConfig",
+    "FinBERTSentimentPayload",
+    "FinBERTValidationError",
     "GemmaConfigurationError",
     "GemmaHealth",
     "GemmaTransportError",
@@ -104,8 +123,12 @@ __all__ = [
     "GovernedModelRouter",
     "GovernedModelWorkRequest",
     "GovernedOutputSchema",
+    "GovernedSentimentArtifact",
+    "GovernedSentimentRequest",
+    "GovernedSentimentWorkRequest",
     "InputType",
     "InvocationEvidence",
+    "LocalFinBERTProvider",
     "LocalGemmaConfig",
     "LocalGemmaProvider",
     "ModelRegistration",
@@ -121,9 +144,15 @@ __all__ = [
     "RoutingDecision",
     "RoutingFailureClass",
     "RoutingRequest",
+    "SentimentAggregation",
+    "SentimentLabel",
+    "SentimentSourceType",
     "TrustTier",
+    "aggregate_sentiment",
     "append_routing_decision",
     "build_analysis_artifact",
     "build_invocation_evidence",
+    "build_sentiment_artifact",
+    "validate_finbert_output",
     "validate_generic_analysis",
 ]

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .artifact_store import AnalysisArtifactStoreError, DurableAnalysisArtifactStore
+from .finbert import FinBERTConfig, GovernedSentimentArtifact, LocalFinBERTProvider
 from .gemma import LocalGemmaConfig, LocalGemmaProvider
 from .ledger import AIEvidenceLedgerError, DurableAIEvidenceLedger
 
@@ -79,16 +80,39 @@ def _config(environment: dict[str, str]) -> tuple[LocalGemmaConfig, str]:
         return LocalGemmaConfig(), "configuration_invalid"
 
 
+def _finbert_config(
+    environment: dict[str, str],
+) -> tuple[FinBERTConfig, LocalFinBERTProvider | None, str]:
+    try:
+        config = FinBERTConfig.from_environment(environment)
+        provider = LocalFinBERTProvider(config)
+        health = (
+            "disabled"
+            if not config.enabled
+            else "configured_unverified"
+            if provider.identity.health.value == "healthy"
+            else "unavailable"
+        )
+        return config, provider, health
+    except ValueError:
+        return FinBERTConfig(), None, "configuration_invalid"
+
+
 def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
     source = dict(os.environ if environment is None else environment)
     root = _state_root(source)
     evidence, evidence_health, evidence_tail = _read_evidence(root)
     artifacts, artifact_health, artifact_tail = _read_artifacts(root)
     config, gemma_health = _config(source)
+    finbert_config, finbert_provider, finbert_health = _finbert_config(source)
     failures = [item for item in evidence if getattr(item, "failure_classification", None)]
-    providers = 1 if config.model_id else 0
-    available = 1 if gemma_health == "healthy" else 0
+    providers = (1 if config.model_id else 0) + (1 if finbert_config.enabled else 0)
+    available = sum(health == "healthy" for health in (gemma_health, finbert_health))
     latest = artifacts[-1] if artifacts else None
+    latest_sentiment = next(
+        (item for item in reversed(artifacts) if isinstance(item, GovernedSentimentArtifact)),
+        None,
+    )
     last_failure = failures[-1] if failures else None
     return {
         "schema_version": INSPECTION_SCHEMA_VERSION,
@@ -105,7 +129,15 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
         "configured_local_gemma_model": config.model_id,
         "local_gemma_health": gemma_health,
         "last_successful_analysis_at": None if latest is None else latest.created_at,
-        "latest_analysis_summary": None if latest is None else latest.structured_payload.summary,
+        "latest_analysis_summary": None
+        if latest is None
+        else str(
+            getattr(
+                latest.structured_payload,
+                "summary",
+                getattr(latest.structured_payload, "label", "unavailable"),
+            )
+        ),
         "last_failure_at": None if last_failure is None else last_failure.ended_at,
         "last_failure_classification": None
         if last_failure is None
@@ -115,6 +147,34 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
         "evidence_record_count": len(evidence),
         "artifact_count": len(artifacts),
         "recoverable_tail_detected": evidence_tail or artifact_tail,
+        "finbert": {
+            "enabled": finbert_config.enabled,
+            "model_id": finbert_config.model_id,
+            "model_version": finbert_config.model_version,
+            "health": finbert_health,
+            "device_class": finbert_config.device,
+            "last_successful_sentiment_at": next(
+                (
+                    item.created_at
+                    for item in reversed(artifacts)
+                    if isinstance(item, GovernedSentimentArtifact)
+                ),
+                None,
+            ),
+            "latest_sentiment": None
+            if latest_sentiment is None
+            else {
+                "label": latest_sentiment.structured_payload.label.value,
+                "confidence": latest_sentiment.confidence,
+                "source_identity": latest_sentiment.structured_payload.source_identity,
+                "freshness": latest_sentiment.stale_after,
+                "limitations": list(latest_sentiment.limitations[:5]),
+            },
+            "sentiment_artifact_count": sum(
+                isinstance(item, GovernedSentimentArtifact) for item in artifacts
+            ),
+            "available": bool(finbert_provider and finbert_health == "healthy"),
+        },
         "paper_only": True,
         "execution_authorized": False,
         "broker_submission": False,
@@ -127,10 +187,12 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
 def ai_registry_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
     source = dict(os.environ if environment is None else environment)
     config, health = _config(source)
-    if config.model_id is None:
-        return {"schema_version": 1, "entries": [], "bounded": True}
-    provider = LocalGemmaProvider(config)
-    model = provider.registration()
+    models = []
+    if config.model_id is not None:
+        models.append((LocalGemmaProvider(config).registration(), health))
+    finbert_config, finbert_provider, finbert_health = _finbert_config(source)
+    if finbert_config.enabled and finbert_provider is not None:
+        models.append((finbert_provider.registration(), finbert_health))
     return {
         "schema_version": 1,
         "entries": [
@@ -141,7 +203,7 @@ def ai_registry_status(environment: dict[str, str] | None = None) -> dict[str, A
                 "model_version": model.version,
                 "execution_location": model.execution_location.value,
                 "declared_capabilities": sorted(item.value for item in model.capabilities),
-                "health_state": health,
+                "health_state": model_health,
                 "enabled_state": model.enabled,
                 "trust_tier": model.trust_tier.name.lower(),
                 "privacy_tier": model.privacy_tier.name.lower(),
@@ -153,13 +215,14 @@ def ai_registry_status(environment: dict[str, str] | None = None) -> dict[str, A
                     item.value for item in model.prohibited_responsibilities
                 ),
             }
+            for model, model_health in models[:MAX_INSPECTION_LIMIT]
         ],
         "bounded": True,
     }
 
 
 def _artifact_summary(artifact) -> dict[str, Any]:
-    return {
+    summary = {
         "artifact_id": artifact.artifact_id,
         "request_id": artifact.request_id,
         "task_correlation_id": artifact.task_correlation_id,
@@ -175,6 +238,16 @@ def _artifact_summary(artifact) -> dict[str, Any]:
         "execution_authorized": False,
         "broker_submission": False,
     }
+    if isinstance(artifact, GovernedSentimentArtifact):
+        summary["sentiment"] = {
+            "label": artifact.structured_payload.label.value,
+            "positive_score": artifact.structured_payload.positive_score,
+            "neutral_score": artifact.structured_payload.neutral_score,
+            "negative_score": artifact.structured_payload.negative_score,
+            "source_identity": artifact.structured_payload.source_identity,
+            "freshness": artifact.stale_after,
+        }
+    return summary
 
 
 def ai_recent_artifacts(
@@ -221,20 +294,34 @@ def ai_artifact_get(payload: object, environment: dict[str, str] | None = None) 
     match = next((item for item in artifacts if item.artifact_id == artifact_id), None)
     if match is None:
         return {"schema_version": 1, "found": False, "artifact": None, "health": health}
+    if isinstance(match, GovernedSentimentArtifact):
+        structured_payload = {
+            "label": match.structured_payload.label.value,
+            "positive_score": match.structured_payload.positive_score,
+            "neutral_score": match.structured_payload.neutral_score,
+            "negative_score": match.structured_payload.negative_score,
+            "confidence": match.structured_payload.confidence,
+            "source_identity": match.structured_payload.source_identity,
+            "source_digest": match.structured_payload.source_digest,
+            "analyzed_at": match.structured_payload.analyzed_at,
+            "limitations": list(match.structured_payload.limitations),
+        }
+    else:
+        structured_payload = {
+            "summary": match.structured_payload.summary,
+            "findings": list(match.structured_payload.findings),
+            "risks": list(match.structured_payload.risks),
+            "evidence_references": list(match.structured_payload.evidence_references),
+            "limitations": list(match.structured_payload.limitations),
+            "confidence": match.structured_payload.confidence,
+        }
     return {
         "schema_version": 1,
         "found": True,
         "health": health,
         "artifact": {
             **_artifact_summary(match),
-            "structured_payload": {
-                "summary": match.structured_payload.summary,
-                "findings": list(match.structured_payload.findings),
-                "risks": list(match.structured_payload.risks),
-                "evidence_references": list(match.structured_payload.evidence_references),
-                "limitations": list(match.structured_payload.limitations),
-                "confidence": match.structured_payload.confidence,
-            },
+            "structured_payload": structured_payload,
             "routing_evidence_id": match.routing_evidence_id,
             "invocation_evidence_id": match.invocation_evidence_id,
         },

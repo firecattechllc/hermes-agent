@@ -14,6 +14,19 @@ const healthyStatus: AIStatus = {
   last_successful_analysis_at: '2026-08-01T17:00:00Z',
   latest_analysis_summary: 'Sanitized research summary',
   last_failure_classification: null,
+  finbert: {
+    enabled: true,
+    available: true,
+    health: 'healthy',
+    sentiment_artifact_count: 1,
+    latest_sentiment: {
+      label: 'positive',
+      confidence: 0.82,
+      source_identity: 'news-42',
+      freshness: null,
+      limitations: ['Advisory only']
+    }
+  },
   paper_only: true,
   broker_submission: false
 }
@@ -33,7 +46,7 @@ describe('AI Foundation status panel', () => {
 
     expect(screen.getAllByText('healthy').length).toBeGreaterThan(0)
     expect(screen.getByText('1 models · 1 available')).toBeTruthy()
-    expect(screen.getByText('Sanitized research summary')).toBeTruthy()
+    expect(screen.getByText('positive · 82% · news-42')).toBeTruthy()
   })
 
   it('renders the latest structured failure classification', () => {

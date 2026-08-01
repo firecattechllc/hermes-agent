@@ -54,3 +54,32 @@ class GovernedModelWorkRequest:
             timeout_ms=self.timeout_ms,
             fallback_allowed=self.fallback_allowed,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class GovernedSentimentWorkRequest:
+    """Hermes handoff containing references only; source text stays backend-local."""
+
+    request_id: str
+    task_correlation_id: str
+    source_identity: str
+    source_digest: str
+    source_type: str
+    privacy_requirement: PrivacyTier
+    evidence_references: tuple[str, ...]
+    responsibility: Responsibility
+    expected_output_contract: str = "sigil.ai.output.financial-sentiment.v1"
+    timeout_ms: int = 15_000
+    fallback_allowed: bool = False
+    paper_only: bool = True
+    broker_submission: bool = False
+
+    def __post_init__(self) -> None:
+        if self.paper_only is not True or self.broker_submission is not False:
+            raise ValueError("governed sentiment handoff cannot receive execution authority")
+        if _SHA256.fullmatch(self.source_digest) is None or any(
+            _SHA256.fullmatch(item) is None for item in self.evidence_references
+        ):
+            raise ValueError("sentiment handoff requires digest references")
+        if self.expected_output_contract != "sigil.ai.output.financial-sentiment.v1":
+            raise ValueError("sentiment handoff output contract is invalid")

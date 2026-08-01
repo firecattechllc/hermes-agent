@@ -1722,6 +1722,19 @@ export type AIStatus = {
   last_successful_analysis_at: string | null
   latest_analysis_summary?: string | null
   last_failure_classification: string | null
+  finbert?: {
+    enabled: boolean
+    available: boolean
+    health: string
+    sentiment_artifact_count: number
+    latest_sentiment: {
+      label: string
+      confidence: number
+      source_identity: string
+      freshness: string | null
+      limitations: string[]
+    } | null
+  }
   paper_only: true
   broker_submission: false
 }
@@ -1742,9 +1755,10 @@ export function AIFoundationPanel({ status }: { status: AIStatus | null }) {
       </div>
       <dl className="mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-xs sm:grid-cols-2 lg:grid-cols-4">
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Local Gemma</dt><dd className="mt-1 font-mono">{status?.local_gemma_health ?? 'unavailable'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">FinBERT sentiment</dt><dd className="mt-1 font-mono">{status?.finbert?.health ?? 'unavailable'} · {status?.finbert?.sentiment_artifact_count ?? 0} artifacts</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Registry</dt><dd className="mt-1 font-mono">{status?.configured_model_count ?? 0} models · {status?.available_provider_count ?? 0} available</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Evidence / artifacts</dt><dd className="mt-1 font-mono">{status?.evidence_ledger_health ?? 'unavailable'} · {status?.artifact_store_health ?? 'unavailable'}</dd></div>
-        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Latest result</dt><dd className="mt-1 break-words font-mono">{status?.last_failure_classification ?? status?.latest_analysis_summary ?? status?.last_successful_analysis_at ?? 'none'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Latest result</dt><dd className="mt-1 break-words font-mono">{status?.last_failure_classification ?? (status?.finbert?.latest_sentiment ? `${status.finbert.latest_sentiment.label} · ${Math.round(status.finbert.latest_sentiment.confidence * 100)}% · ${status.finbert.latest_sentiment.source_identity}` : status?.latest_analysis_summary ?? status?.last_successful_analysis_at ?? 'none')}</dd></div>
       </dl>
     </section>
   )
