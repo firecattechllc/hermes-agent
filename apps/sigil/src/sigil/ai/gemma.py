@@ -126,11 +126,14 @@ class LocalGemmaConfig:
     model_id: str | None = None
     model_version: str = "configured-v1"
     request_timeout_ms: int = 30_000
+    keep_alive: int | None = None
 
     def __post_init__(self) -> None:
         validate_identifier(self.model_version, "model_version")
         if not 100 <= self.request_timeout_ms <= 300_000:
             raise GemmaConfigurationError("local Gemma timeout is outside the governed bound")
+        if self.keep_alive is not None and self.keep_alive != 0:
+            raise GemmaConfigurationError("local Gemma keep_alive must be zero when configured")
         if self.model_id is not None:
             validate_identifier(self.model_id, "model_id")
         if self.endpoint is not None:
@@ -340,24 +343,27 @@ class LocalGemmaProvider:
     ) -> tuple[Mapping[str, object] | None, ProviderFailure | None]:
         assert self.config.endpoint is not None
         try:
+            request_payload: dict[str, object] = {
+                "model": self.model_id,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            dict(invocation.input_payload),
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ),
+                    }
+                ],
+                "format": "json",
+                "stream": False,
+            }
+            if self.config.keep_alive is not None:
+                request_payload["keep_alive"] = self.config.keep_alive
             payload = self.transport.request(
                 method="POST",
                 url=f"{self.config.endpoint.rstrip('/')}/api/chat",
-                payload={
-                    "model": self.model_id,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": json.dumps(
-                                dict(invocation.input_payload),
-                                sort_keys=True,
-                                separators=(",", ":"),
-                            ),
-                        }
-                    ],
-                    "format": "json",
-                    "stream": False,
-                },
+                payload=request_payload,
                 timeout_seconds=min(invocation.timeout_ms, self.request_timeout_ms) / 1_000,
             )
             if not isinstance(payload, dict):

@@ -1717,6 +1717,31 @@ export type AIStatus = {
   configured_model_count: number
   available_provider_count: number
   local_gemma_health: string
+  mac_ollama?: {
+    enabled: boolean
+    device_identity?: string
+    fleet_role?: string
+    endpoint_classification?: string
+    embedding_adapter?: string
+    health?: string
+    roles?: Record<'primary' | 'fast' | 'embedding' | 'fallback', {
+      configured: boolean
+      model_identity: string
+      health: string
+      identity_match: boolean
+      readiness: string
+      reason: string | null
+      deprecated: boolean
+      enabled: boolean
+      admission_state: string
+      upstream_revision_evidence: string
+      license_evidence: string
+    }>
+    paper_only: true
+    broker_submission: false
+    execution_authorized: false
+    approval_authority: false
+  }
   evidence_ledger_health: string
   artifact_store_health: string
   artifact_count: number
@@ -1837,6 +1862,9 @@ export function AIFoundationPanel({ status }: { status: AIStatus | null }) {
       </div>
       <dl className="mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-xs sm:grid-cols-2 lg:grid-cols-4">
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Local Gemma</dt><dd className="mt-1 font-mono">{status?.local_gemma_health ?? 'unavailable'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Mac Ollama profile</dt><dd className="mt-1 break-words font-mono">{status?.mac_ollama?.enabled ? 'enabled' : 'disabled'} · {status?.mac_ollama?.endpoint_classification ?? status?.mac_ollama?.health ?? 'unavailable'} · {status?.mac_ollama?.fleet_role ?? 'mac'} · paper only</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Ollama primary / fast</dt><dd className="mt-1 break-words font-mono">{status?.mac_ollama?.roles?.primary.health ?? 'unavailable'} · {status?.mac_ollama?.roles?.primary.model_identity ?? 'not configured'} / {status?.mac_ollama?.roles?.fast.health ?? 'unavailable'} · {status?.mac_ollama?.roles?.fast.model_identity ?? 'not configured'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Ollama embedding / fallback</dt><dd className="mt-1 break-words font-mono">{status?.mac_ollama?.embedding_adapter ?? 'unconfigured'} · {status?.mac_ollama?.roles?.embedding.health ?? 'unavailable'} / fallback {status?.mac_ollama?.roles?.fallback.admission_state ?? 'rejected'} · deprecated</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">FinBERT sentiment</dt><dd className="mt-1 font-mono">{status?.finbert?.health ?? 'unavailable'} · {status?.finbert?.sentiment_artifact_count ?? 0} artifacts</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">EmbeddingGemma retrieval</dt><dd className="mt-1 font-mono">{status?.embeddinggemma?.health ?? 'unavailable'} · {status?.embeddinggemma?.source_count ?? 0} sources · {status?.embeddinggemma?.embedding_count ?? 0} embeddings</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Kronos forecasting</dt><dd className="mt-1 font-mono">{status?.kronos?.health ?? 'unavailable'} · {status?.kronos?.forecast_artifact_count ?? 0} forecasts · {status?.kronos?.evaluation_artifact_count ?? 0} evaluations</dd></div>

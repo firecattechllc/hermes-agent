@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import Enum, IntEnum
 
 AI_CONTRACT_VERSION = 1
-_IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,127}$")
+_IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9._:/-]{0,127}$")
 _SENSITIVE_METADATA_MARKERS = (
     "api_key",
     "apikey",
@@ -20,7 +20,7 @@ _SENSITIVE_METADATA_MARKERS = (
 
 
 def validate_identifier(value: str, field: str) -> str:
-    if not _IDENTIFIER.fullmatch(value):
+    if not _IDENTIFIER.fullmatch(value) or "//" in value or "/../" in f"/{value}/":
         raise ValueError(f"{field} must be a stable lowercase identifier")
     return value
 
