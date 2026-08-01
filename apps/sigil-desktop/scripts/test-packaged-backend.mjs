@@ -101,6 +101,19 @@ try {
   }
   process.stdout.write('PASS: ai_status preserved advisory-only authority\n')
 
+  const disabledOrchestration = aiStatus.orchestration
+  if (
+    disabledOrchestration?.enabled !== false ||
+    disabledOrchestration?.health !== 'disabled' ||
+    disabledOrchestration?.buzz !== 'unavailable' ||
+    disabledOrchestration?.atlas !== 'unavailable' ||
+    disabledOrchestration?.openworker !== 'unavailable' ||
+    disabledOrchestration?.pending_human_interactions !== 0
+  ) {
+    throw new Error(`Hermes orchestration did not start safely disabled: ${JSON.stringify(disabledOrchestration)}`)
+  }
+  process.stdout.write('PASS: packaged optional orchestration surfaces start safely disabled\n')
+
   const recentArtifacts = bridgeRequest({
     command: 'ai_recent_artifacts',
     payload: { limit: 1 }
@@ -275,6 +288,53 @@ try {
     { env: environment }
   )
   process.stdout.write('PASS: packaged deterministic Kronos forecast and evaluation stayed advisory-only\n')
+
+  run(
+    python,
+    [
+      '-c',
+      [
+        'from dataclasses import replace',
+        'from pathlib import Path',
+        'from sigil.ai import *',
+        'class Specialists:',
+        ' def execute(self, step, request, *, attempt, completed_at):',
+        "  evidence = 'sha256:' + ('c' * 64)",
+        "  artifact = 'analysis-artifact-' + ('d' * 64)",
+        "  return GovernedStepResult('packaged-step-result-' + str(step.ordinal), step.step_id, OrchestrationStepStatus.SUCCEEDED, artifact, (evidence,), ('sanitized finding',), ('operator review required',), (), (), ('Advisory only.',), 0.5, 'current', None, False, False, attempt, completed_at)",
+        "root = Path(__import__('os').environ['SIGIL_DESKTOP_STATE_DIR']).resolve()",
+        "request = GovernedOrchestrationRequest('orchestration-packaged-complete', 'packaged-orchestration-task', ORCHESTRATION_WORKFLOW, 'Synthesize governed research evidence for operator review.', frozenset((Capability.SEMANTIC_RETRIEVAL, Capability.FINANCIAL_SENTIMENT, Capability.TIME_SERIES_FORECASTING, Capability.REASONING)), frozenset((Responsibility.RESEARCH_RETRIEVAL, Responsibility.FINANCIAL_SENTIMENT_ANALYSIS, Responsibility.MARKET_FORECASTING, Responsibility.RESEARCH_ANALYSIS)), ('sha256:' + ('a' * 64),), PrivacyTier.LOCAL_ONLY, TrustTier.TRUSTED, CostClass.FREE, 5000, 4, 2, True, False, '2026-08-01T18:10:00+00:00')",
+        "service = GovernedOrchestrationService(store=DurableOrchestrationStore(root), artifact_store=DurableAnalysisArtifactStore(root), specialist_executor=Specialists(), registry_revision='sha256:' + ('b' * 64), enabled=True)",
+        "result = service.run(request, completed_at='2026-08-01T18:10:05+00:00')",
+        'assert result.terminal_status == OrchestrationState.COMPLETED and result.artifact_id',
+        'assert result.paper_only is True and result.broker_submission is False',
+        "paused = service.run(replace(request, orchestration_id='orchestration-packaged-paused', task_correlation_id='packaged-human-task', human_approval_requirement=True, requested_at='2026-08-01T18:11:00+00:00'), completed_at='2026-08-01T18:11:05+00:00')",
+        'assert paused.terminal_status == OrchestrationState.PAUSED',
+        'records = DurableOrchestrationStore(root).read_records()',
+        'assert records[-1].interactions and records[-1].interactions[0].response is None',
+        'assert all(record.request.paper_only and not record.request.broker_submission for record in records)'
+      ].join('\n')
+    ],
+    { env: environment }
+  )
+  const packagedOrchestration = bridgeRequest(
+    { command: 'ai_status' },
+    {
+      SIGIL_AI_ORCHESTRATION_ENABLED: 'true',
+      SIGIL_AI_ATLAS_ENABLED: 'true'
+    }
+  ).orchestration
+  if (
+    packagedOrchestration?.completed_count !== 1 ||
+    packagedOrchestration?.paused_count !== 1 ||
+    packagedOrchestration?.pending_human_interactions !== 1 ||
+    packagedOrchestration?.atlas !== 'available' ||
+    packagedOrchestration?.buzz !== 'unavailable' ||
+    packagedOrchestration?.openworker !== 'unavailable'
+  ) {
+    throw new Error(`Packaged orchestration inspection was unsafe: ${JSON.stringify(packagedOrchestration)}`)
+  }
+  process.stdout.write('PASS: packaged deterministic orchestration and human interaction stayed governed\n')
 
   const stoppedSnapshot = bridgeRequest({
     command: 'control_paper_cycle',

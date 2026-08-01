@@ -130,6 +130,10 @@ class Responsibility(str, Enum):
     )
     AUTOMATIC_STRATEGY_PROMOTION = "automatic_strategy_promotion"
     AUTOMATIC_FORECAST_DRIVEN_TRADING = "automatic_forecast_driven_trading"
+    ARBITRARY_NETWORK_ACCESS = "arbitrary_network_access"
+    UNRESTRICTED_FILESYSTEM_ACCESS = "unrestricted_filesystem_access"
+    AUTONOMOUS_TRADING = "autonomous_trading"
+    SELF_MODIFYING_GOVERNANCE = "self_modifying_governance"
 
 
 PROHIBITED_RESPONSIBILITIES = frozenset(
@@ -151,6 +155,10 @@ PROHIBITED_RESPONSIBILITIES = frozenset(
         Responsibility.SOURCE_DELETION_WITHOUT_GOVERNED_OPERATOR_ACTION,
         Responsibility.AUTOMATIC_STRATEGY_PROMOTION,
         Responsibility.AUTOMATIC_FORECAST_DRIVEN_TRADING,
+        Responsibility.ARBITRARY_NETWORK_ACCESS,
+        Responsibility.UNRESTRICTED_FILESYSTEM_ACCESS,
+        Responsibility.AUTONOMOUS_TRADING,
+        Responsibility.SELF_MODIFYING_GOVERNANCE,
     }
 )
 

@@ -1772,6 +1772,32 @@ export type AIStatus = {
       limitations: string[]
     } | null
   }
+  orchestration?: {
+    enabled: boolean
+    health: string
+    active_count: number
+    completed_count: number
+    partial_count: number
+    failed_count: number
+    paused_count: number
+    pending_human_interactions: number
+    buzz: string
+    atlas: string
+    openworker: string
+    latest: {
+      orchestration_id: string
+      plan_id: string
+      state: string
+      capabilities: string[]
+      completed_steps: number
+      failed_steps: number
+      artifact_id: string | null
+      evidence_identities: string[]
+      failure_classification: string | null
+      limitations: string[]
+      updated_at: string
+    } | null
+  }
   paper_only: true
   broker_submission: false
 }
@@ -1795,9 +1821,13 @@ export function AIFoundationPanel({ status }: { status: AIStatus | null }) {
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">FinBERT sentiment</dt><dd className="mt-1 font-mono">{status?.finbert?.health ?? 'unavailable'} · {status?.finbert?.sentiment_artifact_count ?? 0} artifacts</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">EmbeddingGemma retrieval</dt><dd className="mt-1 font-mono">{status?.embeddinggemma?.health ?? 'unavailable'} · {status?.embeddinggemma?.source_count ?? 0} sources · {status?.embeddinggemma?.embedding_count ?? 0} embeddings</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Kronos forecasting</dt><dd className="mt-1 font-mono">{status?.kronos?.health ?? 'unavailable'} · {status?.kronos?.forecast_artifact_count ?? 0} forecasts · {status?.kronos?.evaluation_artifact_count ?? 0} evaluations</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Hermes orchestration</dt><dd className="mt-1 font-mono">{status?.orchestration?.health ?? 'unavailable'} · {status?.orchestration?.latest?.state ?? 'idle'} · {status?.orchestration?.pending_human_interactions ?? 0} pending input</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Coordination surfaces</dt><dd className="mt-1 font-mono">Buzz {status?.orchestration?.buzz ?? 'unavailable'} · Atlas {status?.orchestration?.atlas ?? 'unavailable'} · OpenWorker {status?.orchestration?.openworker ?? 'unavailable'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Orchestration evidence</dt><dd className="mt-1 break-all font-mono">{status?.orchestration?.latest ? `${status.orchestration.latest.capabilities.join(', ') || 'no capabilities'} · ${status.orchestration.latest.artifact_id ?? 'no artifact'} · ${status.orchestration.latest.evidence_identities[0] ?? 'no evidence'}` : 'none'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Orchestration limitations</dt><dd className="mt-1 break-words font-mono">{status?.orchestration?.latest?.limitations.join(' · ') || 'none'}</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Registry</dt><dd className="mt-1 font-mono">{status?.configured_model_count ?? 0} models · {status?.available_provider_count ?? 0} available</dd></div>
         <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Evidence / artifacts</dt><dd className="mt-1 font-mono">{status?.evidence_ledger_health ?? 'unavailable'} · {status?.artifact_store_health ?? 'unavailable'}</dd></div>
-        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Latest result</dt><dd className="mt-1 break-words font-mono">{status?.last_failure_classification ?? (status?.kronos?.last_successful_forecast ? `${status.kronos.last_successful_forecast.symbol} · ${status.kronos.last_successful_forecast.interval} · ${status.kronos.last_successful_forecast.forecast_horizon} points · ${status.kronos.last_successful_forecast.freshness}` : status?.embeddinggemma?.latest_retrieval ? `${status.embeddinggemma.latest_retrieval.result_count} retrieval results · ${status.embeddinggemma.latest_retrieval.freshness.join(', ') || 'no matches'}` : status?.finbert?.latest_sentiment ? `${status.finbert.latest_sentiment.label} · ${Math.round(status.finbert.latest_sentiment.confidence * 100)}% · ${status.finbert.latest_sentiment.source_identity}` : status?.latest_analysis_summary ?? status?.last_successful_analysis_at ?? 'none')}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Latest result</dt><dd className="mt-1 break-words font-mono">{status?.last_failure_classification ?? (status?.orchestration?.latest ? `${status.orchestration.latest.state} · ${status.orchestration.latest.completed_steps} completed · ${status.orchestration.latest.failed_steps} failed` : status?.kronos?.last_successful_forecast ? `${status.kronos.last_successful_forecast.symbol} · ${status.kronos.last_successful_forecast.interval} · ${status.kronos.last_successful_forecast.forecast_horizon} points · ${status.kronos.last_successful_forecast.freshness}` : status?.embeddinggemma?.latest_retrieval ? `${status.embeddinggemma.latest_retrieval.result_count} retrieval results · ${status.embeddinggemma.latest_retrieval.freshness.join(', ') || 'no matches'}` : status?.finbert?.latest_sentiment ? `${status.finbert.latest_sentiment.label} · ${Math.round(status.finbert.latest_sentiment.confidence * 100)}% · ${status.finbert.latest_sentiment.source_identity}` : status?.latest_analysis_summary ?? status?.last_successful_analysis_at ?? 'none')}</dd></div>
       </dl>
     </section>
   )

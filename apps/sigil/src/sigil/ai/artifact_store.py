@@ -29,6 +29,7 @@ from .kronos import (
     UncertaintyMode,
 )
 from .models import Capability, PrivacyTier, Responsibility, TrustTier
+from .orchestration import GovernedOrchestrationArtifact
 from .registry import canonical_digest
 from .retrieval import (
     GovernedRetrievalArtifact,
@@ -84,13 +85,15 @@ class DurableAnalysisArtifactStore:
         | GovernedSentimentArtifact
         | GovernedRetrievalArtifact
         | GovernedForecastArtifact
-        | GovernedForecastEvaluationArtifact,
+        | GovernedForecastEvaluationArtifact
+        | GovernedOrchestrationArtifact,
     ) -> (
         GovernedAnalysisArtifact
         | GovernedSentimentArtifact
         | GovernedRetrievalArtifact
         | GovernedForecastArtifact
         | GovernedForecastEvaluationArtifact
+        | GovernedOrchestrationArtifact
     ):
         with self._locked():
             records = self._read_unlocked(recover_truncated_tail=True)
@@ -133,7 +136,8 @@ class DurableAnalysisArtifactStore:
         | GovernedSentimentArtifact
         | GovernedRetrievalArtifact
         | GovernedForecastArtifact
-        | GovernedForecastEvaluationArtifact,
+        | GovernedForecastEvaluationArtifact
+        | GovernedOrchestrationArtifact,
         ...,
     ]:
         with self._locked():
@@ -146,7 +150,8 @@ class DurableAnalysisArtifactStore:
         | GovernedSentimentArtifact
         | GovernedRetrievalArtifact
         | GovernedForecastArtifact
-        | GovernedForecastEvaluationArtifact,
+        | GovernedForecastEvaluationArtifact
+        | GovernedOrchestrationArtifact,
         ...,
     ]:
         if not self.path.exists():
@@ -172,6 +177,7 @@ class DurableAnalysisArtifactStore:
             | GovernedRetrievalArtifact
             | GovernedForecastArtifact
             | GovernedForecastEvaluationArtifact
+            | GovernedOrchestrationArtifact
         ] = []
         identities: set[str] = set()
         previous = _ZERO_HASH
@@ -220,7 +226,8 @@ class DurableAnalysisArtifactStore:
         | GovernedSentimentArtifact
         | GovernedRetrievalArtifact
         | GovernedForecastArtifact
-        | GovernedForecastEvaluationArtifact,
+        | GovernedForecastEvaluationArtifact
+        | GovernedOrchestrationArtifact,
     ) -> dict[str, object]:
         payload = asdict(artifact)
         payload["capability"] = artifact.capability.value
@@ -236,9 +243,31 @@ class DurableAnalysisArtifactStore:
         | GovernedRetrievalArtifact
         | GovernedForecastArtifact
         | GovernedForecastEvaluationArtifact
+        | GovernedOrchestrationArtifact
     ):
         if not isinstance(payload, dict):
             raise AnalysisArtifactCorruptionError("artifact payload shape is invalid")
+        if payload.get("capability") == Capability.ORCHESTRATION.value:
+            return GovernedOrchestrationArtifact(
+                **{
+                    **payload,
+                    "capability": Capability(payload["capability"]),
+                    "responsibility": Responsibility(payload["responsibility"]),
+                    "completed_step_ids": tuple(payload["completed_step_ids"]),
+                    "failed_step_ids": tuple(payload["failed_step_ids"]),
+                    "skipped_step_ids": tuple(payload["skipped_step_ids"]),
+                    "evidence_identities": tuple(payload["evidence_identities"]),
+                    "retrieval_artifact_ids": tuple(payload["retrieval_artifact_ids"]),
+                    "sentiment_artifact_ids": tuple(payload["sentiment_artifact_ids"]),
+                    "forecast_artifact_ids": tuple(payload["forecast_artifact_ids"]),
+                    "findings": tuple(payload["findings"]),
+                    "risks": tuple(payload["risks"]),
+                    "disagreements": tuple(payload["disagreements"]),
+                    "missing_evidence": tuple(payload["missing_evidence"]),
+                    "limitations": tuple(payload["limitations"]),
+                    "freshness": tuple(payload["freshness"]),
+                }
+            )
         if str(payload.get("artifact_id", "")).startswith("evaluation-artifact-"):
             return GovernedForecastEvaluationArtifact(
                 **{

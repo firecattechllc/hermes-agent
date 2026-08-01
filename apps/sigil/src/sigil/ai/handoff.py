@@ -149,3 +149,36 @@ class GovernedForecastWorkRequest:
             raise ValueError("forecast handoff requires digest references")
         if self.expected_output_contract != "sigil.ai.output.time-series-forecast.v1":
             raise ValueError("forecast handoff output contract is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class GovernedOrchestrationWorkRequest:
+    """Bounded Hermes request for the single governed advisory workflow."""
+
+    orchestration_id: str
+    task_correlation_id: str
+    workflow_type: str
+    objective: str
+    evidence_context_digests: tuple[str, ...]
+    privacy_requirement: PrivacyTier
+    trust_requirement: TrustTier
+    allowed_capabilities: tuple[Capability, ...]
+    allowed_responsibilities: tuple[Responsibility, ...]
+    timeout_ms: int
+    maximum_steps: int
+    maximum_parallelism: int
+    fallback_allowed: bool
+    human_approval_required: bool
+    expected_output_contract: str = "sigil.ai.output.hermes-orchestration.v1"
+    paper_only: bool = True
+    broker_submission: bool = False
+
+    def __post_init__(self) -> None:
+        if self.paper_only is not True or self.broker_submission is not False:
+            raise ValueError("governed orchestration handoff cannot receive execution authority")
+        if not self.evidence_context_digests or any(
+            _SHA256.fullmatch(item) is None for item in self.evidence_context_digests
+        ):
+            raise ValueError("orchestration handoff requires digest references")
+        if self.expected_output_contract != "sigil.ai.output.hermes-orchestration.v1":
+            raise ValueError("orchestration handoff output contract is invalid")

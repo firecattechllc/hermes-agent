@@ -18,6 +18,12 @@ from .kronos import (
     LocalKronosProvider,
 )
 from .ledger import AIEvidenceLedgerError, DurableAIEvidenceLedger
+from .orchestration import (
+    DurableOrchestrationStore,
+    GovernedOrchestrationArtifact,
+    OrchestrationState,
+    OrchestrationStoreError,
+)
 from .retrieval import (
     DurableRetrievalStore,
     EmbeddingGemmaConfig,
@@ -103,6 +109,22 @@ def _read_retrieval(
         return (), (), (), "recoverable_tail" if recoverable else "corrupt", recoverable
 
 
+def _read_orchestrations(
+    root: Path | None,
+) -> tuple[tuple[object, ...], str, bool]:
+    directory = None if root is None else root / "governed-ai-orchestration-v1"
+    if directory is None or not (directory / "orchestrations.jsonl").exists():
+        return (), "empty", False
+    if not (directory / "orchestrations.lock").exists():
+        return (), "corrupt", False
+    try:
+        records = DurableOrchestrationStore(root).latest_all()
+        return records, "healthy", False
+    except OrchestrationStoreError as error:
+        recoverable = "truncated tail" in str(error)
+        return (), "recoverable_tail" if recoverable else "corrupt", recoverable
+
+
 def _config(environment: dict[str, str]) -> tuple[LocalGemmaConfig, str]:
     try:
         config = LocalGemmaConfig.from_environment(environment)
@@ -172,6 +194,9 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
     evidence, evidence_health, evidence_tail = _read_evidence(root)
     artifacts, artifact_health, artifact_tail = _read_artifacts(root)
     sources, chunks, embeddings, retrieval_health, retrieval_tail = _read_retrieval(root)
+    orchestrations, orchestration_health, orchestration_tail = _read_orchestrations(root)
+    latest_by_orchestration = {item.orchestration_id: item for item in orchestrations}
+    latest_orchestrations = tuple(latest_by_orchestration.values())
     config, gemma_health = _config(source)
     finbert_config, finbert_provider, finbert_health = _finbert_config(source)
     embedding_config, embedding_provider, embedding_health = _embedding_config(source)
@@ -208,7 +233,13 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
         ),
         None,
     )
-    if isinstance(latest, GovernedForecastEvaluationArtifact):
+    latest_orchestration_artifact = next(
+        (item for item in reversed(artifacts) if isinstance(item, GovernedOrchestrationArtifact)),
+        None,
+    )
+    if isinstance(latest, GovernedOrchestrationArtifact):
+        latest_summary = f"{len(latest.completed_step_ids)} orchestration steps completed"
+    elif isinstance(latest, GovernedForecastEvaluationArtifact):
         latest_summary = f"forecast evaluation MAE {latest.mae:.6g}"
     elif isinstance(latest, GovernedForecastArtifact):
         latest_summary = f"{latest.symbol} {latest.forecast_horizon}-point forecast"
@@ -243,7 +274,10 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
         "artifact_store_health": artifact_health,
         "evidence_record_count": len(evidence),
         "artifact_count": len(artifacts),
-        "recoverable_tail_detected": evidence_tail or artifact_tail or retrieval_tail,
+        "recoverable_tail_detected": evidence_tail
+        or artifact_tail
+        or retrieval_tail
+        or orchestration_tail,
         "finbert": {
             "enabled": finbert_config.enabled,
             "model_id": finbert_config.model_id,
@@ -344,6 +378,83 @@ def ai_status(environment: dict[str, str] | None = None) -> dict[str, Any]:
             if last_failure is None
             else last_failure.failure_classification,
         },
+        "orchestration": {
+            "enabled": source.get("SIGIL_AI_ORCHESTRATION_ENABLED", "").lower()
+            in {"1", "true", "yes"},
+            "health": "disabled"
+            if source.get("SIGIL_AI_ORCHESTRATION_ENABLED", "").lower() not in {"1", "true", "yes"}
+            else orchestration_health,
+            "store_health": orchestration_health,
+            "recoverable_corruption": orchestration_tail,
+            "active_count": sum(
+                item.state in {OrchestrationState.PLANNED, OrchestrationState.RUNNING}
+                for item in latest_orchestrations
+            ),
+            "completed_count": sum(
+                item.state == OrchestrationState.COMPLETED for item in latest_orchestrations
+            ),
+            "partial_count": sum(
+                item.state == OrchestrationState.PARTIAL for item in latest_orchestrations
+            ),
+            "failed_count": sum(
+                item.state in {OrchestrationState.FAILED, OrchestrationState.CANCELLED}
+                for item in latest_orchestrations
+            ),
+            "paused_count": sum(
+                item.state == OrchestrationState.PAUSED for item in latest_orchestrations
+            ),
+            "pending_human_interactions": sum(
+                item.response is None
+                for record in latest_orchestrations
+                for item in record.interactions
+            ),
+            "buzz": "available"
+            if source.get("SIGIL_AI_BUZZ_ENABLED", "").lower() in {"1", "true", "yes"}
+            else "unavailable",
+            "atlas": "available"
+            if source.get("SIGIL_AI_ATLAS_ENABLED", "").lower() in {"1", "true", "yes"}
+            else "unavailable",
+            "openworker": "available"
+            if source.get("SIGIL_AI_OPENWORKER_ENABLED", "").lower() in {"1", "true", "yes"}
+            else "unavailable",
+            "worker_count": 1
+            if source.get("SIGIL_AI_OPENWORKER_ENABLED", "").lower() in {"1", "true", "yes"}
+            else 0,
+            "latest": None
+            if not latest_orchestrations
+            else {
+                "orchestration_id": latest_orchestrations[-1].orchestration_id,
+                "plan_id": latest_orchestrations[-1].plan.plan_id,
+                "state": latest_orchestrations[-1].state.value,
+                "capabilities": [
+                    item.capability.value for item in latest_orchestrations[-1].plan.steps
+                ],
+                "completed_steps": sum(
+                    item.status.value == "succeeded"
+                    for item in latest_orchestrations[-1].step_results
+                ),
+                "failed_steps": sum(
+                    item.status.value == "failed" for item in latest_orchestrations[-1].step_results
+                ),
+                "artifact_id": latest_orchestrations[-1].final_artifact_id,
+                "evidence_identities": [
+                    item.evidence_id for item in latest_orchestrations[-1].evidence[-10:]
+                ],
+                "failure_classification": latest_orchestrations[-1].failure_classification,
+                "limitations": [
+                    item
+                    for result in latest_orchestrations[-1].step_results
+                    for item in result.limitations
+                ][:5],
+                "updated_at": latest_orchestrations[-1].updated_at,
+            },
+            "latest_artifact": None
+            if latest_orchestration_artifact is None
+            else latest_orchestration_artifact.artifact_id,
+            "paper_only": True,
+            "execution_authorized": False,
+            "broker_submission": False,
+        },
         "paper_only": True,
         "execution_authorized": False,
         "broker_submission": False,
@@ -397,6 +508,24 @@ def ai_registry_status(environment: dict[str, str] | None = None) -> dict[str, A
 
 
 def _artifact_summary(artifact) -> dict[str, Any]:
+    if isinstance(artifact, GovernedOrchestrationArtifact):
+        return {
+            "artifact_id": artifact.artifact_id,
+            "orchestration_id": artifact.orchestration_id,
+            "task_correlation_id": artifact.task_correlation_id,
+            "plan_id": artifact.plan_id,
+            "capability": artifact.capability.value,
+            "responsibility": artifact.responsibility.value,
+            "created_at": artifact.created_at,
+            "completed_step_count": len(artifact.completed_step_ids),
+            "failed_step_count": len(artifact.failed_step_ids),
+            "skipped_step_count": len(artifact.skipped_step_ids),
+            "evidence_identities": list(artifact.evidence_identities[:20]),
+            "limitations": list(artifact.limitations[:5]),
+            "paper_only": True,
+            "execution_authorized": False,
+            "broker_submission": False,
+        }
     if isinstance(artifact, GovernedForecastEvaluationArtifact):
         return {
             "artifact_id": artifact.artifact_id,
@@ -503,7 +632,26 @@ def ai_artifact_get(payload: object, environment: dict[str, str] | None = None) 
     match = next((item for item in artifacts if item.artifact_id == artifact_id), None)
     if match is None:
         return {"schema_version": 1, "found": False, "artifact": None, "health": health}
-    if isinstance(match, GovernedForecastEvaluationArtifact):
+    if isinstance(match, GovernedOrchestrationArtifact):
+        structured_payload = {
+            "plan_id": match.plan_id,
+            "completed_step_ids": list(match.completed_step_ids),
+            "failed_step_ids": list(match.failed_step_ids),
+            "skipped_step_ids": list(match.skipped_step_ids),
+            "evidence_identities": list(match.evidence_identities),
+            "retrieval_artifact_ids": list(match.retrieval_artifact_ids),
+            "sentiment_artifact_ids": list(match.sentiment_artifact_ids),
+            "forecast_artifact_ids": list(match.forecast_artifact_ids),
+            "synthesis_artifact_id": match.synthesis_artifact_id,
+            "findings": list(match.findings),
+            "risks": list(match.risks),
+            "disagreements": list(match.disagreements),
+            "missing_evidence": list(match.missing_evidence),
+            "limitations": list(match.limitations),
+            "confidence": match.confidence,
+            "freshness": list(match.freshness),
+        }
+    elif isinstance(match, GovernedForecastEvaluationArtifact):
         structured_payload = {
             "forecast_artifact_id": match.forecast_artifact_id,
             "observed_series_id": match.observed_series_id,

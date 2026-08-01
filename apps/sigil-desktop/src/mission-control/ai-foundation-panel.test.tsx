@@ -64,6 +64,32 @@ const healthyStatus: AIStatus = {
       limitations: ['Advisory only']
     }
   },
+  orchestration: {
+    enabled: true,
+    health: 'healthy',
+    active_count: 0,
+    completed_count: 1,
+    partial_count: 0,
+    failed_count: 0,
+    paused_count: 0,
+    pending_human_interactions: 0,
+    buzz: 'unavailable',
+    atlas: 'available',
+    openworker: 'unavailable',
+    latest: {
+      orchestration_id: 'orchestration-research-001',
+      plan_id: `orchestration-plan-${'a'.repeat(64)}`,
+      state: 'completed',
+      capabilities: ['semantic_retrieval.v1', 'financial_sentiment.v1'],
+      completed_steps: 4,
+      failed_steps: 0,
+      artifact_id: `analysis-artifact-${'b'.repeat(64)}`,
+      evidence_identities: [`sha256:${'c'.repeat(64)}`],
+      failure_classification: null,
+      limitations: ['Advisory only'],
+      updated_at: '2026-08-01T17:10:00Z'
+    }
+  },
   paper_only: true,
   broker_submission: false
 }
@@ -83,9 +109,14 @@ describe('AI Foundation status panel', () => {
 
     expect(screen.getAllByText('healthy').length).toBeGreaterThan(0)
     expect(screen.getByText('1 models · 1 available')).toBeTruthy()
-    expect(screen.getByText('AAPL · 1d · 8 points · current')).toBeTruthy()
+    expect(screen.getByText('completed · 4 completed · 0 failed')).toBeTruthy()
     expect(screen.getByText('healthy · 3 sources · 4 embeddings')).toBeTruthy()
     expect(screen.getByText('healthy · 1 forecasts · 1 evaluations')).toBeTruthy()
+    expect(screen.getByText('healthy · completed · 0 pending input')).toBeTruthy()
+    expect(screen.getByText('Buzz unavailable · Atlas available · OpenWorker unavailable')).toBeTruthy()
+    const evidence = screen.getByText('Orchestration evidence').parentElement?.textContent ?? ''
+    expect(evidence).toContain('semantic_retrieval.v1, financial_sentiment.v1')
+    expect(evidence).toContain('analysis-artifact-')
   })
 
   it('renders the latest structured failure classification', () => {
