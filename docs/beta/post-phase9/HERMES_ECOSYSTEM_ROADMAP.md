@@ -1,12 +1,11 @@
 # Hermes Ecosystem Roadmap
 
-## Provisional gate
+## Stage 1 authorization gate
 
-Phase 9 implementation is locally validated, while Phase 9 live-node
-certification remains unproven in committed evidence. This roadmap is provisional
-Stage 0 planning only and does not authorize implementation or installation. No
-post–Phase 9 runtime branch may begin until all live-node gates are completed and
-recorded.
+Phase 9 live-node certification is complete and merged. Stage 1 is authorized
+only for the pinned, disabled-by-default governed integration registry. Stage 1
+does not install or activate an integration. Later stages remain unimplemented,
+disabled, and unauthorized until separately approved.
 
 Each stage uses a separate branch and draft pull request. Integrations remain
 disabled until their own certification passes.
@@ -51,6 +50,6 @@ documentation, and evidence artifacts. It performs no unrelated refactor.
 Authenticated social channels require later channel-specific approval and are
 not part of the initial pilot.
 
-Stage 1 through Stage 11, including Stage 8A, are proposed sequence only. Their
-branches, implementation, installation, and activation remain prohibited until
-the Phase 9 live-node prerequisite is evidenced in the repository.
+Stage 2 through Stage 11, including Stage 8A, remain proposed sequence only.
+Their implementation, installation, and activation remain disabled and require
+separate authorization. Stage 1 grants no installation or activation authority.

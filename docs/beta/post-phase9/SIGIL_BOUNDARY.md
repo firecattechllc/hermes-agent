@@ -1,10 +1,11 @@
 # Sigil Boundary
 
-## Provisional status
+## Stage 1 status
 
-Phase 9 is locally validated but lacks committed live-node certification. This
-Stage 0 boundary is provisional planning only and authorizes no runtime
-integration or financial execution.
+Phase 9 live-node certification is complete and merged. Stage 1 is authorized
+only for descriptive registry governance and read-only inspection. It activates
+no integration and authorizes no financial execution. Stage 2 and all later
+stages remain unimplemented and disabled.
 
 Permitted defaults are read-only research, market evidence, source-backed
 analysis, paper proposals, and paper-only tests.
