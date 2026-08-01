@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sigil Mission Control - Ready State</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-container": "#254000",
+                        "primary-fixed-dim": "#4edea3",
+                        "tertiary": "#91db2a",
+                        "surface-container": "#1e2021",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "secondary-fixed": "#71f8e4",
+                        "on-tertiary-fixed": "#102000",
+                        "on-error-container": "#ffdad6",
+                        "surface-variant": "#333536",
+                        "surface-container-low": "#1a1c1d",
+                        "primary": "#4edea3",
+                        "on-tertiary": "#1f3700",
+                        "surface-container-highest": "#333536",
+                        "primary-fixed": "#6ffbbe",
+                        "inverse-surface": "#e2e2e3",
+                        "error-container": "#93000a",
+                        "surface-container-lowest": "#0c0e0f",
+                        "secondary-container": "#04b4a2",
+                        "on-secondary-container": "#003f38",
+                        "tertiary-container": "#72b400",
+                        "secondary": "#4fdbc8",
+                        "surface-bright": "#38393a",
+                        "surface-tint": "#4edea3",
+                        "primary-container": "#10b981",
+                        "on-primary-fixed-variant": "#005236",
+                        "on-surface-variant": "#bbcabf",
+                        "tertiary-fixed-dim": "#91db2a",
+                        "outline-variant": "#3c4a42",
+                        "surface": "#121415",
+                        "on-secondary-fixed-variant": "#005048",
+                        "on-error": "#690005",
+                        "on-tertiary-fixed-variant": "#304f00",
+                        "on-background": "#e2e2e3",
+                        "surface-dim": "#121415",
+                        "surface-container-high": "#282a2b",
+                        "tertiary-fixed": "#acf847",
+                        "outline": "#86948a",
+                        "on-secondary": "#003731",
+                        "on-primary": "#003824",
+                        "on-secondary-fixed": "#00201c",
+                        "on-surface": "#e2e2e3",
+                        "on-primary-fixed": "#002113",
+                        "inverse-primary": "#006c49",
+                        "background": "#121415",
+                        "on-primary-container": "#00422b",
+                        "error": "#ffb4ab",
+                        "inverse-on-surface": "#2f3132"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "xl": "32px",
+                        "margin-desktop": "24px",
+                        "sm": "8px",
+                        "lg": "24px",
+                        "gutter": "16px",
+                        "unit": "4px",
+                        "margin-mobile": "16px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-sm": ["Inter"],
+                        "data-lg": ["JetBrains Mono"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "data-sm": ["JetBrains Mono"],
+                        "data-md": ["JetBrains Mono"],
+                        "headline-lg": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "data-lg": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.06em", "fontWeight": "700" }],
+                        "data-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "data-md": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #0A0C0D; color: #e2e2e3; }
+        .panel { background-color: #121417; border: 1px solid #262A30; }
+        .data-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Subtle glow for critical active states */
+        .glow-active { box-shadow: 0 0 4px rgba(20, 184, 166, 0.1); border: 1px solid rgba(20, 184, 166, 0.3); }
+        .glow-error { box-shadow: 0 0 4px rgba(255, 180, 171, 0.1); border: 1px solid rgba(255, 180, 171, 0.3); }
+    </style>
+</head>
+<body class="font-body-md h-screen flex overflow-hidden">
+<!-- SideNavBar -->
+<nav class="bg-surface-container dark:bg-surface-container docked left-0 h-full w-64 border-r border-outline-variant dark:border-outline-variant flat no shadows fixed left-0 top-0 h-full flex flex-col py-md px-sm z-40">
+<div class="mb-lg px-sm">
+<h1 class="text-headline-sm font-headline-sm font-bold text-primary">Sigil v3.5</h1>
+<p class="text-data-sm font-data-sm text-on-surface-variant mt-unit">Environment: Paper</p>
+</div>
+<button class="bg-primary-container text-on-primary-container text-body-md font-body-md py-sm px-md rounded mb-lg mx-sm hover:bg-primary-fixed transition-colors flex items-center justify-center gap-sm">
+<span class="material-symbols-outlined text-[18px]">add</span>
+            New Mission
+        </button>
+<div class="flex-1 overflow-y-auto">
+<ul class="space-y-unit">
+<li>
+<a class="flex items-center gap-md px-md py-sm bg-secondary-container dark:bg-secondary-container text-on-secondary-container dark:text-on-secondary-container rounded-lg translate-x-1 transition-transform duration-200" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-body-md font-body-md">Overview</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+<span class="text-body-md font-body-md">Portfolio</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="text-body-md font-body-md">Proposals</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">rocket_launch</span>
+<span class="text-body-md font-body-md">Launch</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">terminal</span>
+<span class="text-body-md font-body-md">Executions</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="text-body-md font-body-md">Reconciliation</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">policy</span>
+<span class="text-body-md font-body-md">Audit</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">newspaper</span>
+<span class="text-body-md font-body-md">News</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-body-md font-body-md">Settings</span>
+</a>
+</li>
+</ul>
+</div>
+<div class="mt-auto pt-md border-t border-outline-variant">
+<ul class="space-y-unit">
+<li>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-highest rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">sensors</span>
+<span class="text-body-md font-body-md">System Health</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-highest rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined">contact_support</span>
+<span class="text-body-md font-body-md">Support</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="ml-64 flex-1 flex flex-col h-full overflow-hidden bg-background">
+<!-- Persistent Safety Banners & Top Status -->
+<header class="bg-surface-container-lowest border-b border-outline-variant py-sm px-lg flex justify-between items-center z-30 flex-shrink-0">
+<div class="flex items-center gap-lg">
+<div class="flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="text-label-caps font-label-caps text-primary">PAPER ONLY</span>
+</div>
+<div class="flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="text-label-caps font-label-caps text-error">BROKER SUBMISSION DISABLED</span>
+</div>
+</div>
+<div class="flex items-center gap-md text-data-sm font-data-sm text-on-surface-variant">
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px] text-primary">check_circle</span>
+                    Runtime Healthy
+                </div>
+<div class="w-px h-4 bg-outline-variant mx-xs"></div>
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px] text-primary">sync</span>
+                    Market Data Fresh (2s ago)
+                </div>
+<div class="w-px h-4 bg-outline-variant mx-xs"></div>
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px] text-primary">wifi</span>
+                    Connected
+                </div>
+</div>
+</header>
+<!-- Dashboard Canvas -->
+<div class="flex-1 overflow-y-auto p-lg flex flex-col gap-lg">
+<!-- Top Controls & Summary -->
+<div class="flex justify-between items-end">
+<div>
+<h2 class="text-headline-lg font-headline-lg text-on-surface mb-unit">Mission Control</h2>
+<p class="text-body-md font-body-md text-on-surface-variant">System initialized and standing by for paper execution.</p>
+</div>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-sm bg-surface-container-low border border-outline-variant px-md py-sm rounded-lg">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="text-data-md font-data-md text-on-surface">Automation: Active</span>
+</div>
+<button class="bg-surface-container hover:bg-surface-container-high border border-error text-error text-body-md font-body-md py-sm px-lg rounded transition-colors flex items-center gap-sm h-10 glow-error">
+<span class="material-symbols-outlined text-[18px]">stop_circle</span>
+                        Stop Automation
+                    </button>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-md">
+<!-- Core Metrics Module (Spans 8) -->
+<div class="col-span-12 lg:col-span-8 panel rounded-xl p-lg flex flex-col justify-between min-h-[200px]">
+<div class="flex justify-between items-start mb-lg">
+<h3 class="text-label-caps font-label-caps text-on-surface-variant">CORE FINANCIALS (PAPER)</h3>
+<span class="material-symbols-outlined text-on-surface-variant">account_balance</span>
+</div>
+<div class="grid grid-cols-2 gap-lg flex-1">
+<div class="flex flex-col justify-end border-r border-outline-variant pr-lg">
+<span class="text-body-sm font-body-sm text-on-surface-variant mb-unit">Available Cash</span>
+<span class="text-headline-lg font-headline-lg text-on-surface data-mono tracking-tight">$10,000.00</span>
+</div>
+<div class="flex flex-col justify-end pl-lg">
+<span class="text-body-sm font-body-sm text-on-surface-variant mb-unit">Portfolio Value</span>
+<span class="text-headline-lg font-headline-lg text-on-surface data-mono tracking-tight">$0.00</span>
+</div>
+</div>
+</div>
+<!-- Operator Attention Queue (Spans 4) -->
+<div class="col-span-12 lg:col-span-4 panel rounded-xl p-lg flex flex-col min-h-[200px]">
+<div class="flex justify-between items-start mb-md">
+<h3 class="text-label-caps font-label-caps text-on-surface-variant">ATTENTION QUEUE</h3>
+<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+</div>
+<div class="flex-1 flex flex-col justify-center items-center text-center p-md bg-surface-container-low rounded-lg border border-outline-variant border-dashed">
+<span class="material-symbols-outlined text-[32px] text-on-surface-variant mb-sm">check_circle</span>
+<span class="text-data-md font-data-md text-on-surface block">0 Pending Proposals</span>
+<span class="text-body-sm font-body-sm text-on-surface-variant mt-xs">System Integrity: Secure</span>
+</div>
+</div>
+<!-- Recent Audit Timeline (Spans 12) -->
+<div class="col-span-12 panel rounded-xl p-lg">
+<div class="flex justify-between items-center mb-md border-b border-outline-variant pb-sm">
+<h3 class="text-label-caps font-label-caps text-on-surface-variant">RECENT AUDIT TIMELINE</h3>
+<a class="text-label-caps font-label-caps text-primary hover:underline" href="#">VIEW ALL</a>
+</div>
+<div class="space-y-sm">
+<!-- Audit Item 1 -->
+<div class="flex items-start gap-md p-sm hover:bg-surface-container-low rounded transition-colors group">
+<div class="mt-xs">
+<span class="material-symbols-outlined text-[16px] text-primary">play_arrow</span>
+</div>
+<div class="flex-1">
+<p class="text-body-sm font-body-sm text-on-surface">System initialized in Paper mode.</p>
+<div class="flex items-center gap-md mt-xs text-data-sm font-data-sm text-on-surface-variant">
+<span>2026-08-01T04:01:27.203383Z</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="data-mono">INIT_PAPER_STATE</span>
+</div>
+</div>
+</div>
+<!-- Audit Item 2 -->
+<div class="flex items-start gap-md p-sm hover:bg-surface-container-low rounded transition-colors group">
+<div class="mt-xs">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">sync</span>
+</div>
+<div class="flex-1">
+<p class="text-body-sm font-body-sm text-on-surface">Market data feed established successfully.</p>
+<div class="flex items-center gap-md mt-xs text-data-sm font-data-sm text-on-surface-variant">
+<span>2026-08-01T04:01:25.101000Z</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="data-mono">MKT_DATA_CONNECT</span>
+</div>
+</div>
+</div>
+<!-- Audit Item 3 -->
+<div class="flex items-start gap-md p-sm hover:bg-surface-container-low rounded transition-colors group">
+<div class="mt-xs">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">verified_user</span>
+</div>
+<div class="flex-1">
+<p class="text-body-sm font-body-sm text-on-surface">Governance policies verified and locked.</p>
+<div class="flex items-center gap-md mt-xs text-data-sm font-data-sm text-on-surface-variant">
+<span>2026-08-01T04:01:22.050000Z</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="data-mono">GOV_POLICY_LOCK</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Persistent Footer Status -->
+<footer class="bg-surface-container border-t border-outline-variant py-xs px-md flex justify-between items-center text-data-sm font-data-sm text-on-surface-variant z-30">
+<div>Alpaca paper submission starts governed and enabled · live execution permanently disabled · account identity masked</div>
+<div>Adapter: governed local paper runtime · provider reads isolated in backend · V2.9 · v2.11.0 · BUILD bff2b2149-20260801.021025</div>
+</footer>
+</main>
+</body></html>

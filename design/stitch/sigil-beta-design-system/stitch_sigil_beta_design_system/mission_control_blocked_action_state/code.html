@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sigil Mission Control - Blocked State</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-container": "#254000",
+                        "primary-fixed-dim": "#4edea3",
+                        "tertiary": "#91db2a",
+                        "surface-container": "#1e2021",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "secondary-fixed": "#71f8e4",
+                        "on-tertiary-fixed": "#102000",
+                        "on-error-container": "#ffdad6",
+                        "surface-variant": "#333536",
+                        "surface-container-low": "#1a1c1d",
+                        "primary": "#4edea3",
+                        "on-tertiary": "#1f3700",
+                        "surface-container-highest": "#333536",
+                        "primary-fixed": "#6ffbbe",
+                        "inverse-surface": "#e2e2e3",
+                        "error-container": "#93000a",
+                        "surface-container-lowest": "#0c0e0f",
+                        "secondary-container": "#04b4a2",
+                        "on-secondary-container": "#003f38",
+                        "tertiary-container": "#72b400",
+                        "secondary": "#4fdbc8",
+                        "surface-bright": "#38393a",
+                        "surface-tint": "#4edea3",
+                        "primary-container": "#10b981",
+                        "on-primary-fixed-variant": "#005236",
+                        "on-surface-variant": "#bbcabf",
+                        "tertiary-fixed-dim": "#91db2a",
+                        "outline-variant": "#3c4a42",
+                        "surface": "#121415",
+                        "on-secondary-fixed-variant": "#005048",
+                        "on-error": "#690005",
+                        "on-tertiary-fixed-variant": "#304f00",
+                        "on-background": "#e2e2e3",
+                        "surface-dim": "#121415",
+                        "surface-container-high": "#282a2b",
+                        "tertiary-fixed": "#acf847",
+                        "outline": "#86948a",
+                        "on-secondary": "#003731",
+                        "on-primary": "#003824",
+                        "on-secondary-fixed": "#00201c",
+                        "on-surface": "#e2e2e3",
+                        "on-primary-fixed": "#002113",
+                        "inverse-primary": "#006c49",
+                        "background": "#121415",
+                        "on-primary-container": "#00422b",
+                        "error": "#ffb4ab",
+                        "inverse-on-surface": "#2f3132"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "xl": "32px",
+                        "margin-desktop": "24px",
+                        "sm": "8px",
+                        "lg": "24px",
+                        "gutter": "16px",
+                        "unit": "4px",
+                        "margin-mobile": "16px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-sm": ["Inter"],
+                        "data-lg": ["JetBrains Mono"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "data-sm": ["JetBrains Mono"],
+                        "data-md": ["JetBrains Mono"],
+                        "headline-lg": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "data-lg": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.06em", "fontWeight": "700" }],
+                        "data-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "data-md": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #0A0C0D; /* Base Level 0 */
+            color: #e2e2e3;
+        }
+        .panel {
+            background-color: #121417; /* Level 1 Panel */
+            border: 1px solid #262A30;
+        }
+        .panel-elevated {
+            background-color: #1A1D21; /* Level 2 Active/Hover */
+            border: 1px solid #262A30;
+        }
+        .blocked-glow {
+            box-shadow: inset 0 0 0 1px #93000a, 0 0 8px 0 rgba(147, 0, 10, 0.15);
+        }
+        .data-label {
+            color: #86948a; /* outline color for labels */
+        }
+    </style>
+</head>
+<body class="font-body-md text-on-surface min-h-screen flex flex-col">
+<!-- Top Navigation Shell -->
+<header class="flex justify-between items-center w-full px-lg h-12 z-50 bg-background border-b border-outline-variant dark:border-outline-variant flat no shadows">
+<div class="flex items-center space-x-md">
+<span class="text-headline-md font-headline-md font-bold text-primary dark:text-primary tracking-tight">Sigil Mission Control</span>
+<div class="flex items-center space-x-sm bg-surface-container-low px-sm py-xs rounded-DEFAULT border border-outline-variant">
+<span class="text-label-caps font-label-caps text-on-surface-variant">ENV:</span>
+<span class="text-data-sm font-data-sm text-primary">PAPER</span>
+<span class="text-on-surface-variant px-xs">|</span>
+<span class="text-label-caps font-label-caps text-on-surface-variant">STATE:</span>
+<span class="text-data-sm font-data-sm text-error">BLOCKED</span>
+</div>
+</div>
+<nav class="hidden md:flex space-x-md">
+<!-- Overview is active by intent -->
+<a class="text-primary dark:text-primary border-b-2 border-primary pb-1 text-label-caps font-label-caps opacity-80 transition-opacity" href="#">Overview</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface text-label-caps font-label-caps transition-colors" href="#">Portfolio</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface text-label-caps font-label-caps transition-colors" href="#">Launch</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:text-on-surface text-label-caps font-label-caps transition-colors" href="#">Audit</a>
+</nav>
+<div class="flex items-center space-x-sm">
+<button aria-label="Security" class="p-xs text-on-surface-variant hover:bg-surface-container-highest transition-colors rounded-full">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">security</span>
+</button>
+<button aria-label="Notifications" class="p-xs text-on-surface-variant hover:bg-surface-container-highest transition-colors rounded-full relative">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button aria-label="Help" class="p-xs text-on-surface-variant hover:bg-surface-container-highest transition-colors rounded-full">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">help</span>
+</button>
+</div>
+</header>
+<!-- Main Workspace -->
+<main class="flex-1 flex flex-col p-md space-y-md w-full max-w-[1600px] mx-auto">
+<!-- Persistent Safety Banner -->
+<div class="w-full bg-surface-container-lowest border-y border-outline-variant py-xs px-sm flex items-center justify-between">
+<div class="flex items-center space-x-sm">
+<span class="material-symbols-outlined text-outline text-[16px]">info</span>
+<span class="text-data-sm font-data-sm text-outline">Live execution permanently disabled · Account identity masked · Provider reads isolated in backend</span>
+</div>
+</div>
+<!-- System Health / Status Bar (Critical Blocked State) -->
+<section class="panel p-sm flex flex-col md:flex-row justify-between items-start md:items-center space-y-sm md:space-y-0 blocked-glow rounded-DEFAULT">
+<div class="flex items-center space-x-md w-full md:w-auto">
+<div class="flex items-center space-x-sm bg-error-container/20 px-sm py-xs rounded-sm border border-error-container">
+<span class="material-symbols-outlined text-error text-[18px]">block</span>
+<span class="text-data-sm font-data-sm text-error uppercase tracking-wider">Runtime: Blocked</span>
+</div>
+<div class="flex flex-col">
+<span class="text-label-caps font-label-caps data-label">ROOT CAUSE</span>
+<span class="text-data-md font-data-md text-on-surface">Monthly Paper Authorization Expired</span>
+</div>
+</div>
+<div class="flex items-center space-x-sm w-full md:w-auto justify-end">
+<!-- Tooltip Explanation -->
+<div class="text-data-sm font-data-sm text-on-surface-variant max-w-xs text-right mr-sm border-r border-outline-variant pr-sm">
+                    Execution blocked: Valid paper authorization token required for August 2026. Request a new token in Launch Control.
+                 </div>
+<!-- Disabled Action -->
+<button class="bg-surface-variant text-outline px-md py-xs rounded-sm text-data-sm font-data-sm flex items-center space-x-xs cursor-not-allowed opacity-50 border border-outline-variant" disabled="">
+<span class="material-symbols-outlined text-[16px]">play_arrow</span>
+<span>Start Automation</span>
+</button>
+</div>
+</section>
+<!-- Sub-Navigation (from screenshot) -->
+<div class="flex space-x-lg border-b border-outline-variant pb-xs">
+<span class="text-label-caps font-label-caps text-primary border-b-2 border-primary pb-xs">OVERVIEW</span>
+<span class="text-label-caps font-label-caps data-label hover:text-on-surface transition-colors cursor-pointer">PORTFOLIO</span>
+<span class="text-label-caps font-label-caps data-label hover:text-on-surface transition-colors cursor-pointer">PROPOSALS</span>
+<span class="text-label-caps font-label-caps data-label hover:text-on-surface transition-colors cursor-pointer">LAUNCH</span>
+<span class="text-label-caps font-label-caps data-label hover:text-on-surface transition-colors cursor-pointer">EXECUTIONS</span>
+<span class="text-label-caps font-label-caps data-label hover:text-on-surface transition-colors cursor-pointer">RECONCILIATION</span>
+<span class="text-label-caps font-label-caps data-label hover:text-on-surface transition-colors cursor-pointer">AUDIT</span>
+<span class="text-label-caps font-label-caps data-label hover:text-on-surface transition-colors cursor-pointer">NEWS</span>
+<span class="text-label-caps font-label-caps data-label hover:text-on-surface transition-colors cursor-pointer">SETTINGS</span>
+</div>
+<!-- Pipeline Modules Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-unit">
+<!-- Module 01 -->
+<div class="panel p-sm flex flex-col h-24 justify-between relative group hover:bg-surface-container-highest transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-data-sm font-data-sm data-label">01</span>
+<span class="text-data-sm font-data-sm text-primary">complete</span>
+</div>
+<div>
+<h3 class="text-label-caps font-label-caps text-on-surface mb-xs">BACKEND BRIDGE</h3>
+<p class="text-data-sm font-data-sm data-label">connected</p>
+</div>
+<div class="absolute bottom-0 left-0 h-1 w-full bg-primary/20">
+<div class="h-full bg-primary w-full"></div>
+</div>
+</div>
+<!-- Module 02 -->
+<div class="panel p-sm flex flex-col h-24 justify-between relative group hover:bg-surface-container-highest transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-data-sm font-data-sm data-label">02</span>
+<span class="text-data-sm font-data-sm text-primary">complete</span>
+</div>
+<div>
+<h3 class="text-label-caps font-label-caps text-on-surface mb-xs">RUNTIME STATE</h3>
+<p class="text-data-sm font-data-sm data-label">Revision 3705</p>
+</div>
+<div class="absolute bottom-0 left-0 h-1 w-full bg-primary/20">
+<div class="h-full bg-primary w-full"></div>
+</div>
+</div>
+<!-- Module 03 -->
+<div class="panel p-sm flex flex-col h-24 justify-between relative group hover:bg-surface-container-highest transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-data-sm font-data-sm data-label">03</span>
+<span class="text-data-sm font-data-sm text-primary">ready</span>
+</div>
+<div>
+<h3 class="text-label-caps font-label-caps text-on-surface mb-xs">HERMES ANALYSIS</h3>
+<p class="text-data-sm font-data-sm data-label">Paper proposals</p>
+</div>
+<div class="absolute bottom-0 left-0 h-1 w-full bg-primary/20">
+<div class="h-full bg-primary w-full"></div>
+</div>
+</div>
+<!-- Module 04 -->
+<div class="panel p-sm flex flex-col h-24 justify-between relative group hover:bg-surface-container-highest transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-data-sm font-data-sm data-label">04</span>
+<span class="text-data-sm font-data-sm text-tertiary">pending</span>
+</div>
+<div>
+<h3 class="text-label-caps font-label-caps text-on-surface mb-xs">PROPOSAL GENERATION</h3>
+<p class="text-data-sm font-data-sm data-label">running</p>
+</div>
+<div class="absolute bottom-0 left-0 h-1 w-full bg-tertiary/20">
+<div class="h-full bg-tertiary w-[60%]"></div>
+</div>
+</div>
+<!-- Module 05 -->
+<div class="panel p-sm flex flex-col h-24 justify-between relative group hover:bg-surface-container-highest transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-data-sm font-data-sm data-label">05</span>
+<span class="text-data-sm font-data-sm text-primary">complete</span>
+</div>
+<div>
+<h3 class="text-label-caps font-label-caps text-on-surface mb-xs">PAPER AUTO-APPROVAL</h3>
+<p class="text-data-sm font-data-sm data-label">active</p>
+</div>
+<div class="absolute bottom-0 left-0 h-1 w-full bg-primary/20">
+<div class="h-full bg-primary w-full"></div>
+</div>
+</div>
+<!-- Module 06 -->
+<div class="panel p-sm flex flex-col h-24 justify-between relative group hover:bg-surface-container-highest transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-data-sm font-data-sm data-label">06</span>
+<span class="text-data-sm font-data-sm text-on-surface">simulated</span>
+</div>
+<div>
+<h3 class="text-label-caps font-label-caps text-on-surface mb-xs">SIMULATED EXECUTION</h3>
+<p class="text-data-sm font-data-sm data-label">Authorized locally</p>
+</div>
+</div>
+<!-- Module 07 (Blocked) -->
+<div class="panel p-sm flex flex-col h-24 justify-between relative bg-error-container/5 border-error/30">
+<div class="flex justify-between items-start">
+<span class="text-data-sm font-data-sm text-error">07</span>
+<span class="text-data-sm font-data-sm text-error animate-pulse">blocked</span>
+</div>
+<div>
+<h3 class="text-label-caps font-label-caps text-error mb-xs">BROKER TRANSPORT</h3>
+<p class="text-data-sm font-data-sm text-error/70">Unavailable - Auth Expired</p>
+</div>
+<div class="absolute bottom-0 left-0 h-1 w-full bg-error/20">
+<div class="h-full bg-error w-[10%]"></div>
+</div>
+</div>
+<!-- Empty slots to maintain grid -->
+<div class="panel p-sm flex flex-col h-24 opacity-30 border-dashed"></div>
+<div class="panel p-sm flex flex-col h-24 opacity-30 border-dashed"></div>
+</div>
+<!-- Secondary Sections -->
+<div class="flex flex-col space-y-md mt-md">
+<!-- Pending Proposals Header -->
+<div class="flex justify-between items-center border-b border-outline-variant pb-xs">
+<h2 class="text-label-caps font-label-caps text-on-surface">PENDING PROPOSALS</h2>
+<span class="text-data-sm font-data-sm data-label">0 awaiting review</span>
+</div>
+<!-- Launch Control Context -->
+<div class="flex justify-between items-center border-b border-outline-variant pb-xs mt-md">
+<h2 class="text-label-caps font-label-caps text-on-surface">LAUNCH CONTROL</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-unit">
+<div class="panel p-sm">
+<span class="text-label-caps font-label-caps data-label block mb-xs">CERTIFICATION</span>
+<span class="text-data-md font-data-md text-on-surface">Paper runtime</span>
+</div>
+<div class="panel p-sm border-error/20 bg-error-container/5">
+<span class="text-label-caps font-label-caps data-label block mb-xs text-error/70">LAUNCH STATE</span>
+<span class="text-data-md font-data-md text-error">suspended (authorization required)</span>
+</div>
+<div class="panel p-sm">
+<span class="text-label-caps font-label-caps data-label block mb-xs">MAXIMUM LAUNCH NOTIONAL</span>
+<span class="text-data-md font-data-md text-on-surface">Dynamic paper allocation</span>
+</div>
+<div class="panel p-sm">
+<span class="text-label-caps font-label-caps data-label block mb-xs">PAPER SIZING POLICY</span>
+<span class="text-data-md font-data-md text-on-surface">5% buying power / 10% position</span>
+</div>
+</div>
+<!-- Action Area -->
+<div class="flex space-x-sm mt-md items-center">
+<button class="bg-primary/20 text-primary border border-primary/50 px-md py-xs rounded-sm text-data-sm font-data-sm opacity-50 cursor-not-allowed">Arm simulated launch</button>
+<button class="bg-surface-variant text-on-surface px-md py-xs rounded-sm text-data-sm font-data-sm border border-outline-variant">Suspend</button>
+<button class="bg-error-container text-on-error-container px-md py-xs rounded-sm text-data-sm font-data-sm border border-error">Engage kill switch</button>
+</div>
+<p class="text-data-sm font-data-sm data-label">Paper sizing is dynamic and portfolio-bounded. No live capital limit or broker execution control exists.</p>
+</div>
+</main>
+</body></html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sigil Mission Control - Recovery State</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-container": "#254000",
+                        "primary-fixed-dim": "#4edea3",
+                        "tertiary": "#91db2a",
+                        "surface-container": "#1e2021",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "secondary-fixed": "#71f8e4",
+                        "on-tertiary-fixed": "#102000",
+                        "on-error-container": "#ffdad6",
+                        "surface-variant": "#333536",
+                        "surface-container-low": "#1a1c1d",
+                        "primary": "#4edea3",
+                        "on-tertiary": "#1f3700",
+                        "surface-container-highest": "#333536",
+                        "primary-fixed": "#6ffbbe",
+                        "inverse-surface": "#e2e2e3",
+                        "error-container": "#93000a",
+                        "surface-container-lowest": "#0c0e0f",
+                        "secondary-container": "#04b4a2",
+                        "on-secondary-container": "#003f38",
+                        "tertiary-container": "#72b400",
+                        "secondary": "#4fdbc8",
+                        "surface-bright": "#38393a",
+                        "surface-tint": "#4edea3",
+                        "primary-container": "#10b981",
+                        "on-primary-fixed-variant": "#005236",
+                        "on-surface-variant": "#bbcabf",
+                        "tertiary-fixed-dim": "#91db2a",
+                        "outline-variant": "#3c4a42",
+                        "surface": "#121415",
+                        "on-secondary-fixed-variant": "#005048",
+                        "on-error": "#690005",
+                        "on-tertiary-fixed-variant": "#304f00",
+                        "on-background": "#e2e2e3",
+                        "surface-dim": "#121415",
+                        "surface-container-high": "#282a2b",
+                        "tertiary-fixed": "#acf847",
+                        "outline": "#86948a",
+                        "on-secondary": "#003731",
+                        "on-primary": "#003824",
+                        "on-secondary-fixed": "#00201c",
+                        "on-surface": "#e2e2e3",
+                        "on-primary-fixed": "#002113",
+                        "inverse-primary": "#006c49",
+                        "background": "#121415",
+                        "on-primary-container": "#00422b",
+                        "error": "#ffb4ab",
+                        "inverse-on-surface": "#2f3132"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "xl": "32px",
+                        "margin-desktop": "24px",
+                        "sm": "8px",
+                        "lg": "24px",
+                        "gutter": "16px",
+                        "unit": "4px",
+                        "margin-mobile": "16px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-sm": ["Inter"],
+                        "data-lg": ["JetBrains Mono"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "data-sm": ["JetBrains Mono"],
+                        "data-md": ["JetBrains Mono"],
+                        "headline-lg": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "data-lg": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.06em", "fontWeight": "700" }],
+                        "data-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "data-md": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: theme('colors.background'); color: theme('colors.on-background'); }
+        .glow-pulse { animation: pulseGlow 4s infinite alternate; }
+        @keyframes pulseGlow { 0% { box-shadow: 0 0 10px rgba(78, 222, 163, 0.1); } 100% { box-shadow: 0 0 20px rgba(78, 222, 163, 0.3); } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-body-md overflow-hidden bg-background text-on-background">
+<!-- Canvas (Main Content Area) -->
+<main class="flex-grow flex flex-col items-center justify-center p-lg relative overflow-hidden">
+<!-- Background subtle element -->
+<div class="absolute inset-0 z-0 opacity-10 pointer-events-none flex items-center justify-center">
+<span class="material-symbols-outlined text-[40vw] text-primary" data-icon="health_and_safety">health_and_safety</span>
+</div>
+<div class="relative z-10 w-full max-w-3xl flex flex-col gap-lg items-center">
+<!-- Recovery Header -->
+<div class="flex flex-col items-center text-center gap-sm mb-xl">
+<div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center border border-primary glow-pulse mb-md">
+<span class="material-symbols-outlined text-primary text-headline-lg font-headline-lg" data-icon="check_circle">check_circle</span>
+</div>
+<h1 class="text-headline-lg font-headline-lg text-primary tracking-tight">Safely Recovered</h1>
+<p class="text-body-lg font-body-lg text-on-surface-variant max-w-xl">
+                    System experienced an unexpected restart. Operations have been restored to a safe state.
+                </p>
+</div>
+<!-- Bento Grid -->
+<div class="w-full grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<!-- System Status Panel -->
+<div class="col-span-1 md:col-span-12 bg-surface border border-outline-variant rounded p-md flex flex-col gap-md">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-on-surface-variant text-data-lg font-data-lg" data-icon="memory">memory</span>
+<h2 class="text-data-lg font-data-lg text-on-surface">Runtime Restoration</h2>
+</div>
+<div class="bg-surface-container p-sm rounded border border-outline-variant flex items-start gap-md">
+<span class="material-symbols-outlined text-primary mt-xs" data-icon="verified_user">verified_user</span>
+<div>
+<p class="text-body-md font-body-md text-on-surface">
+                                Runtime state restored from local hash-chained evidence (<span class="text-data-md font-data-md text-primary">Revision 3704</span>). All safety parameters verified.
+                            </p>
+</div>
+</div>
+</div>
+<!-- Automation State Panel -->
+<div class="col-span-1 md:col-span-6 bg-surface border border-outline-variant rounded p-md flex flex-col gap-md">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-on-surface-variant text-data-lg font-data-lg" data-icon="smart_toy">smart_toy</span>
+<h2 class="text-data-lg font-data-lg text-on-surface">Automation State</h2>
+</div>
+<div class="flex-grow flex flex-col items-center justify-center gap-sm p-lg border border-outline-variant border-dashed rounded bg-surface-container-lowest">
+<span class="material-symbols-outlined text-secondary text-headline-lg font-headline-lg" data-icon="pause_circle">pause_circle</span>
+<span class="text-label-caps font-label-caps text-on-surface tracking-widest text-center">AUTOMATION PAUSED</span>
+<p class="text-body-sm font-body-sm text-on-surface-variant text-center mt-xs">Requires manual operator resumption.</p>
+</div>
+<button class="w-full h-10 bg-primary-container text-on-primary-container text-data-md font-data-md rounded flex items-center justify-center gap-sm hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined" data-icon="play_arrow">play_arrow</span>
+                        Resume Automation
+                    </button>
+</div>
+<!-- Audit Trail Panel -->
+<div class="col-span-1 md:col-span-6 bg-surface border border-outline-variant rounded p-md flex flex-col gap-md">
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-on-surface-variant text-data-lg font-data-lg" data-icon="policy">policy</span>
+<h2 class="text-data-lg font-data-lg text-on-surface">Audit Trail</h2>
+</div>
+<span class="text-label-caps font-label-caps text-on-surface-variant">LATEST EVENT</span>
+</div>
+<div class="flex-grow flex flex-col gap-sm overflow-y-auto">
+<!-- Audit Item (Recovery) -->
+<div class="bg-surface-container p-sm rounded border-l-2 border-primary flex flex-col gap-xs">
+<div class="flex justify-between items-center">
+<span class="text-label-caps font-label-caps text-primary">RECOVERY</span>
+<span class="text-data-sm font-data-sm text-on-surface-variant">08:42:15 UTC</span>
+</div>
+<p class="text-data-md font-data-md text-on-surface">Local state integrity check passed.</p>
+<span class="text-data-sm font-data-sm text-on-surface-variant opacity-70">Hash: 0x9f...a1b2</span>
+</div>
+<!-- Previous Audit Item -->
+<div class="bg-surface-container-lowest p-sm rounded border border-outline-variant flex flex-col gap-xs opacity-60">
+<div class="flex justify-between items-center">
+<span class="text-label-caps font-label-caps text-on-surface-variant">SYS_RESTART</span>
+<span class="text-data-sm font-data-sm text-on-surface-variant">08:41:03 UTC</span>
+</div>
+<p class="text-data-md font-data-md text-on-surface">Unexpected environment termination detected.</p>
+</div>
+</div>
+<button class="w-full h-8 border border-outline-variant text-on-surface-variant text-data-sm font-data-sm rounded flex items-center justify-center gap-sm hover:bg-surface-container-highest transition-colors mt-auto">
+                        View Full Log
+                    </button>
+</div>
+</div>
+<button class="mt-lg h-10 px-lg bg-surface border border-outline-variant text-on-surface text-data-md font-data-md rounded flex items-center justify-center gap-sm hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="dashboard">dashboard</span>
+                Return to Overview
+            </button>
+</div>
+</main>
+</body></html>
