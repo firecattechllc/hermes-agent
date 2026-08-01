@@ -1156,10 +1156,19 @@ function MarketUniversePanel({
         <SearchField
           aria-label="Search governed instruments"
           containerClassName="min-w-0 flex-1"
-          onChange={applySearch}
+          onChange={setQuery}
           placeholder="Search symbol, issuer, exchange, or alias"
           value={query}
         />
+        <Button
+          disabled={loading || !status?.target_capacity_validated}
+          onClick={() => applySearch(query)}
+          size="xs"
+          variant="outline"
+        >
+          <Codicon name="search" />
+          {loading ? 'Searching…' : 'Search'}
+        </Button>
         <select
           aria-label="Filter governed universe"
           className="border border-(--ui-stroke-secondary) bg-(--ui-bg-secondary) px-2 text-xs"
@@ -1178,7 +1187,18 @@ function MarketUniversePanel({
       </div>
       {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
       {loading ? <div className="mt-3"><Loader label="Searching governed universe" /></div> : null}
-      {!loading && results ? (
+      {!status?.target_capacity_validated ? (
+        <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+          Catalog unavailable — refresh the asset catalog before searching.
+        </p>
+      ) : null}
+      {!loading && results && results.results.length === 0 ? (
+        <EmptyState
+          description={`No governed instruments matched “${results.query}” in the selected universe.`}
+          title="No matching instruments"
+        />
+      ) : null}
+      {!loading && results && results.results.length > 0 ? (
         <div className="mt-3 divide-y divide-(--ui-stroke-tertiary)">
           {results.results.map(item => (
             <div className="flex items-center justify-between gap-3 py-2" key={item.instrument_id}>
