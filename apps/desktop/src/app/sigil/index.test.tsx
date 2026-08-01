@@ -9,11 +9,12 @@ describe('SigilOperatorView', () => {
   it('is paper, simulated, disconnected, masked, and has no live submission control', async () => {
     render(<SigilOperatorView adapter={new MockSigilOperatorAdapter('ready')} />)
 
-    expect(await screen.findByText('Sigil Operator')).toBeTruthy()
-    expect(screen.getByText('PAPER')).toBeTruthy()
-    expect(screen.getByText('SIMULATED')).toBeTruthy()
-    expect(screen.getByText('DISCONNECTED')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Sigil' })).toBeTruthy()
+    expect(screen.getAllByText('Paper only').length).toBeGreaterThan(0)
+    expect(screen.getByText('disconnected')).toBeTruthy()
     expect(screen.getByText('•••• 23F4')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Executions' }))
+    expect(screen.getByText('Simulated executions')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /submit/i })).toBeNull()
     expect(screen.getByRole('status').textContent).toContain(
       'No broker submission'

@@ -487,6 +487,7 @@
         "sigil:control-paper-authorization",
         "sigil:reset-paper-runtime",
         "sigil:get-provider-snapshot",
+        "sigil:get-ai-status",
         "sigil:get-market-universe-status",
         "sigil:search-market-universe",
         "sigil:get-market-universe-quotes",

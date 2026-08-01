@@ -1,0 +1,1479 @@
+"""Model-neutral governed analysis coordination inside the backend authority layer."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass
+
+from .analysis import (
+    AnalysisValidationError,
+    GovernedAnalysisArtifact,
+    GovernedAnalysisRequest,
+    GovernedOutputSchema,
+    build_analysis_artifact,
+    validate_generic_analysis,
+)
+from .artifact_store import (
+    AnalysisArtifactStoreError,
+    DurableAnalysisArtifactStore,
+)
+from .evidence import build_invocation_evidence
+from .finbert import (
+    GovernedSentimentArtifact,
+    GovernedSentimentRequest,
+    build_sentiment_artifact,
+    validate_finbert_output,
+)
+from .handoff import (
+    GovernedForecastWorkRequest,
+    GovernedModelWorkRequest,
+    GovernedRetrievalWorkRequest,
+    GovernedSentimentWorkRequest,
+)
+from .kronos import (
+    GovernedForecastArtifact,
+    GovernedForecastEvaluationArtifact,
+    GovernedForecastRequest,
+    GovernedMarketSeries,
+    KronosValidationError,
+    UncertaintyMode,
+    build_forecast_artifact,
+    evaluate_forecast,
+    validate_kronos_output,
+)
+from .ledger import (
+    AIEvidenceLedgerError,
+    AIEvidenceRecordType,
+    DurableAIEvidenceLedger,
+    GovernedAIEvidenceRecord,
+    append_routing_decision,
+    evidence_identity,
+)
+from .models import Capability, CostClass, ExecutionLocation, Responsibility, TrustTier
+from .provider import (
+    ModelProvider,
+    ProviderFailure,
+    ProviderFailureClass,
+    ProviderInvocation,
+    ProviderResult,
+)
+from .registry import GovernedModelRegistry, canonical_digest
+from .retrieval import (
+    DurableRetrievalStore,
+    GovernedEmbeddingArtifact,
+    GovernedIndexingRequest,
+    GovernedIndexingResponse,
+    GovernedRetrievalArtifact,
+    GovernedRetrievalRequest,
+    RetrievalStoreError,
+    RetrievalValidationError,
+    build_embedding_artifact,
+    build_retrieval_artifact,
+    deterministic_chunks,
+    validate_embedding_output,
+)
+from .routing import GovernedModelRouter, RoutingRequest
+
+
+class AnalysisFailureClass(str):
+    SERVICE_DISABLED = "service_disabled"
+    ROUTING_REJECTED = "routing_rejected"
+    PROVIDER_UNAVAILABLE = "provider_unavailable"
+    OUTPUT_VALIDATION_FAILED = "output_validation_failed"
+    ARTIFACT_PERSISTENCE_FAILED = "artifact_persistence_failed"
+    EVIDENCE_PERSISTENCE_FAILED = "evidence_persistence_failed"
+
+
+@dataclass(frozen=True, slots=True)
+class GovernedAnalysisResponse:
+    request_id: str
+    artifact: (
+        GovernedAnalysisArtifact
+        | GovernedSentimentArtifact
+        | GovernedRetrievalArtifact
+        | GovernedForecastArtifact
+        | GovernedForecastEvaluationArtifact
+        | None
+    )
+    routing_evidence_id: str | None
+    invocation_evidence_id: str | None
+    failure_classification: str | None
+    routing_summary: str
+    limitations: tuple[str, ...]
+    paper_only: bool = True
+    execution_authorized: bool = False
+    broker_submission: bool = False
+    portfolio_mutation: bool = False
+    approval_authority: bool = False
+
+    @property
+    def succeeded(self) -> bool:
+        return self.artifact is not None and self.failure_classification is None
+
+
+@dataclass(frozen=True, slots=True)
+class GovernedAnalysisStatus:
+    enabled: bool
+    provider_availability: tuple[tuple[str, str], ...]
+    registry_revision: str
+    last_successful_analysis: str | None
+    last_failure_classification: str | None
+    evidence_ledger_health: str
+    artifact_store_health: str
+    configured_models: tuple[str, ...]
+    paper_only: bool = True
+    broker_submission: bool = False
+
+
+class GovernedAnalysisService:
+    def __init__(
+        self,
+        *,
+        registry: GovernedModelRegistry,
+        providers: Mapping[str, ModelProvider],
+        evidence_ledger: DurableAIEvidenceLedger,
+        artifact_store: DurableAnalysisArtifactStore,
+        retrieval_store: DurableRetrievalStore | None = None,
+        enabled: bool = False,
+    ) -> None:
+        if any(getattr(provider, "ledger", None) is not None for provider in providers.values()):
+            raise ValueError("analysis service providers must delegate evidence ownership")
+        if any(key != provider.identity.provider_id for key, provider in providers.items()):
+            raise ValueError("analysis provider mapping identity mismatch")
+        self.registry = registry
+        self.providers = dict(providers)
+        self.evidence_ledger = evidence_ledger
+        self.artifact_store = artifact_store
+        self.retrieval_store = retrieval_store
+        self.enabled = enabled
+        self._last_failure: str | None = None
+
+    def analyze(
+        self, request: GovernedAnalysisRequest, *, completed_at: str
+    ) -> GovernedAnalysisResponse:
+        if not self.enabled:
+            return self._failure(
+                request,
+                AnalysisFailureClass.SERVICE_DISABLED,
+                "service disabled",
+            )
+        route_request = RoutingRequest(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            evidence_correlation_id=f"analysis-{request.request_id}",
+            responsibility=request.responsibility,
+            required_capabilities=frozenset({request.requested_capability}),
+            preferred_model_family="gemma",
+            privacy_requirement=request.privacy_requirement,
+            maximum_cost_class=request.maximum_cost_class,
+            execution_location_preference=request.execution_location_preference,
+            minimum_trust_tier=request.minimum_trust_tier,
+            timeout_ms=request.timeout_ms,
+            fallback_allowed=request.fallback_permission,
+        )
+        decision = GovernedModelRouter(self.registry).route(
+            route_request, decision_timestamp=request.requested_at
+        )
+        selected_model = next(
+            (item for item in self.registry.models if item.model_id == decision.selected_model_id),
+            None,
+        )
+        try:
+            append_routing_decision(
+                self.evidence_ledger,
+                request=route_request,
+                decision=decision,
+                model_version=None if selected_model is None else selected_model.version,
+                execution_location=(
+                    None if selected_model is None else selected_model.execution_location
+                ),
+            )
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+            )
+        if not decision.succeeded or selected_model is None:
+            failure = (
+                AnalysisFailureClass.ROUTING_REJECTED
+                if decision.failure_class is None
+                else decision.failure_class.value
+            )
+            return self._failure(request, failure, "routing rejected", decision.evidence_identity)
+
+        provider = self.providers.get(selected_model.provider_id)
+        invocation = ProviderInvocation(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            model_id=selected_model.model_id,
+            registry_revision=self.registry.revision,
+            capability=request.requested_capability,
+            input_payload={
+                "input_digest": request.input_digest,
+                "evidence_context_digests": list(request.evidence_context_digests),
+                "expected_output_schema": request.expected_output_schema.value,
+                "responsibility": request.responsibility.value,
+            },
+            timeout_ms=request.timeout_ms,
+            started_at=request.requested_at,
+            ended_at=completed_at,
+        )
+        try:
+            self._append_attempt(
+                invocation,
+                selected_model.provider_id,
+                selected_model.version,
+                selected_model.execution_location,
+            )
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+                decision.evidence_identity,
+            )
+        if provider is None:
+            result = self._unavailable_result(invocation, selected_model.execution_location)
+        else:
+            result = provider.invoke(invocation)
+        if not self._result_matches(
+            result,
+            invocation,
+            selected_model.provider_id,
+            selected_model.execution_location,
+        ):
+            result = self._malformed_result(
+                invocation, selected_model.provider_id, selected_model.execution_location
+            )
+        try:
+            self._append_result(result, invocation, selected_model.version)
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        if not result.succeeded or result.output is None:
+            classification = (
+                AnalysisFailureClass.PROVIDER_UNAVAILABLE
+                if result.failure is None
+                else result.failure.classification.value
+            )
+            return self._failure(
+                request,
+                classification,
+                "provider invocation failed",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        try:
+            payload = validate_generic_analysis(
+                result.output, trusted_evidence=request.evidence_context_digests
+            )
+            if result.evidence.output_digest is None:
+                raise AnalysisValidationError("provider output evidence digest is missing")
+        except AnalysisValidationError:
+            try:
+                rejected_id = self._append_output_rejection(
+                    request, invocation, selected_model.version, result
+                )
+            except AIEvidenceLedgerError:
+                return self._failure(
+                    request,
+                    AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                    "evidence ledger unavailable",
+                    decision.evidence_identity,
+                    result.evidence.evidence_identity,
+                )
+            return self._failure(
+                request,
+                AnalysisFailureClass.OUTPUT_VALIDATION_FAILED,
+                "provider output rejected",
+                decision.evidence_identity,
+                rejected_id,
+            )
+
+        artifact = build_analysis_artifact(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            provider_id=selected_model.provider_id,
+            model_id=selected_model.model_id,
+            model_version=selected_model.version,
+            capability=request.requested_capability,
+            responsibility=request.responsibility,
+            created_at=completed_at,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            input_digest=request.input_digest,
+            output_digest=result.evidence.output_digest,
+            structured_payload=payload,
+            citations=payload.evidence_references,
+            confidence=payload.confidence,
+            limitations=payload.limitations,
+            stale_after=None,
+        )
+        try:
+            self.artifact_store.append(artifact)
+        except AnalysisArtifactStoreError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.ARTIFACT_PERSISTENCE_FAILED,
+                "artifact store unavailable",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        self._last_failure = None
+        return GovernedAnalysisResponse(
+            request_id=request.request_id,
+            artifact=artifact,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            failure_classification=None,
+            routing_summary=(
+                "fallback selected" if decision.fallback else "preferred model selected"
+            ),
+            limitations=payload.limitations,
+        )
+
+    def analyze_hermes(
+        self,
+        work: GovernedModelWorkRequest,
+        *,
+        requested_at: str,
+        completed_at: str,
+    ) -> GovernedAnalysisResponse:
+        request = GovernedAnalysisRequest(
+            request_id=work.request_id,
+            task_correlation_id=work.task_correlation_id,
+            requested_capability=work.capability,
+            responsibility=work.responsibility,
+            privacy_requirement=work.privacy_requirement,
+            maximum_cost_class=work.routing_request().maximum_cost_class,
+            minimum_trust_tier=work.routing_request().minimum_trust_tier,
+            execution_location_preference=work.routing_request().execution_location_preference,
+            fallback_permission=work.fallback_allowed,
+            timeout_ms=work.timeout_ms,
+            input_digest=f"sha256:{canonical_digest(asdict(work))}",
+            evidence_context_digests=work.evidence_context,
+            expected_output_schema=GovernedOutputSchema(work.expected_output_contract),
+            requested_at=requested_at,
+        )
+        return self.analyze(request, completed_at=completed_at)
+
+    def analyze_sentiment(
+        self, request: GovernedSentimentRequest, *, completed_at: str
+    ) -> GovernedAnalysisResponse:
+        """Route, invoke, validate, evidence, and persist advisory sentiment."""
+        if not self.enabled:
+            return self._failure(request, AnalysisFailureClass.SERVICE_DISABLED, "service disabled")
+        route_request = RoutingRequest(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            evidence_correlation_id=f"sentiment-{request.request_id}",
+            responsibility=request.responsibility,
+            required_capabilities=frozenset({request.capability}),
+            preferred_model_family="finbert",
+            privacy_requirement=request.privacy_requirement,
+            maximum_cost_class=CostClass.FREE,
+            execution_location_preference=(ExecutionLocation.LOCAL,),
+            minimum_trust_tier=TrustTier.TRUSTED,
+            timeout_ms=request.timeout_ms,
+            fallback_allowed=request.fallback_permission,
+        )
+        decision = GovernedModelRouter(self.registry).route(
+            route_request, decision_timestamp=request.requested_at
+        )
+        selected_model = next(
+            (item for item in self.registry.models if item.model_id == decision.selected_model_id),
+            None,
+        )
+        try:
+            append_routing_decision(
+                self.evidence_ledger,
+                request=route_request,
+                decision=decision,
+                model_version=None if selected_model is None else selected_model.version,
+                execution_location=None
+                if selected_model is None
+                else selected_model.execution_location,
+            )
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+            )
+        if not decision.succeeded or selected_model is None:
+            classification = (
+                AnalysisFailureClass.ROUTING_REJECTED
+                if decision.failure_class is None
+                else decision.failure_class.value
+            )
+            return self._failure(
+                request, classification, "sentiment routing rejected", decision.evidence_identity
+            )
+        invocation = ProviderInvocation(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            model_id=selected_model.model_id,
+            registry_revision=self.registry.revision,
+            capability=request.capability,
+            input_payload={
+                "source_text": request.source_text,
+                "source_identity": request.source_identity,
+                "source_digest": request.input_digest,
+                "source_type": request.source_type.value,
+                "language": request.language,
+                "evidence_context_digests": list(request.evidence_context_digests),
+            },
+            timeout_ms=request.timeout_ms,
+            started_at=request.requested_at,
+            ended_at=completed_at,
+        )
+        try:
+            self._append_attempt(
+                invocation,
+                selected_model.provider_id,
+                selected_model.version,
+                selected_model.execution_location,
+            )
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+                decision.evidence_identity,
+            )
+        provider = self.providers.get(selected_model.provider_id)
+        result = (
+            self._unavailable_result(invocation, selected_model.execution_location)
+            if provider is None
+            else provider.invoke(invocation)
+        )
+        if not self._result_matches(
+            result,
+            invocation,
+            selected_model.provider_id,
+            selected_model.execution_location,
+        ):
+            result = self._malformed_result(
+                invocation, selected_model.provider_id, selected_model.execution_location
+            )
+        try:
+            self._append_result(result, invocation, selected_model.version)
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        if not result.succeeded or result.output is None:
+            classification = (
+                AnalysisFailureClass.PROVIDER_UNAVAILABLE
+                if result.failure is None
+                else result.failure.classification.value
+            )
+            return self._failure(
+                request,
+                classification,
+                "FinBERT invocation failed",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        try:
+            payload = validate_finbert_output(
+                result.output,
+                request=request,
+                expected_model_id=selected_model.model_id,
+                expected_model_version=selected_model.version,
+            )
+            if result.evidence.output_digest is None:
+                raise AnalysisValidationError("provider output evidence digest is missing")
+        except (AnalysisValidationError, ValueError):
+            try:
+                rejected_id = self._append_output_rejection(
+                    request, invocation, selected_model.version, result
+                )
+            except AIEvidenceLedgerError:
+                return self._failure(
+                    request,
+                    AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                    "evidence ledger unavailable",
+                    decision.evidence_identity,
+                    result.evidence.evidence_identity,
+                )
+            return self._failure(
+                request,
+                AnalysisFailureClass.OUTPUT_VALIDATION_FAILED,
+                "FinBERT output rejected",
+                decision.evidence_identity,
+                rejected_id,
+            )
+        artifact = build_sentiment_artifact(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            provider_id=selected_model.provider_id,
+            model_id=selected_model.model_id,
+            model_version=selected_model.version,
+            capability=request.capability,
+            responsibility=request.responsibility,
+            created_at=completed_at,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            input_digest=request.input_digest,
+            output_digest=result.evidence.output_digest,
+            structured_payload=payload,
+            citations=request.evidence_context_digests,
+            confidence=payload.confidence,
+            limitations=payload.limitations,
+            stale_after=None,
+        )
+        try:
+            self.artifact_store.append(artifact)
+        except AnalysisArtifactStoreError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.ARTIFACT_PERSISTENCE_FAILED,
+                "artifact store unavailable",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        self._last_failure = None
+        return GovernedAnalysisResponse(
+            request_id=request.request_id,
+            artifact=artifact,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            failure_classification=None,
+            routing_summary=("fallback selected" if decision.fallback else "FinBERT selected"),
+            limitations=payload.limitations,
+        )
+
+    def analyze_hermes_sentiment(
+        self,
+        work: GovernedSentimentWorkRequest,
+        *,
+        source_text: str,
+        language: str,
+        requested_at: str,
+        completed_at: str,
+    ) -> GovernedAnalysisResponse:
+        """Resolve a reference-only Hermes handoff inside backend authority."""
+        from .finbert import SentimentSourceType
+
+        request = GovernedSentimentRequest(
+            request_id=work.request_id,
+            task_correlation_id=work.task_correlation_id,
+            responsibility=work.responsibility,
+            input_digest=work.source_digest,
+            evidence_context_digests=work.evidence_references,
+            source_type=SentimentSourceType(work.source_type),
+            source_identity=work.source_identity,
+            source_text=source_text,
+            language=language,
+            requested_at=requested_at,
+            timeout_ms=work.timeout_ms,
+            privacy_requirement=work.privacy_requirement,
+            fallback_permission=work.fallback_allowed,
+        )
+        return self.analyze_sentiment(request, completed_at=completed_at)
+
+    def forecast(
+        self,
+        request: GovernedForecastRequest,
+        *,
+        series: GovernedMarketSeries,
+        completed_at: str,
+    ) -> GovernedAnalysisResponse:
+        """Route and persist a validated advisory Kronos forecast."""
+        if not self.enabled:
+            return self._failure(request, AnalysisFailureClass.SERVICE_DISABLED, "service disabled")
+        if (
+            request.series_id != series.series_id
+            or request.series_digest != series.source_digest
+            or request.symbol != series.symbol
+            or request.interval != series.interval
+            or series.privacy_classification < request.privacy_requirement
+            or series.source_trust < request.minimum_trust_tier
+            or (request.require_fresh and series.is_stale(request.requested_at))
+        ):
+            return self._failure(
+                request, "market_series_rejected", "market series failed governed validation"
+            )
+        route_request = RoutingRequest(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            evidence_correlation_id=f"forecast-{request.request_id}",
+            responsibility=request.responsibility,
+            required_capabilities=frozenset({Capability.TIME_SERIES_FORECASTING}),
+            preferred_model_family="kronos",
+            privacy_requirement=request.privacy_requirement,
+            maximum_cost_class=CostClass.FREE,
+            execution_location_preference=(ExecutionLocation.LOCAL,),
+            minimum_trust_tier=request.minimum_trust_tier,
+            timeout_ms=request.timeout_ms,
+            fallback_allowed=request.fallback_permission,
+        )
+        decision = GovernedModelRouter(self.registry).route(
+            route_request, decision_timestamp=request.requested_at
+        )
+        selected_model = next(
+            (item for item in self.registry.models if item.model_id == decision.selected_model_id),
+            None,
+        )
+        try:
+            append_routing_decision(
+                self.evidence_ledger,
+                request=route_request,
+                decision=decision,
+                model_version=None if selected_model is None else selected_model.version,
+                execution_location=None
+                if selected_model is None
+                else selected_model.execution_location,
+            )
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+            )
+        if not decision.succeeded or selected_model is None:
+            classification = (
+                AnalysisFailureClass.ROUTING_REJECTED
+                if decision.failure_class is None
+                else decision.failure_class.value
+            )
+            return self._failure(
+                request, classification, "forecast routing rejected", decision.evidence_identity
+            )
+        provider = self.providers.get(selected_model.provider_id)
+        config = getattr(provider, "config", None)
+        if config is not None and (
+            series.interval not in config.allowed_intervals
+            or not config.min_sequence_length <= series.bar_count <= config.max_sequence_length
+            or request.forecast_horizon > config.max_horizon
+        ):
+            return self._failure(
+                request,
+                "forecast_input_unsupported",
+                "forecast bounds are unsupported",
+                decision.evidence_identity,
+            )
+        freshness_state = "stale" if series.is_stale(completed_at) else "current"
+        invocation = ProviderInvocation(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            model_id=selected_model.model_id,
+            registry_revision=self.registry.revision,
+            capability=Capability.TIME_SERIES_FORECASTING,
+            input_payload={
+                "series_id": series.series_id,
+                "series_digest": series.source_digest,
+                "symbol": series.symbol,
+                "interval": series.interval,
+                "bars": [asdict(item) for item in series.bars],
+                "forecast_horizon": request.forecast_horizon,
+                "uncertainty_mode": request.uncertainty_mode.value,
+                "requested_quantiles": list(request.requested_quantiles),
+                "model_id": selected_model.model_id,
+                "tokenizer_id": getattr(provider, "tokenizer_id", "unavailable"),
+                "tokenizer_version": getattr(provider, "tokenizer_version", "unavailable"),
+                "freshness_state": freshness_state,
+                "evidence_context_digests": list(request.evidence_context_digests),
+            },
+            timeout_ms=request.timeout_ms,
+            started_at=request.requested_at,
+            ended_at=completed_at,
+        )
+        try:
+            self._append_attempt(
+                invocation,
+                selected_model.provider_id,
+                selected_model.version,
+                selected_model.execution_location,
+            )
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+                decision.evidence_identity,
+            )
+        result = (
+            self._unavailable_result(invocation, selected_model.execution_location)
+            if provider is None
+            else provider.invoke(invocation)
+        )
+        if not self._result_matches(
+            result, invocation, selected_model.provider_id, selected_model.execution_location
+        ):
+            result = self._malformed_result(
+                invocation, selected_model.provider_id, selected_model.execution_location
+            )
+        try:
+            self._append_result(result, invocation, selected_model.version)
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                "evidence ledger unavailable",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        if not result.succeeded or result.output is None:
+            classification = (
+                AnalysisFailureClass.PROVIDER_UNAVAILABLE
+                if result.failure is None
+                else result.failure.classification.value
+            )
+            return self._failure(
+                request,
+                classification,
+                "Kronos invocation failed",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        try:
+            payload = validate_kronos_output(
+                result.output,
+                request=request,
+                series=series,
+                provider_id=selected_model.provider_id,
+                model_id=selected_model.model_id,
+                model_version=selected_model.version,
+                tokenizer_id=getattr(provider, "tokenizer_id", "unavailable"),
+                tokenizer_version=getattr(provider, "tokenizer_version", "unavailable"),
+            )
+            if result.evidence.output_digest is None:
+                raise KronosValidationError("Kronos output evidence digest is missing")
+        except (KronosValidationError, TypeError, ValueError):
+            try:
+                rejected_id = self._append_output_rejection(
+                    request, invocation, selected_model.version, result
+                )
+            except AIEvidenceLedgerError:
+                return self._failure(
+                    request,
+                    AnalysisFailureClass.EVIDENCE_PERSISTENCE_FAILED,
+                    "evidence ledger unavailable",
+                    decision.evidence_identity,
+                    result.evidence.evidence_identity,
+                )
+            return self._failure(
+                request,
+                AnalysisFailureClass.OUTPUT_VALIDATION_FAILED,
+                "Kronos output rejected",
+                decision.evidence_identity,
+                rejected_id,
+            )
+        artifact = build_forecast_artifact(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            series_id=series.series_id,
+            series_digest=series.source_digest,
+            symbol=series.symbol,
+            interval=series.interval,
+            provider_id=selected_model.provider_id,
+            model_id=selected_model.model_id,
+            model_version=selected_model.version,
+            tokenizer_id=getattr(provider, "tokenizer_id", "unavailable"),
+            tokenizer_version=getattr(provider, "tokenizer_version", "unavailable"),
+            forecast_horizon=request.forecast_horizon,
+            structured_payload=payload,
+            source_trust=series.source_trust,
+            freshness_state=freshness_state,
+            limitations=payload.limitations,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            input_digest=series.source_digest,
+            output_digest=result.evidence.output_digest,
+            created_at=completed_at,
+            stale_after=series.stale_after,
+            responsibility=request.responsibility,
+        )
+        try:
+            self.artifact_store.append(artifact)
+        except AnalysisArtifactStoreError:
+            return self._failure(
+                request,
+                AnalysisFailureClass.ARTIFACT_PERSISTENCE_FAILED,
+                "artifact store unavailable",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        self._last_failure = None
+        return GovernedAnalysisResponse(
+            request_id=request.request_id,
+            artifact=artifact,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            failure_classification=None,
+            routing_summary="fallback selected" if decision.fallback else "Kronos selected",
+            limitations=payload.limitations,
+        )
+
+    def forecast_hermes(
+        self,
+        work: GovernedForecastWorkRequest,
+        *,
+        series: GovernedMarketSeries,
+        requested_at: str,
+        completed_at: str,
+    ) -> GovernedAnalysisResponse:
+        request = GovernedForecastRequest(
+            request_id=work.request_id,
+            task_correlation_id=work.task_correlation_id,
+            responsibility=work.responsibility,
+            series_id=work.series_id,
+            series_digest=work.series_digest,
+            symbol=work.symbol,
+            interval=work.interval,
+            forecast_horizon=work.forecast_horizon,
+            uncertainty_mode=UncertaintyMode(work.uncertainty_mode),
+            requested_quantiles=work.requested_quantiles,
+            privacy_requirement=work.privacy_requirement,
+            minimum_trust_tier=work.minimum_trust_tier,
+            fallback_permission=work.fallback_allowed,
+            timeout_ms=work.timeout_ms,
+            requested_at=requested_at,
+            evidence_context_digests=work.evidence_context_digests,
+        )
+        return self.forecast(request, series=series, completed_at=completed_at)
+
+    def evaluate_forecast(
+        self,
+        forecast: GovernedForecastArtifact,
+        observed: GovernedMarketSeries,
+        *,
+        request_id: str,
+        task_correlation_id: str,
+        evaluated_at: str,
+    ) -> GovernedForecastEvaluationArtifact:
+        artifact = evaluate_forecast(
+            forecast,
+            observed,
+            request_id=request_id,
+            task_correlation_id=task_correlation_id,
+            evaluated_at=evaluated_at,
+        )
+        self.artifact_store.append(artifact)
+        return artifact
+
+    def index_retrieval_source(
+        self, request: GovernedIndexingRequest, *, completed_at: str
+    ) -> GovernedIndexingResponse:
+        """Index one explicitly governed source through the shared provider/evidence path."""
+        if not self.enabled:
+            return self._indexing_failure(request, "service_disabled", "service disabled")
+        if self.retrieval_store is None:
+            return self._indexing_failure(
+                request, "retrieval_store_unavailable", "retrieval store unavailable"
+            )
+        chunks = deterministic_chunks(
+            request.source, maximum_characters=request.chunk_maximum_characters
+        )
+        route_request = RoutingRequest(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            evidence_correlation_id=f"indexing-{request.request_id}",
+            responsibility=Responsibility.EVIDENCE_RETRIEVAL,
+            required_capabilities=frozenset({Capability.EMBEDDINGS}),
+            preferred_model_family="embeddinggemma",
+            privacy_requirement=request.source.privacy_classification,
+            maximum_cost_class=CostClass.FREE,
+            execution_location_preference=(ExecutionLocation.LOCAL,),
+            minimum_trust_tier=request.source.trust_classification,
+            timeout_ms=30_000,
+            fallback_allowed=request.fallback_permission,
+        )
+        decision = GovernedModelRouter(self.registry).route(
+            route_request, decision_timestamp=request.requested_at
+        )
+        selected_model = next(
+            (item for item in self.registry.models if item.model_id == decision.selected_model_id),
+            None,
+        )
+        try:
+            append_routing_decision(
+                self.evidence_ledger,
+                request=route_request,
+                decision=decision,
+                model_version=None if selected_model is None else selected_model.version,
+                execution_location=None
+                if selected_model is None
+                else selected_model.execution_location,
+            )
+        except AIEvidenceLedgerError:
+            return self._indexing_failure(
+                request, "evidence_persistence_failed", "evidence ledger unavailable"
+            )
+        if not decision.succeeded or selected_model is None:
+            return self._indexing_failure(
+                request,
+                "no_suitable_model"
+                if decision.failure_class is None
+                else decision.failure_class.value,
+                "embedding routing rejected",
+                decision.evidence_identity,
+            )
+        provider = self.providers.get(selected_model.provider_id)
+        if provider is None:
+            return self._indexing_failure(
+                request,
+                "provider_unavailable",
+                "embedding provider unavailable",
+                decision.evidence_identity,
+            )
+        batch_size = max(1, int(getattr(getattr(provider, "config", None), "max_batch_size", 1)))
+        embeddings: list[GovernedEmbeddingArtifact] = []
+        invocation_ids: list[str] = []
+        for offset in range(0, len(chunks), batch_size):
+            batch = chunks[offset : offset + batch_size]
+            invocation = ProviderInvocation(
+                request_id=request.request_id,
+                task_correlation_id=request.task_correlation_id,
+                model_id=selected_model.model_id,
+                registry_revision=self.registry.revision,
+                capability=Capability.EMBEDDINGS,
+                input_payload={
+                    "texts": [item.text for item in batch],
+                    "source_id": request.source.source_id,
+                    "chunk_ids": [item.chunk_id for item in batch],
+                },
+                timeout_ms=min(provider.request_timeout_ms, 300_000),
+                started_at=request.requested_at,
+                ended_at=completed_at,
+            )
+            try:
+                self._append_attempt(
+                    invocation,
+                    selected_model.provider_id,
+                    selected_model.version,
+                    selected_model.execution_location,
+                )
+                result = provider.invoke(invocation)
+                if not self._result_matches(
+                    result,
+                    invocation,
+                    selected_model.provider_id,
+                    selected_model.execution_location,
+                ):
+                    result = self._malformed_result(
+                        invocation,
+                        selected_model.provider_id,
+                        selected_model.execution_location,
+                    )
+                self._append_result(result, invocation, selected_model.version)
+            except AIEvidenceLedgerError:
+                return self._indexing_failure(
+                    request,
+                    "evidence_persistence_failed",
+                    "evidence ledger unavailable",
+                    decision.evidence_identity,
+                    tuple(invocation_ids),
+                )
+            invocation_ids.append(result.evidence.evidence_identity)
+            if not result.succeeded or result.output is None:
+                return self._indexing_failure(
+                    request,
+                    "provider_unavailable"
+                    if result.failure is None
+                    else result.failure.classification.value,
+                    "embedding invocation failed",
+                    decision.evidence_identity,
+                    tuple(invocation_ids),
+                )
+            try:
+                dimension = int(result.output["vector_dimension"])
+                vectors = validate_embedding_output(
+                    result.output,
+                    model_id=selected_model.model_id,
+                    model_version=selected_model.version,
+                    vector_dimension=dimension,
+                    expected_count=len(batch),
+                )
+            except (KeyError, TypeError, ValueError, RetrievalValidationError):
+                try:
+                    rejected_id = self._append_output_rejection(
+                        request, invocation, selected_model.version, result
+                    )
+                except AIEvidenceLedgerError:
+                    rejected_id = result.evidence.evidence_identity
+                return self._indexing_failure(
+                    request,
+                    "output_validation_failed",
+                    "embedding output rejected",
+                    decision.evidence_identity,
+                    (*invocation_ids[:-1], rejected_id),
+                )
+            for chunk, vector in zip(batch, vectors, strict=True):
+                vector_digest = f"sha256:{canonical_digest(list(vector))}"
+                embeddings.append(
+                    build_embedding_artifact(
+                        provider_id=selected_model.provider_id,
+                        model_id=selected_model.model_id,
+                        model_version=selected_model.version,
+                        source_id=request.source.source_id,
+                        chunk_id=chunk.chunk_id,
+                        source_digest=request.source.source_digest,
+                        chunk_digest=chunk.chunk_digest,
+                        vector_dimension=dimension,
+                        vector_digest=vector_digest,
+                        vector=vector,
+                        normalized=True,
+                        created_at=completed_at,
+                        registry_revision=self.registry.revision,
+                        invocation_evidence_id=result.evidence.evidence_identity,
+                    )
+                )
+        try:
+            self.retrieval_store.append_index(request.source, chunks, embeddings)
+        except RetrievalStoreError:
+            return self._indexing_failure(
+                request,
+                "retrieval_persistence_failed",
+                "retrieval store rejected the index",
+                decision.evidence_identity,
+                tuple(invocation_ids),
+            )
+        return GovernedIndexingResponse(
+            request_id=request.request_id,
+            source_id=request.source.source_id,
+            chunk_ids=tuple(item.chunk_id for item in chunks),
+            embedding_ids=tuple(item.embedding_id for item in embeddings),
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_ids=tuple(invocation_ids),
+            failure_classification=None,
+            limitations=("Local governed retrieval index; advisory use only.",),
+        )
+
+    def retrieve(
+        self, request: GovernedRetrievalRequest, *, completed_at: str
+    ) -> GovernedAnalysisResponse:
+        """Embed a bounded query and persist sanitized ranked references."""
+        if not self.enabled:
+            return self._failure(request, "service_disabled", "service disabled")
+        if self.retrieval_store is None:
+            return self._failure(
+                request, "retrieval_store_unavailable", "retrieval store unavailable"
+            )
+        route_request = RoutingRequest(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            evidence_correlation_id=f"retrieval-{request.request_id}",
+            responsibility=request.responsibility,
+            required_capabilities=frozenset({Capability.SEMANTIC_RETRIEVAL}),
+            preferred_model_family="embeddinggemma",
+            privacy_requirement=request.privacy_requirement,
+            maximum_cost_class=CostClass.FREE,
+            execution_location_preference=(ExecutionLocation.LOCAL,),
+            minimum_trust_tier=request.minimum_trust_tier,
+            timeout_ms=30_000,
+            fallback_allowed=request.fallback_permission,
+        )
+        decision = GovernedModelRouter(self.registry).route(
+            route_request, decision_timestamp=request.requested_at
+        )
+        selected_model = next(
+            (item for item in self.registry.models if item.model_id == decision.selected_model_id),
+            None,
+        )
+        try:
+            append_routing_decision(
+                self.evidence_ledger,
+                request=route_request,
+                decision=decision,
+                model_version=None if selected_model is None else selected_model.version,
+                execution_location=None
+                if selected_model is None
+                else selected_model.execution_location,
+            )
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request, "evidence_persistence_failed", "evidence ledger unavailable"
+            )
+        if not decision.succeeded or selected_model is None:
+            return self._failure(
+                request,
+                "no_suitable_model"
+                if decision.failure_class is None
+                else decision.failure_class.value,
+                "retrieval routing rejected",
+                decision.evidence_identity,
+            )
+        provider = self.providers.get(selected_model.provider_id)
+        invocation = ProviderInvocation(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            model_id=selected_model.model_id,
+            registry_revision=self.registry.revision,
+            capability=Capability.SEMANTIC_RETRIEVAL,
+            input_payload={
+                "texts": [request.query_text],
+                "query_digest": request.query_digest,
+                "corpus_ids": list(request.corpus_ids),
+            },
+            timeout_ms=30_000 if provider is None else provider.request_timeout_ms,
+            started_at=request.requested_at,
+            ended_at=completed_at,
+        )
+        try:
+            self._append_attempt(
+                invocation,
+                selected_model.provider_id,
+                selected_model.version,
+                selected_model.execution_location,
+            )
+            result = (
+                self._unavailable_result(invocation, selected_model.execution_location)
+                if provider is None
+                else provider.invoke(invocation)
+            )
+            if not self._result_matches(
+                result,
+                invocation,
+                selected_model.provider_id,
+                selected_model.execution_location,
+            ):
+                result = self._malformed_result(
+                    invocation, selected_model.provider_id, selected_model.execution_location
+                )
+            self._append_result(result, invocation, selected_model.version)
+        except AIEvidenceLedgerError:
+            return self._failure(
+                request,
+                "evidence_persistence_failed",
+                "evidence ledger unavailable",
+                decision.evidence_identity,
+            )
+        if not result.succeeded or result.output is None:
+            return self._failure(
+                request,
+                "provider_unavailable"
+                if result.failure is None
+                else result.failure.classification.value,
+                "retrieval embedding failed",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        try:
+            dimension = int(result.output["vector_dimension"])
+            query_vector = validate_embedding_output(
+                result.output,
+                model_id=selected_model.model_id,
+                model_version=selected_model.version,
+                vector_dimension=dimension,
+                expected_count=1,
+            )[0]
+            results = self.retrieval_store.search(request, query_vector, now=completed_at)
+        except (KeyError, TypeError, ValueError, RetrievalStoreError, RetrievalValidationError):
+            return self._failure(
+                request,
+                "retrieval_failed",
+                "retrieval failed safely",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        output_digest = f"sha256:{canonical_digest([asdict(item) for item in results])}"
+        artifact = build_retrieval_artifact(
+            request_id=request.request_id,
+            task_correlation_id=request.task_correlation_id,
+            provider_id=selected_model.provider_id,
+            model_id=selected_model.model_id,
+            model_version=selected_model.version,
+            capability=Capability.SEMANTIC_RETRIEVAL,
+            responsibility=request.responsibility,
+            created_at=completed_at,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            input_digest=request.query_digest,
+            output_digest=output_digest,
+            corpus_ids=request.corpus_ids,
+            results=results,
+            limitations=(
+                "Semantic similarity is advisory and does not establish factual agreement.",
+            ),
+            stale_after=None,
+        )
+        try:
+            self.artifact_store.append(artifact)
+        except AnalysisArtifactStoreError:
+            return self._failure(
+                request,
+                "artifact_persistence_failed",
+                "artifact store unavailable",
+                decision.evidence_identity,
+                result.evidence.evidence_identity,
+            )
+        return GovernedAnalysisResponse(
+            request_id=request.request_id,
+            artifact=artifact,
+            routing_evidence_id=decision.evidence_identity,
+            invocation_evidence_id=result.evidence.evidence_identity,
+            failure_classification=None,
+            routing_summary=(
+                "fallback selected" if decision.fallback else "EmbeddingGemma selected"
+            ),
+            limitations=artifact.limitations,
+        )
+
+    def retrieve_hermes(
+        self,
+        work: GovernedRetrievalWorkRequest,
+        *,
+        query_text: str,
+        requested_at: str,
+        completed_at: str,
+    ) -> GovernedAnalysisResponse:
+        """Resolve a digest-bound query within backend authority."""
+        from .retrieval import FreshnessRequirement, RetrievalSourceType
+
+        request = GovernedRetrievalRequest(
+            request_id=work.request_id,
+            task_correlation_id=work.task_correlation_id,
+            responsibility=work.responsibility,
+            query_digest=work.query_digest,
+            query_text=query_text,
+            corpus_ids=work.corpus_ids,
+            source_type_filters=tuple(
+                RetrievalSourceType(item) for item in work.source_type_filters
+            ),
+            privacy_requirement=work.privacy_requirement,
+            minimum_trust_tier=work.minimum_trust_tier,
+            freshness_requirement=FreshnessRequirement(work.freshness_requirement),
+            maximum_results=work.maximum_results,
+            minimum_score=work.minimum_score,
+            fallback_permission=work.fallback_allowed,
+            requested_at=requested_at,
+            evidence_context_digests=work.evidence_context_digests,
+        )
+        return self.retrieve(request, completed_at=completed_at)
+
+    @staticmethod
+    def _indexing_failure(
+        request,
+        classification,
+        limitation,
+        routing_evidence_id=None,
+        invocation_evidence_ids=(),
+    ) -> GovernedIndexingResponse:
+        return GovernedIndexingResponse(
+            request_id=request.request_id,
+            source_id=None,
+            chunk_ids=(),
+            embedding_ids=(),
+            routing_evidence_id=routing_evidence_id,
+            invocation_evidence_ids=tuple(invocation_evidence_ids),
+            failure_classification=classification,
+            limitations=(limitation,),
+        )
+
+    def status(self) -> GovernedAnalysisStatus:
+        try:
+            evidence_records = self.evidence_ledger.read_records()
+            evidence_health = "healthy"
+        except AIEvidenceLedgerError:
+            evidence_records = ()
+            evidence_health = "corrupt"
+        try:
+            artifacts = self.artifact_store.read_artifacts()
+            artifact_health = "healthy"
+        except AnalysisArtifactStoreError:
+            artifacts = ()
+            artifact_health = "corrupt"
+        return GovernedAnalysisStatus(
+            enabled=self.enabled,
+            provider_availability=tuple(
+                sorted(
+                    (provider_id, provider.identity.health.value)
+                    for provider_id, provider in self.providers.items()
+                )
+            ),
+            registry_revision=self.registry.revision,
+            last_successful_analysis=None if not artifacts else artifacts[-1].artifact_id,
+            last_failure_classification=self._last_failure
+            or next(
+                (
+                    item.failure_classification
+                    for item in reversed(evidence_records)
+                    if item.failure_classification is not None
+                ),
+                None,
+            ),
+            evidence_ledger_health=evidence_health,
+            artifact_store_health=artifact_health,
+            configured_models=tuple(sorted(model.model_id for model in self.registry.models)),
+        )
+
+    def _append_attempt(self, invocation, provider_id, model_version, location) -> None:
+        digest = f"sha256:{canonical_digest(dict(invocation.input_payload))}"
+        identity = evidence_identity(
+            {"type": "analysis_attempt", "request": invocation.request_id, "digest": digest}
+        )
+        self.evidence_ledger.append(
+            GovernedAIEvidenceRecord(
+                evidence_identity=identity,
+                record_type=AIEvidenceRecordType.PROVIDER_INVOCATION_ATTEMPT,
+                request_id=invocation.request_id,
+                task_correlation_id=invocation.task_correlation_id,
+                provider_id=provider_id,
+                model_id=invocation.model_id,
+                model_version=model_version,
+                registry_revision=invocation.registry_revision,
+                capability=invocation.capability,
+                execution_location=location,
+                routing_status="selected",
+                fallback=False,
+                started_at=invocation.started_at,
+                ended_at=invocation.started_at,
+                succeeded=False,
+                failure_classification=None,
+                input_digest=digest,
+                output_digest=None,
+            )
+        )
+
+    def _append_result(self, result, invocation, model_version) -> None:
+        self.evidence_ledger.append(
+            GovernedAIEvidenceRecord(
+                evidence_identity=result.evidence.evidence_identity,
+                record_type=(
+                    AIEvidenceRecordType.PROVIDER_RESULT_SUCCEEDED
+                    if result.succeeded
+                    else AIEvidenceRecordType.PROVIDER_RESULT_FAILED
+                ),
+                request_id=invocation.request_id,
+                task_correlation_id=invocation.task_correlation_id,
+                provider_id=result.evidence.provider_id,
+                model_id=invocation.model_id,
+                model_version=model_version,
+                registry_revision=invocation.registry_revision,
+                capability=invocation.capability,
+                execution_location=result.evidence.execution_location,
+                routing_status="selected",
+                fallback=False,
+                started_at=invocation.started_at,
+                ended_at=invocation.ended_at,
+                succeeded=result.succeeded,
+                failure_classification=result.evidence.failure_classification,
+                input_digest=result.evidence.input_digest,
+                output_digest=result.evidence.output_digest,
+                provider_metadata=result.evidence.provider_metadata,
+            )
+        )
+
+    def _append_output_rejection(self, request, invocation, model_version, result) -> str:
+        identity = evidence_identity(
+            {"type": "output_rejection", "invocation": result.evidence.evidence_identity}
+        )
+        self.evidence_ledger.append(
+            GovernedAIEvidenceRecord(
+                evidence_identity=identity,
+                record_type=AIEvidenceRecordType.ANALYSIS_OUTPUT_REJECTED,
+                request_id=request.request_id,
+                task_correlation_id=request.task_correlation_id,
+                provider_id=result.evidence.provider_id,
+                model_id=invocation.model_id,
+                model_version=model_version,
+                registry_revision=invocation.registry_revision,
+                capability=invocation.capability,
+                execution_location=result.evidence.execution_location,
+                routing_status="selected",
+                fallback=False,
+                started_at=invocation.started_at,
+                ended_at=invocation.ended_at,
+                succeeded=False,
+                failure_classification=AnalysisFailureClass.OUTPUT_VALIDATION_FAILED,
+                input_digest=result.evidence.input_digest,
+                output_digest=result.evidence.output_digest,
+                provider_metadata=result.evidence.provider_metadata,
+            )
+        )
+        return identity
+
+    @staticmethod
+    def _unavailable_result(invocation, location) -> ProviderResult:
+        failure = ProviderFailure(
+            ProviderFailureClass.UNAVAILABLE, "Selected provider is unavailable.", True
+        )
+        evidence = build_invocation_evidence(
+            request_id=invocation.request_id,
+            task_correlation_id=invocation.task_correlation_id,
+            provider_id="provider-unavailable",
+            model_id=invocation.model_id,
+            registry_revision=invocation.registry_revision,
+            capability=invocation.capability,
+            execution_location=location,
+            started_at=invocation.started_at,
+            ended_at=invocation.ended_at,
+            succeeded=False,
+            failure_classification=failure.classification.value,
+            input_payload=dict(invocation.input_payload),
+            output_payload=None,
+        )
+        return ProviderResult(output=None, failure=failure, evidence=evidence)
+
+    @staticmethod
+    def _result_matches(result, invocation, provider_id, location) -> bool:
+        evidence = result.evidence
+        return (
+            evidence.request_id == invocation.request_id
+            and evidence.task_correlation_id == invocation.task_correlation_id
+            and evidence.provider_id == provider_id
+            and evidence.model_id == invocation.model_id
+            and evidence.registry_revision == invocation.registry_revision
+            and evidence.capability == invocation.capability
+            and evidence.execution_location == location
+            and evidence.paper_only is True
+            and evidence.broker_submission is False
+            and result.paper_only is True
+            and result.broker_submission is False
+        )
+
+    @staticmethod
+    def _malformed_result(invocation, provider_id, location) -> ProviderResult:
+        failure = ProviderFailure(
+            ProviderFailureClass.MALFORMED_OUTPUT,
+            "Provider evidence did not match the governed invocation.",
+            False,
+        )
+        evidence = build_invocation_evidence(
+            request_id=invocation.request_id,
+            task_correlation_id=invocation.task_correlation_id,
+            provider_id=provider_id,
+            model_id=invocation.model_id,
+            registry_revision=invocation.registry_revision,
+            capability=invocation.capability,
+            execution_location=location,
+            started_at=invocation.started_at,
+            ended_at=invocation.ended_at,
+            succeeded=False,
+            failure_classification=failure.classification.value,
+            input_payload=dict(invocation.input_payload),
+            output_payload=None,
+        )
+        return ProviderResult(output=None, failure=failure, evidence=evidence)
+
+    def _failure(
+        self,
+        request,
+        classification,
+        limitation,
+        routing_evidence_id=None,
+        invocation_evidence_id=None,
+    ) -> GovernedAnalysisResponse:
+        self._last_failure = classification
+        return GovernedAnalysisResponse(
+            request_id=request.request_id,
+            artifact=None,
+            routing_evidence_id=routing_evidence_id,
+            invocation_evidence_id=invocation_evidence_id,
+            failure_classification=classification,
+            routing_summary=limitation,
+            limitations=(limitation,),
+        )

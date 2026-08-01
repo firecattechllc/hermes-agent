@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
+import time
 from typing import Any, Protocol
 
 import httpx
 
 from .models import ClientResult, HermesLinkEnvelope, HermesLinkStatus, LinkError
+from .security import CredentialRegistry, build_signed_request, resolve_secret
 
 
 class Response(Protocol):
@@ -24,13 +27,23 @@ class HermesLinkClient:
         self,
         base_url: str,
         *,
-        token: str,
+        token: str | None = None,
+        credential_registry: CredentialRegistry | None = None,
+        coordinator_node_id: str | None = None,
+        target_node_id: str | None = None,
         transport: Transport | None = None,
         connect_timeout: float = 2.0,
         read_timeout: float = 10.0,
     ) -> None:
+        if (token is None) == (credential_registry is None):
+            raise ValueError(
+                "exactly one Hermes Link client authentication mode is required"
+            )
         self.base_url = base_url.rstrip("/")
         self._token = token
+        self._credential_registry = credential_registry
+        self._coordinator_node_id = coordinator_node_id
+        self._target_node_id = target_node_id
         self._transport = transport or httpx.Client(
             timeout=httpx.Timeout(read_timeout, connect=connect_timeout)
         )
@@ -44,11 +57,35 @@ class HermesLinkClient:
         kind: str = "envelope",
     ) -> ClientResult:
         try:
+            body = (
+                b""
+                if envelope is None
+                else json.dumps(
+                    envelope.model_dump(mode="json"),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            )
+            headers: dict[str, str]
+            if self._credential_registry is not None:
+                if self._coordinator_node_id is None or self._target_node_id is None:
+                    raise ValueError("signed client node identities are required")
+                credential = self._credential_registry.active_for(
+                    self._coordinator_node_id,
+                    self._target_node_id,
+                    now=int(time.time()),
+                )
+                signed = build_signed_request(method, path, body, credential)
+                headers = signed.headers(resolve_secret(credential.secret_reference))
+                if body:
+                    headers["Content-Type"] = "application/json"
+            else:
+                headers = {"Authorization": f"Bearer {self._token}"}
             response = self._transport.request(
                 method,
                 self.base_url + path,
-                headers={"Authorization": f"Bearer {self._token}"},
-                json=None if envelope is None else envelope.model_dump(mode="json"),
+                headers=headers,
+                content=body,
             )
             data = response.json()
             if response.status_code >= 400:

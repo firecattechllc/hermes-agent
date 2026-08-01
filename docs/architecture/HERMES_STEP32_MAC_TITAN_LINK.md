@@ -148,6 +148,7 @@ Titan service, and leave the append-only journal intact for audit/replay. Do not
 delete queue data during rollback. Reverting the CLI/API code does not change
 Titan's existing nursery or local inference behavior.
 
-Future milestones may add governed automatic replay, sync lifecycle events,
-token-provider plugins, reviewed private-interface binding, streaming, and a Mac
-presence UI. None is implied or authorized by Step 32.
+The later signed fleet transport milestone is documented in
+`HERMES_SIGNED_LINK_FLEET_TRANSPORT.md`. It adds versioned request signatures,
+restart-safe replay rejection, rotation-capable credential references, and a
+restricted deployment path without changing Step 32 message authority.
