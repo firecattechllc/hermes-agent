@@ -2510,14 +2510,23 @@ export function SigilOperatorView({
                   </span>
                 </div>
                 <Pipeline compact stages={snapshot.stages} />
-                <div className="mt-5 grid gap-6 2xl:grid-cols-[1.35fr_1fr]">
-                  <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <h2 className="text-xs font-semibold uppercase tracking-[0.1em]">Pending proposals</h2>
-                      <span className="font-mono text-[0.625rem] text-(--ui-text-tertiary)">
+                <div className="mt-5 grid gap-4 2xl:grid-cols-[1.35fr_1fr]">
+                  <section className="sigil-beta-panel overflow-hidden" aria-labelledby="pending-proposals-title">
+                    <div className="flex items-center justify-between gap-3 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-3">
+                      <div>
+                        <p className="sigil-beta-label text-primary">Decision queue</p>
+                        <h2
+                          className="mt-1 text-sm font-semibold text-(--ui-text-primary)"
+                          id="pending-proposals-title"
+                        >
+                          Pending proposals
+                        </h2>
+                      </div>
+                      <span className="sigil-beta-data text-[0.6875rem] text-(--ui-text-tertiary)">
                         {snapshot.pendingApprovals} awaiting review
                       </span>
                     </div>
+                    <div className="px-4 py-2">
                     {snapshot.proposals
                       .filter(proposal => proposal.status === 'pending')
                       .slice(0, 2)
@@ -2525,8 +2534,8 @@ export function SigilOperatorView({
                         <button
                           aria-pressed={selectedProposal?.id === proposal.id}
                           className={cn(
-                            'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-t border-(--ui-stroke-tertiary) px-2 py-3 text-left transition-colors last:border-b hover:bg-(--chrome-action-hover)',
-                            selectedProposal?.id === proposal.id && 'border-l-2 border-l-primary bg-(--ui-bg-secondary)'
+                            'my-2 grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) px-3 py-3 text-left transition-colors hover:border-primary/25 hover:bg-(--ui-bg-tertiary)',
+                            selectedProposal?.id === proposal.id && 'border-primary/40 bg-primary/6'
                           )}
                           key={proposal.id}
                           onClick={() => setSelectedProposalId(proposal.id)}
@@ -2549,11 +2558,23 @@ export function SigilOperatorView({
                           </span>
                         </button>
                       ))}
-                  </div>
-                  <div>
-                    <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.1em]">Launch control</h2>
-                    <LaunchControl actionLocked onAction={setPendingAction} snapshot={snapshot} />
-                  </div>
+                    </div>
+                  </section>
+
+                  <section className="sigil-beta-panel overflow-hidden" aria-labelledby="launch-control-title">
+                    <div className="border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-3">
+                      <p className="sigil-beta-label text-primary">Governed authority</p>
+                      <h2
+                        className="mt-1 text-sm font-semibold text-(--ui-text-primary)"
+                        id="launch-control-title"
+                      >
+                        Launch control
+                      </h2>
+                    </div>
+                    <div className="px-4 py-4">
+                      <LaunchControl actionLocked onAction={setPendingAction} snapshot={snapshot} />
+                    </div>
+                  </section>
                 </div>
               </div>
             </div>

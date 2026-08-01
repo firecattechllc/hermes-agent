@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Sigil Mission Control</title>
+    
+    <!-- Required Fonts and Icons -->
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-tertiary-container": "#254000",
+                        "primary-fixed-dim": "#4edea3",
+                        "tertiary": "#91db2a",
+                        "surface-container": "#1e2021",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "secondary-fixed": "#71f8e4",
+                        "on-tertiary-fixed": "#102000",
+                        "on-error-container": "#ffdad6",
+                        "surface-variant": "#333536",
+                        "surface-container-low": "#1a1c1d",
+                        "primary": "#4edea3",
+                        "on-tertiary": "#1f3700",
+                        "surface-container-highest": "#333536",
+                        "primary-fixed": "#6ffbbe",
+                        "inverse-surface": "#e2e2e3",
+                        "error-container": "#93000a",
+                        "surface-container-lowest": "#0c0e0f",
+                        "secondary-container": "#04b4a2",
+                        "on-secondary-container": "#003f38",
+                        "tertiary-container": "#72b400",
+                        "secondary": "#4fdbc8",
+                        "surface-bright": "#38393a",
+                        "surface-tint": "#4edea3",
+                        "primary-container": "#10b981",
+                        "on-primary-fixed-variant": "#005236",
+                        "on-surface-variant": "#bbcabf",
+                        "tertiary-fixed-dim": "#91db2a",
+                        "outline-variant": "#3c4a42",
+                        "surface": "#121415",
+                        "on-secondary-fixed-variant": "#005048",
+                        "on-error": "#690005",
+                        "on-tertiary-fixed-variant": "#304f00",
+                        "on-background": "#e2e2e3",
+                        "surface-dim": "#121415",
+                        "surface-container-high": "#282a2b",
+                        "tertiary-fixed": "#acf847",
+                        "outline": "#86948a",
+                        "on-secondary": "#003731",
+                        "on-primary": "#003824",
+                        "on-secondary-fixed": "#00201c",
+                        "on-surface": "#e2e2e3",
+                        "on-primary-fixed": "#002113",
+                        "inverse-primary": "#006c49",
+                        "background": "#121415",
+                        "on-primary-container": "#00422b",
+                        "error": "#ffb4ab",
+                        "inverse-on-surface": "#2f3132",
+                        "warning": "#eab308", 
+                        "warning-container": "#423202",
+                        "on-warning-container": "#fef08a"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "md": "16px",
+                        "xl": "32px",
+                        "margin-desktop": "24px",
+                        "sm": "8px",
+                        "lg": "24px",
+                        "gutter": "16px",
+                        "unit": "4px",
+                        "margin-mobile": "16px",
+                        "xs": "4px"
+                    },
+                    fontFamily: {
+                        "headline-sm": ["Inter"],
+                        "data-lg": ["JetBrains Mono"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "data-sm": ["JetBrains Mono"],
+                        "data-md": ["JetBrains Mono"],
+                        "headline-lg": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "body-lg": ["Inter"]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #0A0C0D; color: #e2e2e3; }
+        .panel { background-color: #121417; border: 1px solid #262A30; }
+        .data-mono { font-family: 'JetBrains Mono', monospace; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333536; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3c4a42; }
+    </style>
+
+    <!-- React and Routing CDNs -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/history@5/umd/history.development.js"></script>
+    <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"></script>
+    <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+<body class="font-body-md h-screen flex overflow-hidden selection:bg-primary selection:text-on-primary">
+    <div id="root" class="w-full h-full"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createRoot } = ReactDOM;
+        const { MemoryRouter, Routes, Route, Link, useNavigate, useLocation } = ReactRouterDOM;
+
+        // --- Shared Components ---
+
+        const Sidebar = () => {
+            const location = useLocation();
+            
+            const navItems = [
+                { path: '/', icon: 'dashboard', label: 'Overview' },
+                { path: '/portfolio', icon: 'account_balance_wallet', label: 'Portfolio' },
+                { path: '/proposals', icon: 'description', label: 'Proposals' },
+                { path: '/launch', icon: 'rocket_launch', label: 'Launch' },
+                { path: '/executions', icon: 'terminal', label: 'Executions' },
+                { path: '/reconciliation', icon: 'account_tree', label: 'Reconciliation' },
+                { path: '/audit', icon: 'policy', label: 'Audit' },
+                { path: '/news', icon: 'newspaper', label: 'News' },
+                { path: '/settings', icon: 'settings', label: 'Settings' },
+            ];
+
+            return (
+                <nav class="bg-surface-container dark:bg-surface-container docked left-0 h-full w-64 border-r border-outline-variant dark:border-outline-variant fixed left-0 top-0 h-full flex flex-col py-md px-sm z-40 hidden md:flex">
+                    <div class="mb-lg px-sm">
+                        <h1 class="text-headline-sm font-headline-sm font-bold text-primary">Sigil v3.5</h1>
+                        <p class="text-data-sm font-data-sm text-on-surface-variant mt-unit">Environment: Paper</p>
+                    </div>
+                    <button class="bg-primary-container text-on-primary-container text-body-md font-body-md py-sm px-md rounded mb-lg mx-sm hover:bg-primary-fixed transition-colors flex items-center justify-center gap-sm">
+                        <span class="material-symbols-outlined text-[18px]">add</span>
+                        New Mission
+                    </button>
+                    <div class="flex-1 overflow-y-auto">
+                        <ul class="space-y-unit">
+                            {navItems.map(item => {
+                                const isActive = location.pathname === item.path;
+                                return (
+                                    <li key={item.path}>
+                                        <Link to={item.path} class={`flex items-center gap-md px-md py-sm rounded-lg transition-all ${isActive ? 'bg-secondary-container text-on-secondary-container translate-x-1' : 'text-on-surface-variant hover:bg-surface-container-highest'}`}>
+                                            <span class="material-symbols-outlined" style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>{item.icon}</span>
+                                            <span class="text-body-md font-body-md">{item.label}</span>
+                                        </Link>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                    <div class="mt-auto pt-md border-t border-outline-variant">
+                        <ul class="space-y-unit">
+                            <li>
+                                <Link to="/startup" class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-highest rounded-lg transition-colors">
+                                    <span class="material-symbols-outlined">power_settings_new</span>
+                                    <span class="text-body-md font-body-md">Startup Sequence</span>
+                                </Link>
+                            </li>
+                            <li>
+                                <a class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-highest rounded-lg transition-colors" href="#">
+                                    <span class="material-symbols-outlined">sensors</span>
+                                    <span class="text-body-md font-body-md">System Health</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </nav>
+            );
+        };
+
+        const Header = () => (
+            <header class="bg-surface-container-lowest border-b border-outline-variant py-sm px-lg flex justify-between items-center z-30 flex-shrink-0">
+                <div class="flex items-center gap-lg">
+                    <div class="flex items-center gap-sm">
+                        <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                        <span class="text-label-caps font-label-caps text-primary">PAPER ONLY</span>
+                    </div>
+                    <div class="flex items-center gap-sm">
+                        <span class="w-2 h-2 rounded-full bg-error"></span>
+                        <span class="text-label-caps font-label-caps text-error">BROKER SUBMISSION DISABLED</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-md text-data-sm font-data-sm text-on-surface-variant">
+                    <div class="flex items-center gap-xs">
+                        <span class="material-symbols-outlined text-[16px] text-primary">check_circle</span>
+                        Runtime Healthy
+                    </div>
+                    <div class="w-px h-4 bg-outline-variant mx-xs"></div>
+                    <div class="flex items-center gap-xs">
+                        <span class="material-symbols-outlined text-[16px] text-primary">wifi</span>
+                        Connected
+                    </div>
+                </div>
+            </header>
+        );
+
+        const Layout = ({ children }) => (
+            <div class="flex h-screen w-full bg-background">
+                <Sidebar />
+                <div class="md:ml-64 flex-1 flex flex-col h-full overflow-hidden">
+                    <Header />
+                    <main class="flex-1 overflow-y-auto">
+                        {children}
+                    </main>
+                </div>
+            </div>
+        );
+
+        // --- Page Components ---
+
+        const Overview = () => (
+            <div class="p-lg flex flex-col gap-lg">
+                <div class="flex justify-between items-end">
+                    <div>
+                        <h2 class="text-headline-lg font-headline-lg text-on-surface mb-unit">Mission Control</h2>
+                        <p class="text-body-md font-body-md text-on-surface-variant">System initialized and standing by for paper execution.</p>
+                    </div>
+                    <div class="flex items-center gap-md">
+                        <div class="flex items-center gap-sm bg-surface-container-low border border-outline-variant px-md py-sm rounded-lg">
+                            <span class="w-2 h-2 rounded-full bg-primary"></span>
+                            <span class="text-data-md font-data-md text-on-surface">Automation: Active</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-md">
+                    <div class="panel p-md rounded-lg flex flex-col justify-between h-24">
+                        <div class="flex justify-between items-start">
+                            <span class="text-label-caps font-label-caps text-on-surface-variant">AVAILABLE CASH</span>
+                            <span class="material-symbols-outlined text-[16px] text-primary">account_balance</span>
+                        </div>
+                        <div class="text-headline-md font-headline-md text-primary">$10,000.00</div>
+                    </div>
+                    <div class="panel p-md rounded-lg flex flex-col justify-between h-24 border-l-2 border-primary">
+                        <div class="flex justify-between items-start">
+                            <span class="text-label-caps font-label-caps text-on-surface-variant">PORTFOLIO VALUE</span>
+                            <span class="material-symbols-outlined text-[16px] text-primary">monitoring</span>
+                        </div>
+                        <div class="text-headline-md font-headline-md text-on-surface">$0.00</div>
+                    </div>
+                    <div class="panel p-md rounded-lg flex flex-col justify-between h-24">
+                        <div class="flex justify-between items-start">
+                            <span class="text-label-caps font-label-caps text-on-surface-variant">PENDING PROPOSALS</span>
+                            <span class="material-symbols-outlined text-[16px] text-on-surface-variant">description</span>
+                        </div>
+                        <div class="text-headline-md font-headline-md text-on-surface">0</div>
+                    </div>
+                    <div class="panel p-md rounded-lg flex flex-col justify-between h-24">
+                        <div class="flex justify-between items-start">
+                            <span class="text-label-caps font-label-caps text-on-surface-variant">SYSTEM HEALTH</span>
+                            <span class="material-symbols-outlined text-[16px] text-tertiary">health_and_safety</span>
+                        </div>
+                        <div class="text-headline-md font-headline-md text-tertiary">Nominal</div>
+                    </div>
+                </div>
+
+                <div class="panel rounded-xl p-lg">
+                    <div class="flex justify-between items-center mb-md border-b border-outline-variant pb-sm">
+                        <h3 class="text-label-caps font-label-caps text-on-surface-variant">RECENT AUDIT TIMELINE</h3>
+                        <Link to="/audit" class="text-label-caps font-label-caps text-primary hover:underline">VIEW ALL</Link>
+                    </div>
+                    <div class="space-y-sm">
+                        <div class="flex items-start gap-md p-sm hover:bg-surface-container-low rounded transition-colors">
+                            <span class="material-symbols-outlined text-[16px] text-primary mt-xs">play_arrow</span>
+                            <div>
+                                <p class="text-body-sm text-on-surface">System initialized in Paper mode.</p>
+                                <p class="text-data-sm text-on-surface-variant mt-xs">INIT_PAPER_STATE • Just now</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const Portfolio = () => (
+            <div class="p-md space-y-md">
+                <header class="flex justify-between items-center mb-lg">
+                    <div>
+                        <h1 class="text-headline-lg font-headline-lg text-on-surface">Portfolio Value</h1>
+                        <p class="font-data-md text-data-md text-on-surface-variant mt-xs">Paper Trading Account</p>
+                    </div>
+                </header>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-md">
+                    <div class="panel p-md rounded flex flex-col h-28 justify-center">
+                        <span class="font-label-caps text-on-surface-variant uppercase">Total Value</span>
+                        <div class="font-data-lg text-headline-lg text-on-surface">$1,452,890.22</div>
+                    </div>
+                     <div class="panel p-md rounded flex flex-col h-28 justify-center">
+                        <span class="font-label-caps text-on-surface-variant uppercase">Cash Balance</span>
+                        <div class="font-data-lg text-headline-sm text-on-surface">$245,100.50</div>
+                    </div>
+                </div>
+                <div class="panel rounded flex flex-col">
+                    <div class="p-md border-b border-outline-variant bg-surface-container-low">
+                        <h3 class="font-headline-sm text-on-surface">Active Positions</h3>
+                    </div>
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-surface-container border-b border-outline-variant">
+                            <tr>
+                                <th class="py-sm px-sm font-label-caps text-on-surface-variant uppercase">Symbol</th>
+                                <th class="py-sm px-sm font-label-caps text-on-surface-variant uppercase text-right">Quantity</th>
+                                <th class="py-sm px-sm font-label-caps text-on-surface-variant uppercase text-right">Current Mark</th>
+                            </tr>
+                        </thead>
+                        <tbody class="font-data-sm">
+                            <tr class="border-b border-outline-variant hover:bg-surface-container-highest">
+                                <td class="py-sm px-sm text-on-surface font-bold">AAPL</td>
+                                <td class="py-sm px-sm text-on-surface text-right">1,200</td>
+                                <td class="py-sm px-sm text-on-surface text-right">$182.30</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+
+        const GenericPlaceholder = ({ title, desc }) => (
+            <div class="p-lg flex flex-col items-center justify-center h-full text-center">
+                <span class="material-symbols-outlined text-[48px] text-outline mb-md">construction</span>
+                <h2 class="text-headline-lg text-on-surface mb-sm">{title}</h2>
+                <p class="text-body-md text-on-surface-variant max-w-md">{desc}</p>
+            </div>
+        );
+
+        const StartupSequence = () => (
+             <div class="h-screen w-full flex flex-col bg-background p-lg justify-center items-center">
+                <div class="w-full max-w-4xl text-center mb-xl">
+                    <h2 class="text-headline-md font-headline-md text-on-surface mb-xs animate-pulse">Authenticating Market Data...</h2>
+                    <p class="text-data-sm font-data-sm text-on-surface-variant">Establishing secure WebSocket connections.</p>
+                </div>
+                <div class="w-full max-w-4xl flex gap-sm">
+                     <div class="flex-1 h-2 bg-primary rounded-full"></div>
+                     <div class="flex-1 h-2 bg-primary rounded-full"></div>
+                     <div class="flex-1 h-2 bg-surface-container-high rounded-full overflow-hidden relative">
+                         <div class="absolute inset-0 bg-primary opacity-50 w-1/2 animate-pulse"></div>
+                     </div>
+                </div>
+                <div class="mt-xl">
+                     <Link to="/" class="text-primary hover:underline font-data-md">Skip to Mission Control</Link>
+                </div>
+            </div>
+        );
+
+        // --- App Shell ---
+        function App() {
+            return (
+                <MemoryRouter>
+                    <Routes>
+                        <Route path="/startup" element={<StartupSequence />} />
+                        <Route path="/" element={<Layout><Overview /></Layout>} />
+                        <Route path="/portfolio" element={<Layout><Portfolio /></Layout>} />
+                        <Route path="/proposals" element={<Layout><GenericPlaceholder title="Proposals" desc="Review algorithmic trade propositions before final execution." /></Layout>} />
+                        <Route path="/launch" element={<Layout><GenericPlaceholder title="Launch Control" desc="Mission execution and automation hub." /></Layout>} />
+                        <Route path="/executions" element={<Layout><GenericPlaceholder title="Executions" desc="Simulated execution logs for Paper environment." /></Layout>} />
+                        <Route path="/reconciliation" element={<Layout><GenericPlaceholder title="Reconciliation" desc="System topology and state verification." /></Layout>} />
+                        <Route path="/audit" element={<Layout><GenericPlaceholder title="Audit Trail" desc="Immutable cryptographic evidence log." /></Layout>} />
+                        <Route path="/news" element={<Layout><GenericPlaceholder title="Intelligence Stream" desc="Global market feeds and analytics." /></Layout>} />
+                        <Route path="/settings" element={<Layout><GenericPlaceholder title="Settings" desc="Local environment configuration." /></Layout>} />
+                    </Routes>
+                </MemoryRouter>
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
