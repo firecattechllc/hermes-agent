@@ -2105,74 +2105,143 @@ export function SigilOperatorView({
 
   return (
     <section
-      className="flex h-full min-h-0 flex-col bg-(--ui-bg-primary) text-[0.8125rem]"
+      className="sigil-beta-shell flex h-full min-h-0 flex-col text-[0.8125rem]"
       data-testid="sigil-operator"
     >
-      <header
-        className={cn('shrink-0 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) py-3', PAGE_INSET_X)}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="flex items-baseline gap-3">
-              <h1 className="text-base font-bold uppercase tracking-[0.025em]">Sigil Operator</h1>
-              <span
-                className="
-                  rounded-sm
-                  border border-lime-400/70
-                  bg-lime-400/8
-                  px-2 py-0.5
-                  font-mono text-[0.625rem] font-semibold
-                  uppercase tracking-[0.12em]
-                  text-lime-300/90
-                  shadow-[0_0_7px_rgba(163,230,53,0.38)]
-                "
-              >
-                ● {RELEASE_STAGE}
+      <header className="shrink-0 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-chrome)">
+        <div
+          className={cn(
+            'flex min-h-14 flex-wrap items-center justify-between gap-4 py-3',
+            PAGE_INSET_X
+          )}
+        >
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-base font-semibold tracking-[-0.01em] text-(--ui-text-primary)">
+                Sigil
+              </h1>
+              <span className="sigil-beta-label rounded-[4px] border border-primary/35 bg-primary/8 px-2 py-1 text-primary">
+                {RELEASE_STAGE}
               </span>
-              <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-(--ui-text-tertiary)">
-                Mission control
+              <span className="sigil-beta-label text-(--ui-text-tertiary)">
+                Mission Control
               </span>
             </div>
+            <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+              Governed financial intelligence and local paper operations
+            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusLabel tone={snapshot.environment === 'paper' ? 'info' : 'danger'}>
-              {snapshot.environment.toUpperCase()}
-            </StatusLabel>
-            <StatusLabel tone="muted">{snapshot.simulation ? 'SIMULATED' : 'NOT SIMULATED'}</StatusLabel>
-            <StatusLabel tone={snapshot.brokerConnection === 'connected' ? 'success' : 'danger'}>
-              {snapshot.brokerConnection.toUpperCase()}
-            </StatusLabel>
-            <span className="hidden h-5 w-px bg-(--ui-stroke-tertiary) sm:block" />
-            <span className="font-mono text-[0.6875rem] font-semibold text-primary">
-              HEALTH · {snapshot.systemHealth === 'Governance healthy' ? '99.8%' : snapshot.systemHealth}
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="sigil-beta-data text-[0.6875rem] text-(--ui-text-secondary)">
+              Health · {snapshot.systemHealth === 'Governance healthy' ? '99.8%' : snapshot.systemHealth}
             </span>
+
             <StatusLabel tone="success">{snapshot.certificationStatus}</StatusLabel>
+
             {desktopApi()?.buildInfo ? (
               <button
                 className="
-                  rounded-sm
-                  border border-lime-400/70
-                  bg-lime-400/8
-                  px-3 py-1
+                  rounded-[4px]
+                  border border-(--ui-stroke-primary)
+                  bg-(--ui-bg-secondary)
+                  px-3 py-1.5
                   font-mono text-[0.625rem] font-semibold
                   uppercase tracking-[0.08em]
-                  text-lime-300/90
-                  shadow-[0_0_8px_rgba(163,230,53,0.35)]
+                  text-(--ui-text-secondary)
                   transition-colors
-                  hover:bg-lime-400/12
-                  hover:text-lime-200
+                  hover:border-primary/50
+                  hover:text-primary
                 "
                 data-sigil-build-badge
                 onClick={() => setAboutOpen(true)}
                 type="button"
               >
-                {RELEASE_STAGE} · v{desktopApi()?.buildInfo?.version} · BUILD {desktopApi()?.buildInfo?.build}
+                v{desktopApi()?.buildInfo?.version} · build {desktopApi()?.buildInfo?.build}
               </button>
             ) : null}
-            <Button onClick={() => setReloadGeneration(value => value + 1)} size="xs" variant="outline">
+
+            <Button
+              className="h-8 rounded-[4px]"
+              onClick={() => setReloadGeneration(value => value + 1)}
+              size="xs"
+              variant="outline"
+            >
               <Codicon name="refresh" />
               Refresh runtime
             </Button>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            'flex min-h-9 flex-wrap items-center justify-between gap-3 border-t border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) py-2',
+            PAGE_INSET_X
+          )}
+          data-testid="global-safety-status"
+        >
+          <div className="flex flex-wrap items-center gap-5">
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="size-1.5 rounded-full bg-primary" />
+              <span className="sigil-beta-label text-primary">Paper only</span>
+            </span>
+
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="size-1.5 rounded-full bg-destructive" />
+              <span className="sigil-beta-label text-destructive">
+                Broker submission disabled
+              </span>
+            </span>
+          </div>
+
+          <div className="sigil-beta-data flex flex-wrap items-center gap-4 text-[0.6875rem] text-(--ui-text-tertiary)">
+            <span>
+              Runtime ·{' '}
+              <strong className="font-medium text-(--ui-text-primary)">
+                {snapshot.runtimeVisibility?.health ?? snapshot.systemHealth}
+              </strong>
+            </span>
+
+            <span className="hidden h-4 w-px bg-(--ui-stroke-tertiary) sm:block" />
+
+            <span>
+              Connection ·{' '}
+              <strong
+                className={cn(
+                  'font-medium',
+                  snapshot.brokerConnection === 'connected'
+                    ? 'text-primary'
+                    : 'text-destructive'
+                )}
+              >
+                {snapshot.brokerConnection}
+              </strong>
+            </span>
+
+            <span className="hidden h-4 w-px bg-(--ui-stroke-tertiary) sm:block" />
+
+            <span>
+              Data ·{' '}
+              <strong
+                className={cn(
+                  'font-medium',
+                  snapshot.dataState === 'stale'
+                    ? 'text-amber-300'
+                    : 'text-(--ui-text-primary)'
+                )}
+              >
+                {snapshot.dataState}
+              </strong>
+            </span>
+
+            <span className="hidden h-4 w-px bg-(--ui-stroke-tertiary) sm:block" />
+
+            <span>
+              Automation ·{' '}
+              <strong className="font-medium text-(--ui-text-primary)">
+                {snapshot.automationState ?? 'stopped'}
+              </strong>
+            </span>
           </div>
         </div>
       </header>
@@ -2288,7 +2357,7 @@ export function SigilOperatorView({
       <nav
         aria-label="Sigil sections"
         className={cn(
-          'flex shrink-0 gap-5 overflow-x-auto border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)',
+          'flex shrink-0 gap-1 overflow-x-auto border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-chrome) py-2',
           PAGE_INSET_X
         )}
       >
@@ -2296,10 +2365,10 @@ export function SigilOperatorView({
           <button
             aria-current={section === item ? 'page' : undefined}
             className={cn(
-              'shrink-0 border-b-2 px-0 py-2.5 text-[0.6875rem] font-semibold uppercase tracking-[0.06em] transition-colors',
+              'shrink-0 rounded-[4px] border px-3 py-2 text-[0.6875rem] font-semibold uppercase tracking-[0.06em] transition-colors',
               section === item
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-(--ui-text-tertiary) hover:text-foreground'
+                ? 'border-primary/35 bg-primary/10 text-primary'
+                : 'border-transparent text-(--ui-text-tertiary) hover:border-(--ui-stroke-tertiary) hover:bg-(--ui-bg-secondary) hover:text-(--ui-text-primary)'
             )}
             key={item}
             onClick={() => setSection(item)}
@@ -2313,6 +2382,24 @@ export function SigilOperatorView({
         {section === 'overview' ? (
           <div className="flex min-h-full flex-col xl:flex-row">
             <div className="min-w-0 flex-1">
+              <div className={cn('border-b border-(--ui-stroke-tertiary) py-6', PAGE_INSET_X)}>
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                  <div>
+                    <p className="sigil-beta-label text-primary">Operational overview</p>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-(--ui-text-primary)">
+                      Mission Control
+                    </h2>
+                    <p className="mt-2 max-w-3xl text-xs leading-5 text-(--ui-text-tertiary)">
+                      Verified runtime state, provider health, governed paper controls,
+                      pending decisions, and immutable evidence.
+                    </p>
+                  </div>
+
+                  <div className="sigil-beta-data rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-3 py-2 text-[0.6875rem] text-(--ui-text-secondary)">
+                    Last verified · {formatEasternDateTime(snapshot.lastUpdated)}
+                  </div>
+                </div>
+              </div>
               <MetricStrip snapshot={snapshot} />
               <RuntimeVisibilityCard onOpenAudit={() => setSection('audit')} snapshot={snapshot} />
               <ProviderPanel

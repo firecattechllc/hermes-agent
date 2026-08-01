@@ -9,7 +9,7 @@ describe('standalone Sigil Mission Control', () => {
     render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
 
     expect(await screen.findByTestId('sigil-operator')).toBeTruthy()
-    expect(screen.getByText('Mission control')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Mission Control', level: 2 })).toBeTruthy()
 
     for (const label of ['Overview', 'Portfolio', 'Proposals', 'Launch', 'Executions', 'Reconciliation', 'Audit', 'Settings']) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy()
@@ -25,7 +25,7 @@ describe('standalone Sigil Mission Control', () => {
 
     expect(await screen.findByText('•••• 23F4')).toBeTruthy()
     expect(screen.getAllByText(SIGIL_FIRST_LAUNCH_LIMIT).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('DISCONNECTED').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/disconnected/i).length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Reconciliation' }))
     expect(screen.getByText('Required')).toBeTruthy()
     expect(screen.queryByText(/submit order/i)).toBeNull()

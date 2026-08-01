@@ -1,43 +1,110 @@
 :root.dark {
-  --ui-base: #f2f4f3;
-  --ui-accent: #55a583;
-  --ui-accent-secondary: #6bb394;
-  --ui-bg-chrome: #0b0e0c;
-  --ui-bg-sidebar: #0d110f;
-  --ui-bg-editor: #101412;
-  --ui-bg-elevated: #181e1b;
-  --ui-bg-card: #151a17;
-  --ui-bg-input: #111613;
-  --ui-bg-primary: #101412;
-  --ui-bg-secondary: #151a17;
-  --ui-bg-tertiary: #1a211d;
-  --ui-bg-quaternary: #202923;
-  --ui-bg-quinary: #263129;
-  --ui-text-primary: #f2f4f3;
-  --ui-text-secondary: #bac3be;
-  --ui-text-tertiary: #88958e;
-  --ui-text-quaternary: #647069;
-  --ui-stroke-primary: #3f5449;
-  --ui-stroke-secondary: #304138;
-  --ui-stroke-tertiary: #26342d;
-  --ui-stroke-quaternary: #1d2922;
-  --ui-row-hover-background: #1a241e;
-  --ui-row-active-background: #203128;
-  --ui-control-hover-background: #1c2922;
-  --ui-control-active-background: #23362c;
-  --ui-chat-surface-background: #0b0e0c;
-  --dt-background: #0b0e0c;
-  --dt-card: #151a17;
-  --dt-foreground: #f2f4f3;
-  --dt-muted: #1a211d;
-  --dt-muted-foreground: #88958e;
-  --dt-primary: #55a583;
-  --dt-primary-foreground: #08110d;
-  --dt-secondary: #1a211d;
-  --dt-secondary-foreground: #f2f4f3;
-  --dt-border: #26342d;
-  --dt-input: #26342d;
-  --dt-ring: #55a583;
-  --dt-destructive: #e75e78;
-  --dt-destructive-foreground: #fff;
+  color-scheme: dark;
+
+  --sigil-background: #0a0c0d;
+  --sigil-surface: #121417;
+  --sigil-surface-low: #0c0e0f;
+  --sigil-surface-raised: #1a1d21;
+  --sigil-surface-high: #202429;
+  --sigil-border: #262a30;
+  --sigil-border-strong: #3c4a42;
+
+  --sigil-text: #e2e2e3;
+  --sigil-text-secondary: #bbcabf;
+  --sigil-text-muted: #86948a;
+  --sigil-text-faint: #647069;
+
+  --sigil-primary: #14b8a6;
+  --sigil-primary-bright: #4fdbc8;
+  --sigil-success: #4edea3;
+  --sigil-optimal: #91db2a;
+  --sigil-warning: #f3c969;
+  --sigil-danger: #ffb4ab;
+
+  --ui-base: var(--sigil-text);
+  --ui-accent: var(--sigil-primary);
+  --ui-accent-secondary: var(--sigil-primary-bright);
+
+  --ui-bg-chrome: var(--sigil-surface-low);
+  --ui-bg-sidebar: var(--sigil-surface);
+  --ui-bg-editor: var(--sigil-background);
+  --ui-bg-elevated: var(--sigil-surface-raised);
+  --ui-bg-card: var(--sigil-surface);
+  --ui-bg-input: var(--sigil-surface-low);
+  --ui-bg-primary: var(--sigil-background);
+  --ui-bg-secondary: var(--sigil-surface);
+  --ui-bg-tertiary: var(--sigil-surface-raised);
+  --ui-bg-quaternary: var(--sigil-surface-high);
+  --ui-bg-quinary: #282d32;
+
+  --ui-text-primary: var(--sigil-text);
+  --ui-text-secondary: var(--sigil-text-secondary);
+  --ui-text-tertiary: var(--sigil-text-muted);
+  --ui-text-quaternary: var(--sigil-text-faint);
+
+  --ui-stroke-primary: var(--sigil-border-strong);
+  --ui-stroke-secondary: #30383e;
+  --ui-stroke-tertiary: var(--sigil-border);
+  --ui-stroke-quaternary: #1d2125;
+
+  --ui-row-hover-background: #171b1e;
+  --ui-row-active-background: #1b2928;
+  --ui-control-hover-background: #1a2424;
+  --ui-control-active-background: #20302e;
+  --ui-chat-surface-background: var(--sigil-surface-low);
+
+  --chrome-action-hover: #1a2424;
+
+  --dt-background: var(--sigil-background);
+  --dt-card: var(--sigil-surface);
+  --dt-foreground: var(--sigil-text);
+  --dt-muted: var(--sigil-surface-raised);
+  --dt-muted-foreground: var(--sigil-text-muted);
+  --dt-primary: var(--sigil-primary);
+  --dt-primary-foreground: #00201c;
+  --dt-secondary: var(--sigil-surface-raised);
+  --dt-secondary-foreground: var(--sigil-text);
+  --dt-border: var(--sigil-border);
+  --dt-input: var(--sigil-border);
+  --dt-ring: var(--sigil-primary);
+  --dt-destructive: var(--sigil-danger);
+  --dt-destructive-foreground: #240000;
+}
+
+.sigil-beta-shell {
+  background:
+    radial-gradient(circle at 85% 0%, rgb(20 184 166 / 4%), transparent 28rem),
+    var(--sigil-background);
+  color: var(--sigil-text);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.sigil-beta-panel {
+  border: 1px solid var(--sigil-border);
+  border-radius: 4px;
+  background: var(--sigil-surface);
+}
+
+.sigil-beta-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sigil-beta-data {
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    Menlo,
+    monospace;
+  font-variant-numeric: tabular-nums;
 }
