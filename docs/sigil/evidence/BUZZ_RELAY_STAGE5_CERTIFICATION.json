@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "certification_scope": "post_phase9_stage5_buzz_relay_adapter",
+  "branch": "beta-post9-05-buzz-relay",
+  "base_commit": "e06701cc5",
+  "certified_at": "2026-08-01T23:58:00Z",
+  "status": "passed",
+  "implementation": {
+    "adapter": "apps/sigil/src/sigil/buzz_relay_adapter.py",
+    "tests": "apps/sigil/tests/test_buzz_relay_adapter.py",
+    "architecture_document": "docs/beta/post-phase9/BUZZ_RELAY_ADAPTER.md",
+    "disabled_by_default": true,
+    "live_relay_connected": false,
+    "external_integration_installed_or_activated": false
+  },
+  "modeled_concepts": [
+    "workspace_project_channel_identity",
+    "human_agent_service_identity",
+    "message_thread_references",
+    "signed_relay_events",
+    "approval_references",
+    "git_workflow_events",
+    "job_correlation_idempotency",
+    "evidence_references",
+    "hash_linked_event_ordering",
+    "replay_protection",
+    "worker_lifecycle_projection"
+  ],
+  "validation": {
+    "focused_stage1_through_stage5_tests": {
+      "result": "passed",
+      "passed": 142
+    },
+    "full_sigil_python_tests": {
+      "result": "passed",
+      "passed": 1487,
+      "warnings": 2,
+      "warning_class": "multiprocessing_fork_deprecation"
+    },
+    "ruff": {
+      "result": "passed"
+    },
+    "git_diff_check": {
+      "result": "passed"
+    }
+  },
+  "authority": {
+    "paper_only": true,
+    "broker_submission": false,
+    "execution_authorized": false,
+    "approval_authority": false,
+    "capital_authority": false,
+    "portfolio_mutation": false,
+    "policy_mutation": false,
+    "credential_access": false,
+    "arbitrary_shell": false,
+    "arbitrary_filesystem": false,
+    "governance_bypass": false,
+    "activation_authorized": false,
+    "installation_authorized": false
+  },
+  "deferred": [
+    "buzz_installation",
+    "live_relay_discovery",
+    "authentication",
+    "relay_subscription",
+    "message_delivery",
+    "thread_mutation",
+    "channel_creation",
+    "project_mutation",
+    "external_signature_verification",
+    "signing_key_discovery",
+    "remote_replay_acknowledgement",
+    "live_git_events",
+    "workflow_execution",
+    "mission_control_projection",
+    "buzznode_integration"
+  ],
+  "stage5_buzz_relay_integration_implemented": true,
+  "stage6_buzznode_integration_implemented": false
+}
