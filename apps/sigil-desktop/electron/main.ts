@@ -376,6 +376,10 @@ async function initializeUpdater(): Promise<GovernedUpdater> {
     throw new Error('The packaged update service is unavailable.')
   }
 
+  // GovernedUpdater records sanitized failures in its snapshot and audit log.
+  // Avoid electron-updater's raw console logger exposing full network errors.
+  autoUpdater.logger = null
+
   const developmentEnabled = process.env.SIGIL_ENABLE_DEV_UPDATES === '1'
   const internalTest = process.env.SIGIL_INTERNAL_UPDATE_CHANNEL === '1'
 
