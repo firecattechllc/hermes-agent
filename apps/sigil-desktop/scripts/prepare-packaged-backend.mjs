@@ -6,7 +6,6 @@ import process from 'node:process'
 
 const appDirectory = path.resolve(import.meta.dirname, '..')
 const sourcePackage = path.resolve(appDirectory, '../sigil/src/sigil')
-const initializer = path.join(appDirectory, 'packaged-backend/sigil/__init__.py')
 const stagingRoot = path.join(appDirectory, 'packaged-backend/staged')
 const temporaryRoot = path.join(
   appDirectory,
@@ -40,7 +39,6 @@ fs.rmSync(temporaryRoot, { recursive: true, force: true })
 try {
   const temporaryPackage = path.join(temporaryRoot, 'sigil')
   copyPythonTree(sourcePackage, temporaryPackage)
-  fs.copyFileSync(initializer, path.join(temporaryPackage, '__init__.py'))
 
   fs.rmSync(stagingRoot, { recursive: true, force: true })
   fs.renameSync(temporaryRoot, stagingRoot)
