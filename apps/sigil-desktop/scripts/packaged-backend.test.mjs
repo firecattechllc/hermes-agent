@@ -90,5 +90,17 @@ describe('packaged Python backend release gate', () => {
     expect(output).toContain(
       'PASS: runtime_snapshot bridge returned valid JSON with ok=true'
     )
+    expect(output).toContain(
+      'PASS: control_paper_cycle stopped the local paper runtime'
+    )
+    expect(output).toContain(
+      'PASS: control_paper_authorization revoked local paper authorization'
+    )
+    expect(output).toContain(
+      'PASS: reset_paper_runtime cleared only the local paper ledger'
+    )
+    expect(output).toContain(
+      'PASS: packaged bridge workflow preserved paper-only broker restrictions'
+    )
   })
 })

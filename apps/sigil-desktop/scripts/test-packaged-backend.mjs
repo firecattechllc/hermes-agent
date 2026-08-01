@@ -65,19 +65,98 @@ try {
   ], { env: environment })
   process.stdout.write('PASS: imported packaged sigil module\n')
 
-  const output = run(
-    python,
-    ['-m', 'sigil.desktop_bridge.runner'],
-    {
-      env: environment,
-      input: '{"command":"runtime_snapshot"}\n'
+  function bridgeRequest(request) {
+    const output = run(
+      python,
+      ['-m', 'sigil.desktop_bridge.runner'],
+      {
+        env: environment,
+        input: `${JSON.stringify(request)}\n`
+      }
+    )
+    const response = JSON.parse(output)
+
+    if (response.ok !== true) {
+      throw new Error(
+        `${request.command} did not return ok=true: ${output}`
+      )
     }
-  )
-  const response = JSON.parse(output)
-  if (response.ok !== true) {
-    throw new Error(`runtime_snapshot did not return ok=true: ${output}`)
+
+    return response.result
   }
-  process.stdout.write('PASS: runtime_snapshot bridge returned valid JSON with ok=true\n')
+
+  const initialSnapshot = bridgeRequest({ command: 'runtime_snapshot' })
+  process.stdout.write(
+    'PASS: runtime_snapshot bridge returned valid JSON with ok=true\n'
+  )
+
+  const stoppedSnapshot = bridgeRequest({
+    command: 'control_paper_cycle',
+    payload: { action: 'stop' }
+  })
+  if (stoppedSnapshot.automation?.state !== 'stopped') {
+    throw new Error(
+      `control_paper_cycle did not stop automation: ${JSON.stringify(stoppedSnapshot)}`
+    )
+  }
+  process.stdout.write(
+    'PASS: control_paper_cycle stopped the local paper runtime\n'
+  )
+
+  const revokedSnapshot = bridgeRequest({
+    command: 'control_paper_authorization',
+    payload: { action: 'revoke' }
+  })
+  if (revokedSnapshot.paper_authorization?.status !== 'revoked') {
+    throw new Error(
+      `control_paper_authorization did not revoke authorization: ${JSON.stringify(revokedSnapshot)}`
+    )
+  }
+  process.stdout.write(
+    'PASS: control_paper_authorization revoked local paper authorization\n'
+  )
+
+  const resetSnapshot = bridgeRequest({
+    command: 'reset_paper_runtime',
+    payload: { confirmation: 'RESET LOCAL PAPER PORTFOLIO' }
+  })
+  if (
+    resetSnapshot.positions?.length !== 0 ||
+    resetSnapshot.proposals?.length !== 0 ||
+    resetSnapshot.executions?.length !== 0
+  ) {
+    throw new Error(
+      `reset_paper_runtime did not clear local ledger state: ${JSON.stringify(resetSnapshot)}`
+    )
+  }
+  process.stdout.write(
+    'PASS: reset_paper_runtime cleared only the local paper ledger\n'
+  )
+
+  const finalSnapshot = bridgeRequest({ command: 'runtime_snapshot' })
+  const serializedFinalSnapshot = JSON.stringify(finalSnapshot)
+
+  if (
+    serializedFinalSnapshot.includes('"broker_submission":true') ||
+    serializedFinalSnapshot.includes('"broker_submission_available":true')
+  ) {
+    throw new Error(
+      `broker submission became available unexpectedly: ${serializedFinalSnapshot}`
+    )
+  }
+
+  if (
+    initialSnapshot.environment !== 'paper' ||
+    finalSnapshot.environment !== 'paper'
+  ) {
+    throw new Error(
+      `packaged bridge left paper mode: ${serializedFinalSnapshot}`
+    )
+  }
+
+  process.stdout.write(
+    'PASS: packaged bridge workflow preserved paper-only broker restrictions\n'
+  )
 } finally {
   fs.rmSync(cacheDirectory, { recursive: true, force: true })
   fs.rmSync(stateDirectory, { recursive: true, force: true })
