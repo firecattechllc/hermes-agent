@@ -592,6 +592,34 @@ describe('standalone Sigil Mission Control', () => {
     expect(screen.getAllByText('SIMULATED').length).toBeGreaterThan(0)
   })
 
+  it('confirmation-gates monthly paper authorization revocation and pauses automation', async () => {
+    const adapter = new MockSigilOperatorAdapter()
+
+    render(<SigilOperatorView adapter={adapter} />)
+    await screen.findByTestId('sigil-operator')
+
+    expect(screen.getByText(/Paper month 2026-07 · active/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+
+    expect(screen.getByText('Confirm authorization revocation')).toBeTruthy()
+    expect(
+      screen.getByText(/running automation will pause/i)
+    ).toBeTruthy()
+    expect(
+      screen.getByText(/simulated fills will be denied/i)
+    ).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke authorization' }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Paper month 2026-07 · revoked/)).toBeTruthy()
+    })
+
+    expect(screen.getByText(/automation paused/i)).toBeTruthy()
+    expect(screen.queryByText(/submit order/i)).toBeNull()
+  })
+
   it('confirmation-gates the local-only paper reset', async () => {
     render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
     await screen.findByTestId('sigil-operator')
