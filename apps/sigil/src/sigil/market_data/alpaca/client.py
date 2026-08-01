@@ -98,6 +98,33 @@ class AlpacaHttpClient:
             raise AlpacaProviderError("malformed_asset_response")
         return payload
 
+    def stock_snapshots(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        feed: str = "iex",
+    ) -> object:
+        """Return read-only snapshots for a bounded symbol set."""
+
+        if not symbols:
+            return {}
+
+        if len(symbols) > 20:
+            raise AlpacaProviderError("snapshot_capacity_rejected")
+
+        if feed not in {"iex", "delayed_sip"}:
+            raise AlpacaProviderError("unsupported_snapshot_feed")
+
+        return self._get(
+            self.config.data_base_url,
+            "/v2/stocks/snapshots",
+            {
+                "symbols": ",".join(symbols),
+                "feed": feed,
+                "currency": "USD",
+            },
+        )
+
     def delayed_bars(self, symbols: tuple[str, ...], *, start: str, end: str) -> object:
         return self._get(
             self.config.data_base_url, "/v2/stocks/bars",

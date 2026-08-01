@@ -25,6 +25,7 @@ import type {
   AlpacaMarketDataStatus,
   AssetCatalogStatus,
   AuditEvent,
+  MarketUniverseQuote,
   MarketUniverseSearchResult,
   MarketUniverseStatus,
   PaperExecutionStatus,
@@ -1104,10 +1105,144 @@ function MarketUniversePanel({
 }) {
   const [query, setQuery] = useState('')
   const [universe, setUniverse] = useState('master')
+  const [quotes, setQuotes] = useState<Readonly<Record<string, MarketUniverseQuote>>>({})
+  const [quoteLoading, setQuoteLoading] = useState(false)
+  const [quoteError, setQuoteError] = useState<string | null>(null)
 
   const applySearch = (nextQuery: string, nextUniverse = universe): void => {
     setQuery(nextQuery)
     onSearch(nextQuery, nextUniverse)
+  }
+
+  const rankedResults = useMemo(() => {
+    const rows = results?.results ?? []
+    const normalizedQuery = results?.query.trim().toUpperCase() ?? ''
+
+    return [...rows].sort((left, right) => {
+      const rank = (symbol: string, name: string): number => {
+        const normalizedSymbol = symbol.toUpperCase()
+        const normalizedName = name.toUpperCase()
+
+        if (normalizedSymbol === normalizedQuery) {
+          return 0
+        }
+        if (normalizedSymbol.startsWith(normalizedQuery)) {
+          return 1
+        }
+        if (normalizedName.startsWith(normalizedQuery)) {
+          return 2
+        }
+        if (normalizedName.includes(normalizedQuery)) {
+          return 3
+        }
+
+        return 4
+      }
+
+      return (
+        rank(left.symbol, left.name) - rank(right.symbol, right.name) ||
+        left.symbol.localeCompare(right.symbol)
+      )
+    })
+  }, [results])
+
+  useEffect(() => {
+    const api = window.sigilDesktop?.getMarketUniverseQuotes
+    const symbols = rankedResults.slice(0, 20).map(item => item.symbol)
+
+    if (!api || symbols.length === 0) {
+      setQuotes({})
+      setQuoteError(null)
+
+      return
+    }
+
+    let cancelled = false
+
+    const refreshQuotes = async (): Promise<void> => {
+      setQuoteLoading(true)
+
+      try {
+        const response = await api({ symbols })
+
+        if (cancelled) {
+          return
+        }
+
+        if (!response.ok) {
+          setQuoteError(response.message)
+          setQuotes({})
+
+          return
+        }
+
+        setQuoteError(null)
+        setQuotes(
+          Object.fromEntries(
+            response.result.quotes.map(quote => [quote.symbol, quote])
+          )
+        )
+      } catch (reason) {
+        if (!cancelled) {
+          setQuoteError(reason instanceof Error ? reason.message : String(reason))
+          setQuotes({})
+        }
+      } finally {
+        if (!cancelled) {
+          setQuoteLoading(false)
+        }
+      }
+    }
+
+    void refreshQuotes()
+
+    const timer = window.setInterval(() => {
+      void refreshQuotes()
+    }, 15_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [rankedResults])
+
+  const formatPrice = (quote: MarketUniverseQuote | undefined): string => {
+    if (!quote || quote.price === null) {
+      return '—'
+    }
+
+    return quote.price.toLocaleString(undefined, {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })
+  }
+
+  const formatChange = (quote: MarketUniverseQuote | undefined): string => {
+    if (!quote || quote.change_percent === null) {
+      return '—'
+    }
+
+    const prefix = quote.change_percent > 0 ? '+' : ''
+
+    return `${prefix}${quote.change_percent.toFixed(2)}%`
+  }
+
+  const quoteAge = (quote: MarketUniverseQuote | undefined): string => {
+    if (!quote || quote.age_seconds === null) {
+      return 'age unavailable'
+    }
+
+    if (quote.age_seconds < 60) {
+      return `${quote.age_seconds}s ago`
+    }
+
+    if (quote.age_seconds < 3_600) {
+      return `${Math.floor(quote.age_seconds / 60)}m ago`
+    }
+
+    return `${Math.floor(quote.age_seconds / 3_600)}h ago`
   }
 
   return (
@@ -1152,19 +1287,18 @@ function MarketUniversePanel({
           </p>
         </>
       ) : null}
-      <div className="mt-3 flex gap-2">
+      <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
         <SearchField
           aria-label="Search governed instruments"
-          containerClassName="min-w-0 flex-1"
+          containerClassName="min-w-0"
           onChange={setQuery}
-          placeholder="Search symbol, issuer, exchange, or alias"
+          placeholder="Search ticker or company name"
           value={query}
         />
         <Button
-          disabled={loading || !status?.target_capacity_validated}
+          disabled={loading || !query.trim() || !status?.target_capacity_validated}
           onClick={() => applySearch(query)}
-          size="xs"
-          variant="outline"
+          size="sm"
         >
           <Codicon name="search" />
           {loading ? 'Searching…' : 'Search'}
@@ -1198,22 +1332,107 @@ function MarketUniversePanel({
           title="No matching instruments"
         />
       ) : null}
-      {!loading && results && results.results.length > 0 ? (
-        <div className="mt-3 divide-y divide-(--ui-stroke-tertiary)">
-          {results.results.map(item => (
-            <div className="flex items-center justify-between gap-3 py-2" key={item.instrument_id}>
-              <div>
-                <span className="font-mono text-xs font-semibold">{item.symbol}</span>
-                <span className="ml-2 text-[0.6875rem] text-(--ui-text-tertiary)">{item.name}</span>
-              </div>
-              <span className="font-mono text-[0.625rem] text-(--ui-text-tertiary)">
-                {item.asset_class} · {item.monitoring_tier.replaceAll('_', ' ')}
-              </span>
-            </div>
-          ))}
-          <p className="pt-2 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
-            Showing {results.results.length} of {results.total}; results bounded to {results.limit}
-          </p>
+      {quoteError ? (
+        <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+          Quotes unavailable: {quoteError}. Catalog results remain available.
+        </p>
+      ) : null}
+      {!loading && rankedResults.length > 0 ? (
+        <div className="mt-4 overflow-hidden border border-(--ui-stroke-tertiary)">
+          <div className="hidden grid-cols-[minmax(14rem,1fr)_8rem_7rem_8rem_10rem] gap-4 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-2 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-(--ui-text-tertiary) md:grid">
+            <span>Instrument</span>
+            <span className="text-right">Price</span>
+            <span className="text-right">Change</span>
+            <span>Exchange</span>
+            <span>Market data</span>
+          </div>
+
+          <div className="divide-y divide-(--ui-stroke-tertiary)">
+            {rankedResults.map(item => {
+              const quote = quotes[item.symbol]
+              const changePositive =
+                quote?.change_percent !== null &&
+                quote?.change_percent !== undefined &&
+                quote.change_percent > 0
+              const changeNegative =
+                quote?.change_percent !== null &&
+                quote?.change_percent !== undefined &&
+                quote.change_percent < 0
+
+              return (
+                <div
+                  className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(14rem,1fr)_8rem_7rem_8rem_10rem] md:items-center md:gap-4"
+                  key={item.instrument_id}
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-sm font-bold">{item.symbol}</span>
+                      {item.proposal_eligible ? (
+                        <StatusLabel tone="success">ELIGIBLE</StatusLabel>
+                      ) : (
+                        <StatusLabel tone="muted">CATALOG ONLY</StatusLabel>
+                      )}
+                    </div>
+                    <p className="mt-1 truncate text-xs text-(--ui-text-secondary)">
+                      {item.name}
+                    </p>
+                    <p className="mt-1 text-[0.625rem] text-(--ui-text-quaternary)">
+                      {item.asset_class.replaceAll('_', ' ')}
+                      {item.broker_tradable ? ' · broker tradable' : ' · not tradable'}
+                    </p>
+                  </div>
+
+                  <div className="md:text-right">
+                    <span className="mr-2 text-[0.625rem] uppercase text-(--ui-text-tertiary) md:hidden">
+                      Price
+                    </span>
+                    <span className="font-mono text-sm font-semibold">
+                      {quoteLoading && !quote ? 'Loading…' : formatPrice(quote)}
+                    </span>
+                  </div>
+
+                  <div className="md:text-right">
+                    <span className="mr-2 text-[0.625rem] uppercase text-(--ui-text-tertiary) md:hidden">
+                      Change
+                    </span>
+                    <span
+                      className={cn(
+                        'font-mono text-xs font-semibold',
+                        changePositive && 'text-emerald-500',
+                        changeNegative && 'text-rose-500',
+                        !changePositive && !changeNegative && 'text-(--ui-text-tertiary)'
+                      )}
+                    >
+                      {formatChange(quote)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="mr-2 text-[0.625rem] uppercase text-(--ui-text-tertiary) md:hidden">
+                      Exchange
+                    </span>
+                    <span className="font-mono text-xs">{item.exchange}</span>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium">{quote?.source ?? 'Price unavailable'}</p>
+                    <p className="mt-1 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+                      {quoteAge(quote)}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-2 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+            <span>
+              Showing {rankedResults.length} of {results?.total ?? 0}
+            </span>
+            <span>
+              Quotes refresh every 15s · read-only Alpaca IEX · broker submission disabled
+            </span>
+          </div>
         </div>
       ) : null}
     </section>

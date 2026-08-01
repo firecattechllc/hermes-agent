@@ -36,6 +36,7 @@ from .autonomous_paper import (
     reconcile_paper_orders,
 )
 from .market_universe import market_universe_search, market_universe_status
+from .market_quotes import market_universe_quotes
 from .production_research import (
     emergency_paper_liquidation,
     production_research_collection,
@@ -76,6 +77,7 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "governed_alpaca_news_collect",
     "market_universe_status",
     "market_universe_search",
+    "market_universe_quotes",
     "alpaca_market_data_status",
     "control_alpaca_market_data",
     "asset_catalog_status",
@@ -384,6 +386,12 @@ def handle_request(request: object) -> dict[str, Any]:
 
     if command == "market_universe_status":
         return {"ok": True, "result": market_universe_status()}
+
+    if command == "market_universe_quotes":
+        return {
+            "ok": True,
+            "result": market_universe_quotes(request.get("payload")),
+        }
 
     if command == "market_universe_search":
         try:

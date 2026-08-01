@@ -53,6 +53,7 @@ describe('Sigil Release Guardian', () => {
       'sigil:collect-governed-alpaca-news',
       'sigil:get-market-universe-status',
       'sigil:search-market-universe',
+      'sigil:get-market-universe-quotes',
       'sigil:get-alpaca-market-data-status',
       'sigil:control-alpaca-market-data',
       'sigil:get-asset-catalog-status',

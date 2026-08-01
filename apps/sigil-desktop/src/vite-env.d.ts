@@ -2,6 +2,7 @@
 
 import type {
   AssetCatalogStatus,
+  MarketUniverseQuoteResult,
   MarketUniverseSearchResult,
   MarketUniverseStatus,
   SigilProviderSnapshot
@@ -109,6 +110,9 @@ interface SigilDesktopApi {
   searchMarketUniverse?: (
     payload: Readonly<Record<string, unknown>>
   ) => Promise<SigilBackendResponse<MarketUniverseSearchResult>>
+  getMarketUniverseQuotes?: (
+    payload: Readonly<Record<string, unknown>>
+  ) => Promise<SigilBackendResponse<MarketUniverseQuoteResult>>
   getAssetCatalogStatus?: () => Promise<
     SigilBackendResponse<AssetCatalogStatus>
   >
