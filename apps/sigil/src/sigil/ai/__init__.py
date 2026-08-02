@@ -70,6 +70,14 @@ from .cross_provider_validation import (
     cross_provider_validation_status,
 )
 
+from .cross_provider_validation_certification import (
+    CROSS_PROVIDER_VALIDATION_CERTIFICATION_VERSION,
+    CrossProviderValidationCertification,
+    CrossProviderValidationCertificationState,
+    certify_cross_provider_validation,
+    cross_provider_certification_manifest,
+)
+
 from .evidence import InvocationEvidence, build_invocation_evidence
 from .finbert import (
     FINBERT_RESPONSIBILITIES,
@@ -323,6 +331,7 @@ __all__ = [
     "ClaudeInspectionStoreConflictError",
     "ClaudeInspectionStoreCorruptionError",
     "ClaudeInspectionStoreError",
+    "CROSS_PROVIDER_VALIDATION_CERTIFICATION_VERSION",
     "CROSS_PROVIDER_VALIDATION_VERSION",
     "CostClass",
     "DeterministicProvider",
@@ -416,6 +425,8 @@ __all__ = [
     "CrossProviderComparison",
     "CrossProviderValidationReport",
     "CrossProviderValidationState",
+    "CrossProviderValidationCertification",
+    "CrossProviderValidationCertificationState",
     "CrossProviderValidationStoreConflictError",
     "CrossProviderValidationStoreCorruptionError",
     "CrossProviderValidationStoreError",
@@ -486,6 +497,8 @@ __all__ = [
     "build_invocation_evidence",
     "claude_inspection_status",
     "cross_provider_validation_status",
+    "certify_cross_provider_validation",
+    "cross_provider_certification_manifest",
     "certification_manifest",
     "certify_claude_inspection",
     "build_orchestration_artifact",
