@@ -173,6 +173,14 @@ class GovernedModelRouter:
     def _evaluate(self, model, provider, request: RoutingRequest) -> CandidateEvaluation:
         reasons: list[str] = []
         if (
+            model.execution_location == ExecutionLocation.EXTERNAL
+            and (
+                request.allowed_provider_ids is None
+                or provider.provider_id not in request.allowed_provider_ids
+            )
+        ):
+            reasons.append("external_provider_not_explicitly_admitted")
+        elif (
             request.allowed_provider_ids is not None
             and provider.provider_id not in request.allowed_provider_ids
         ):

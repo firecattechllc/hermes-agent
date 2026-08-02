@@ -532,3 +532,34 @@ def test_analysis_provider_admission_validation_fails_closed() -> None:
         request(allowed_provider_ids=frozenset())
     with pytest.raises(AnalysisValidationError, match="stable lowercase"):
         request(allowed_provider_ids=frozenset({"Invalid Provider"}))
+
+
+def test_analysis_service_never_uses_implicit_external_fallback(
+    tmp_path: Path,
+) -> None:
+    external = FakeProvider(
+        provider_id="hermes-claude",
+        model_id="claude-advisory",
+        location=ExecutionLocation.EXTERNAL,
+    )
+    external_model = registration(
+        external,
+        privacy=PrivacyTier.EXTERNAL_APPROVED,
+        trust=TrustTier.RESTRICTED,
+        family="claude",
+    )
+    analysis = service(tmp_path, external, model=external_model)
+
+    response = analysis.analyze(
+        request(
+            privacy_requirement=PrivacyTier.EXTERNAL_APPROVED,
+            execution_location_preference=(ExecutionLocation.EXTERNAL,),
+        ),
+        completed_at=LATER,
+    )
+
+    assert response.failure_classification == RoutingFailureClass.NO_SUITABLE_MODEL.value
+    assert response.artifact is None
+    assert external.calls == 0
+    assert response.paper_only is True
+    assert response.broker_submission is False

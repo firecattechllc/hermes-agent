@@ -373,7 +373,7 @@ def test_capability_mismatch_is_structured_and_paper_only() -> None:
     assert result.evidence.paper_only is True
 
 
-def test_provider_admission_blocks_unlisted_external_fallback() -> None:
+def test_external_provider_requires_explicit_admission() -> None:
     external = model(
         "claude-advisory",
         "hermes-claude",
@@ -384,7 +384,13 @@ def test_provider_admission_blocks_unlisted_external_fallback() -> None:
         trust=TrustTier.RESTRICTED,
         cost=CostClass.STANDARD,
     )
-    decision = GovernedModelRouter(registry(external)).route(
+    router = GovernedModelRouter(registry(external))
+
+    implicit = router.route(
+        request(privacy=PrivacyTier.EXTERNAL_APPROVED),
+        decision_timestamp="2026-08-01T12:00:00Z",
+    )
+    unlisted = router.route(
         request(
             privacy=PrivacyTier.EXTERNAL_APPROVED,
             allowed_provider_ids=frozenset({"local-runtime"}),
@@ -392,12 +398,13 @@ def test_provider_admission_blocks_unlisted_external_fallback() -> None:
         decision_timestamp="2026-08-01T12:00:00Z",
     )
 
-    assert decision.failure_class == RoutingFailureClass.NO_SUITABLE_MODEL
-    assert decision.selected_provider_id is None
-    assert decision.selected_model_id is None
-    assert decision.considered_candidates[0].rejection_reasons == (
-        "provider_not_allowed",
-    )
+    for decision in (implicit, unlisted):
+        assert decision.failure_class == RoutingFailureClass.NO_SUITABLE_MODEL
+        assert decision.selected_provider_id is None
+        assert decision.selected_model_id is None
+        assert decision.considered_candidates[0].rejection_reasons == (
+            "external_provider_not_explicitly_admitted",
+        )
 
 
 def test_explicit_provider_admission_allows_advisory_external_route() -> None:
@@ -467,3 +474,67 @@ def test_provider_admission_validation_fails_closed() -> None:
 
     with pytest.raises(ValueError, match="stable lowercase"):
         request(allowed_provider_ids=frozenset({"Invalid Provider"}))
+
+
+def test_local_and_fleet_routes_do_not_require_explicit_provider_admission() -> None:
+    local = model(
+        "gemma-local",
+        "local-runtime",
+        "gemma",
+        ExecutionLocation.LOCAL,
+        frozenset({Capability.REASONING}),
+    )
+    fleet = model(
+        "gemma-fleet",
+        "fleet-runtime",
+        "gemma",
+        ExecutionLocation.FLEET,
+        frozenset({Capability.REASONING}),
+        privacy=PrivacyTier.GOVERNED_REMOTE,
+    )
+
+    local_decision = GovernedModelRouter(registry(local)).route(
+        request(),
+        decision_timestamp="2026-08-01T12:00:00Z",
+    )
+    fleet_decision = GovernedModelRouter(registry(fleet)).route(
+        request(privacy=PrivacyTier.GOVERNED_REMOTE),
+        decision_timestamp="2026-08-01T12:00:00Z",
+    )
+
+    assert local_decision.selected_provider_id == "local-runtime"
+    assert local_decision.selected_model_id == "gemma-local"
+    assert fleet_decision.selected_provider_id == "fleet-runtime"
+    assert fleet_decision.selected_model_id == "gemma-fleet"
+
+
+def test_external_admission_policy_is_deterministic_and_audited() -> None:
+    external = model(
+        "claude-advisory",
+        "hermes-claude",
+        "claude",
+        ExecutionLocation.EXTERNAL,
+        frozenset({Capability.REASONING}),
+        privacy=PrivacyTier.EXTERNAL_APPROVED,
+        trust=TrustTier.RESTRICTED,
+        cost=CostClass.STANDARD,
+    )
+    router = GovernedModelRouter(registry(external))
+    route_request = request(privacy=PrivacyTier.EXTERNAL_APPROVED)
+
+    first = router.route(
+        route_request,
+        decision_timestamp="2026-08-01T12:00:00Z",
+    )
+    second = router.route(
+        route_request,
+        decision_timestamp="2026-08-01T12:00:00Z",
+    )
+
+    assert first.evidence_identity == second.evidence_identity
+    assert first.considered_candidates == second.considered_candidates
+    assert first.considered_candidates[0].rejection_reasons == (
+        "external_provider_not_explicitly_admitted",
+    )
+    assert first.paper_only is True
+    assert first.broker_submission is False
