@@ -48,6 +48,14 @@ from .claude_inspection import (
     claude_inspection_status,
 )
 
+from .claude_inspection_certification import (
+    CLAUDE_INSPECTION_CERTIFICATION_VERSION,
+    ClaudeInspectionCertification,
+    ClaudeInspectionCertificationState,
+    certification_manifest,
+    certify_claude_inspection,
+)
+
 from .evidence import InvocationEvidence, build_invocation_evidence
 from .finbert import (
     FINBERT_RESPONSIBILITIES,
@@ -258,6 +266,7 @@ __all__ = [
     "CLAUDE_MODEL_FAMILY",
     "CLAUDE_MODEL_ID",
     "CLAUDE_MODEL_VERSION",
+    "CLAUDE_INSPECTION_CERTIFICATION_VERSION",
     "CLAUDE_PROVIDER_ID",
     "CLAUDE_RESPONSIBILITIES",
     "EMBEDDING_GEMMA_RESPONSIBILITIES",
@@ -295,6 +304,8 @@ __all__ = [
     "ClaudeInspectionReport",
     "ClaudeInspectionRequest",
     "ClaudeInspectionValidationError",
+    "ClaudeInspectionCertification",
+    "ClaudeInspectionCertificationState",
     "ClaudeInspectionStoreConflictError",
     "ClaudeInspectionStoreCorruptionError",
     "ClaudeInspectionStoreError",
@@ -451,6 +462,8 @@ __all__ = [
     "build_forecast_artifact",
     "build_invocation_evidence",
     "claude_inspection_status",
+    "certification_manifest",
+    "certify_claude_inspection",
     "build_orchestration_artifact",
     "build_orchestration_plan",
     "build_retrieval_artifact",
