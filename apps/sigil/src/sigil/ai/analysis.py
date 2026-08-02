@@ -81,6 +81,7 @@ class GovernedAnalysisRequest:
     evidence_context_digests: tuple[str, ...]
     expected_output_schema: GovernedOutputSchema
     requested_at: str
+    allowed_provider_ids: frozenset[str] | None = None
     schema_version: int = ANALYSIS_SCHEMA_VERSION
     paper_only: bool = True
     broker_submission: bool = False
@@ -108,6 +109,14 @@ class GovernedAnalysisRequest:
             raise AnalysisValidationError("analysis timeout is outside its governed bound")
         if not self.requested_at:
             raise AnalysisValidationError("analysis request timestamp cannot be blank")
+        if self.allowed_provider_ids is not None:
+            if not self.allowed_provider_ids:
+                raise AnalysisValidationError("allowed_provider_ids cannot be empty")
+            try:
+                for provider_id in sorted(self.allowed_provider_ids):
+                    validate_identifier(provider_id, "allowed_provider_ids")
+            except ValueError as error:
+                raise AnalysisValidationError(str(error)) from error
         if self.paper_only is not True or self.broker_submission is not False:
             raise AnalysisValidationError("analysis request cannot receive execution authority")
 

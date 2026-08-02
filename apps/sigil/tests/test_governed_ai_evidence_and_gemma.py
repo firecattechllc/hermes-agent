@@ -448,11 +448,18 @@ def test_hermes_handoff_is_digest_only_and_advisory() -> None:
     )
     route = work.routing_request()
     assert route.preferred_model_family == "gemma"
+    assert route.allowed_provider_ids is None
+    admitted = replace(work, allowed_provider_ids=frozenset({"hermes-claude"}))
+    assert admitted.routing_request().allowed_provider_ids == frozenset({"hermes-claude"})
     assert work.paper_only is True
     assert work.broker_submission is False
 
     with pytest.raises(ValueError, match="digest references"):
         replace(work, evidence_context=("raw-prompt",))
+    with pytest.raises(ValueError, match="cannot be empty"):
+        replace(work, allowed_provider_ids=frozenset())
+    with pytest.raises(ValueError, match="stable lowercase"):
+        replace(work, allowed_provider_ids=frozenset({"Invalid Provider"}))
 
 
 def test_adapter_has_no_portfolio_approval_or_execution_authority(tmp_path: Path) -> None:

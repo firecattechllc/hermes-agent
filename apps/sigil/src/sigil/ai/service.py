@@ -170,6 +170,7 @@ class GovernedAnalysisService:
             minimum_trust_tier=request.minimum_trust_tier,
             timeout_ms=request.timeout_ms,
             fallback_allowed=request.fallback_permission,
+            allowed_provider_ids=request.allowed_provider_ids,
         )
         decision = GovernedModelRouter(self.registry).route(
             route_request, decision_timestamp=request.requested_at
@@ -360,6 +361,7 @@ class GovernedAnalysisService:
             evidence_context_digests=work.evidence_context,
             expected_output_schema=GovernedOutputSchema(work.expected_output_contract),
             requested_at=requested_at,
+            allowed_provider_ids=work.allowed_provider_ids,
         )
         return self.analyze(request, completed_at=completed_at)
 

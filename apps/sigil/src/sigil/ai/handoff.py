@@ -5,7 +5,15 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .models import Capability, CostClass, ExecutionLocation, PrivacyTier, Responsibility, TrustTier
+from .models import (
+    Capability,
+    CostClass,
+    ExecutionLocation,
+    PrivacyTier,
+    Responsibility,
+    TrustTier,
+    validate_identifier,
+)
 from .routing import RoutingRequest
 
 _SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -24,6 +32,7 @@ class GovernedModelWorkRequest:
     timeout_ms: int = 30_000
     preferred_model_family: str | None = "gemma"
     fallback_allowed: bool = True
+    allowed_provider_ids: frozenset[str] | None = None
     paper_only: bool = True
     broker_submission: bool = False
 
@@ -34,6 +43,11 @@ class GovernedModelWorkRequest:
             raise ValueError("expected output contract must be a governed Sigil contract")
         if any(_SHA256.fullmatch(item) is None for item in self.evidence_context):
             raise ValueError("Hermes evidence context must contain digest references only")
+        if self.allowed_provider_ids is not None:
+            if not self.allowed_provider_ids:
+                raise ValueError("allowed_provider_ids cannot be empty")
+            for provider_id in sorted(self.allowed_provider_ids):
+                validate_identifier(provider_id, "allowed_provider_ids")
 
     def routing_request(self) -> RoutingRequest:
         return RoutingRequest(
@@ -53,6 +67,7 @@ class GovernedModelWorkRequest:
             minimum_trust_tier=TrustTier.RESTRICTED,
             timeout_ms=self.timeout_ms,
             fallback_allowed=self.fallback_allowed,
+            allowed_provider_ids=self.allowed_provider_ids,
         )
 
 

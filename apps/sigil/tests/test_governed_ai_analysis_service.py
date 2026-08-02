@@ -443,3 +443,92 @@ def test_hermes_handoff_success_and_failure(tmp_path: Path) -> None:
         failed_root, FakeProvider(failure=ProviderFailureClass.UNAVAILABLE)
     ).analyze_hermes(work, requested_at=NOW, completed_at=LATER)
     assert failure.failure_classification == ProviderFailureClass.UNAVAILABLE.value
+
+
+def test_provider_admission_blocks_unlisted_fallback_in_analysis_service(
+    tmp_path: Path,
+) -> None:
+    local = FakeProvider()
+    disabled_local = registration(local, health=ProviderHealth.UNAVAILABLE, enabled=False)
+    external = FakeProvider(
+        provider_id="hermes-claude",
+        model_id="claude-advisory",
+        location=ExecutionLocation.EXTERNAL,
+    )
+    external_model = registration(
+        external,
+        privacy=PrivacyTier.EXTERNAL_APPROVED,
+        trust=TrustTier.RESTRICTED,
+        family="claude",
+    )
+    analysis = service(
+        tmp_path,
+        local,
+        model=disabled_local,
+        extra_providers=(external.identity,),
+        extra_models=(external_model,),
+    )
+    analysis.providers[external.identity.provider_id] = external
+
+    blocked = analysis.analyze(
+        request(
+            privacy_requirement=PrivacyTier.EXTERNAL_APPROVED,
+            execution_location_preference=(
+                ExecutionLocation.LOCAL,
+                ExecutionLocation.EXTERNAL,
+            ),
+            allowed_provider_ids=frozenset({"local-runtime"}),
+        ),
+        completed_at=LATER,
+    )
+
+    assert blocked.failure_classification == RoutingFailureClass.NO_SUITABLE_MODEL.value
+    assert external.calls == 0
+    assert blocked.artifact is None
+
+
+def test_hermes_provider_admission_reaches_analysis_router(tmp_path: Path) -> None:
+    external = FakeProvider(
+        provider_id="hermes-claude",
+        model_id="claude-advisory",
+        location=ExecutionLocation.EXTERNAL,
+    )
+    external_model = registration(
+        external,
+        privacy=PrivacyTier.EXTERNAL_APPROVED,
+        trust=TrustTier.RESTRICTED,
+        family="claude",
+    )
+    analysis = service(tmp_path, external, model=external_model)
+    work = GovernedModelWorkRequest(
+        request_id="hermes-analysis",
+        task_correlation_id="hermes-task",
+        evidence_correlation_id="hermes-evidence",
+        capability=Capability.REASONING,
+        responsibility=Responsibility.RESEARCH_ANALYSIS,
+        privacy_requirement=PrivacyTier.EXTERNAL_APPROVED,
+        evidence_context=(DIGEST_B,),
+        expected_output_contract=GovernedOutputSchema.GENERIC_ANALYSIS_V1.value,
+        allowed_provider_ids=frozenset({"hermes-claude"}),
+    )
+
+    response = analysis.analyze_hermes(
+        work,
+        requested_at=NOW,
+        completed_at=LATER,
+    )
+
+    assert response.succeeded
+    assert response.artifact is not None
+    assert response.artifact.provider_id == "hermes-claude"
+    assert response.artifact.model_id == "claude-advisory"
+    assert external.calls == 1
+    assert response.paper_only is True
+    assert response.broker_submission is False
+
+
+def test_analysis_provider_admission_validation_fails_closed() -> None:
+    with pytest.raises(AnalysisValidationError, match="cannot be empty"):
+        request(allowed_provider_ids=frozenset())
+    with pytest.raises(AnalysisValidationError, match="stable lowercase"):
+        request(allowed_provider_ids=frozenset({"Invalid Provider"}))
