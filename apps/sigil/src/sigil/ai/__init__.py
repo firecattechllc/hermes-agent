@@ -56,6 +56,15 @@ from .claude_inspection_certification import (
     certify_claude_inspection,
 )
 
+from .cross_provider_validation import (
+    CROSS_PROVIDER_VALIDATION_VERSION,
+    CrossProviderComparison,
+    CrossProviderValidationReport,
+    CrossProviderValidationState,
+    ProviderClaim,
+    validate_cross_provider_claims,
+)
+
 from .evidence import InvocationEvidence, build_invocation_evidence
 from .finbert import (
     FINBERT_RESPONSIBILITIES,
@@ -309,6 +318,7 @@ __all__ = [
     "ClaudeInspectionStoreConflictError",
     "ClaudeInspectionStoreCorruptionError",
     "ClaudeInspectionStoreError",
+    "CROSS_PROVIDER_VALIDATION_VERSION",
     "CostClass",
     "DeterministicProvider",
     "DeterministicProviderMode",
@@ -397,6 +407,9 @@ __all__ = [
     "ClaudeTransportError",
     "ClaudeTransportFailure",
     "ClaudeTransportResult",
+    "CrossProviderComparison",
+    "CrossProviderValidationReport",
+    "CrossProviderValidationState",
     "HermesClaudeTransport",
     "HorizonMetric",
     "HumanInteractionKind",
@@ -432,6 +445,7 @@ __all__ = [
     "PrivacyTier",
     "ProviderFailure",
     "ProviderFailureClass",
+    "ProviderClaim",
     "ProviderHealth",
     "ProviderIdentity",
     "ProviderInvocation",
@@ -480,6 +494,7 @@ __all__ = [
     "route_mac_ollama",
     "validate_embedding_output",
     "validate_finbert_output",
+    "validate_cross_provider_claims",
     "validate_generic_analysis",
     "validate_kronos_output",
 ]
