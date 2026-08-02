@@ -101,6 +101,14 @@ from .gamma_release_review import (
     review_gamma_release_readiness,
 )
 
+from .gamma_signoff import (
+    GAMMA_SIGNOFF_VERSION,
+    GammaSignoffRecord,
+    GammaSignoffState,
+    build_gamma_signoff,
+    gamma_signoff_projection,
+)
+
 from .evidence import InvocationEvidence, build_invocation_evidence
 from .finbert import (
     FINBERT_RESPONSIBILITIES,
@@ -398,6 +406,7 @@ __all__ = [
     "GovernedAnalysisArtifact",
     "GAMMA_RELEASE_READINESS_VERSION",
     "GAMMA_RELEASE_REVIEW_VERSION",
+    "GAMMA_SIGNOFF_VERSION",
     "GAMMA_RELIABILITY_CERTIFICATION_VERSION",
     "GovernedAnalysisRequest",
     "GovernedAnalysisResponse",
@@ -407,6 +416,8 @@ __all__ = [
     "GammaReleaseReview",
     "GammaReleaseReviewState",
     "GammaStageEvidence",
+    "GammaSignoffRecord",
+    "GammaSignoffState",
     "GovernedClaudeInspectionService",
     "GovernedAnalysisStatus",
     "GovernedAtlasProjection",
@@ -527,6 +538,7 @@ __all__ = [
     "build_forecast_artifact",
     "build_invocation_evidence",
     "build_gamma_release_readiness_manifest",
+    "build_gamma_signoff",
     "claude_inspection_status",
     "cross_provider_validation_status",
     "certify_cross_provider_validation",
@@ -534,6 +546,7 @@ __all__ = [
     "gamma_reliability_manifest",
     "gamma_release_readiness_projection",
     "gamma_release_review_projection",
+    "gamma_signoff_projection",
     "review_gamma_release_readiness",
     "cross_provider_certification_manifest",
     "certification_manifest",
