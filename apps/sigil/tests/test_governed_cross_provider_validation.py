@@ -160,3 +160,60 @@ def test_invalid_provider_identity_and_duplicate_subjects_fail_closed() -> None:
             [claim("g-1", "local-gemma", "routing", "safe"), duplicate],
             [claim("c-1", "hermes-claude", "routing", "safe")],
         )
+
+
+def test_validation_identity_changes_when_claim_content_changes() -> None:
+    first = validate_cross_provider_claims(
+        target_revision="360d4730d",
+        target_digest=DIGEST_A,
+        gemma_claims=(
+            claim("g-1", "local-gemma", "routing", "safe"),
+        ),
+        claude_claims=(
+            claim("c-1", "hermes-claude", "routing", "safe"),
+        ),
+        validated_at=NOW,
+    )
+    second = validate_cross_provider_claims(
+        target_revision="360d4730d",
+        target_digest=DIGEST_A,
+        gemma_claims=(
+            claim("g-1", "local-gemma", "risk", "low"),
+        ),
+        claude_claims=(
+            claim("c-1", "hermes-claude", "risk", "high"),
+        ),
+        validated_at=NOW,
+    )
+
+    assert first.validation_id != second.validation_id
+    assert first.validation_digest != second.validation_digest
+
+
+def test_validation_identity_is_order_independent() -> None:
+    gemma = (
+        claim("g-2", "local-gemma", "zeta", "yes"),
+        claim("g-1", "local-gemma", "alpha", "yes"),
+    )
+    claude = (
+        claim("c-2", "hermes-claude", "zeta", "yes"),
+        claim("c-1", "hermes-claude", "alpha", "yes"),
+    )
+
+    first = validate_cross_provider_claims(
+        target_revision="360d4730d",
+        target_digest=DIGEST_A,
+        gemma_claims=gemma,
+        claude_claims=claude,
+        validated_at=NOW,
+    )
+    second = validate_cross_provider_claims(
+        target_revision="360d4730d",
+        target_digest=DIGEST_A,
+        gemma_claims=tuple(reversed(gemma)),
+        claude_claims=tuple(reversed(claude)),
+        validated_at=NOW,
+    )
+
+    assert first.validation_id == second.validation_id
+    assert first.validation_digest == second.validation_digest
