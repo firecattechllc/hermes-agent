@@ -1,0 +1,329 @@
+{
+  "broker_submission": false,
+  "certification_stage": "12B",
+  "certification_status": "certified",
+  "feature_expansion_prohibited": true,
+  "matrix_identity": "sha256:582cd06b082c4f634bdd0845ffc5bf0d193bf272d97c19c7599421f0755104a3",
+  "paper_only": true,
+  "proofs": [
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "agent-reach-public-vs-private",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/sigil/evidence/AGENT_REACH_STAGE8A_CERTIFICATION.json"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/agent_reach_adapter.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove public-read capability cannot cross into private or mutating access. Permitted flow remains bounded; denied flow preserves Reject the request and discard untrusted evidence.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_agent_reach_adapter.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "buzz-events-vs-command-authority",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/sigil/evidence/BUZZ_RELAY_STAGE5_CERTIFICATION.json"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/buzz_relay_adapter.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove event transport cannot grant command or execution authority. Permitted flow remains bounded; denied flow preserves Reject the event and preserve the current authoritative state.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_buzz_relay_adapter.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "buzznode-registration-vs-placement",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/sigil/evidence/BUZZNODE_STAGE6_CERTIFICATION.json"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/buzznode_adapter.py",
+        "apps/sigil/src/sigil/fleet_routing.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove registration alone cannot make a node eligible for placement. Permitted flow remains bounded; denied flow preserves Exclude or quarantine the node from placement.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_buzznode_adapter.py",
+        "apps/sigil/tests/test_fleet_routing.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "desktop-projection-vs-backend-authority",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "apps/sigil/tests/test_sigil_bridge.py"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/desktop_bridge/bridge.py",
+        "apps/sigil/src/sigil/desktop_bridge/runtime.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove desktop projections cannot become authoritative runtime commands. Permitted flow remains bounded; denied flow preserves Restore the disconnected paper-only default projection.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_sigil_bridge.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "fleet-placement-vs-financial-execution",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/sigil/evidence/ROUTING_FLEET_STAGE10_CERTIFICATION.json"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/fleet_routing.py",
+        "apps/sigil/src/sigil/ai/fleet.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove placement decisions cannot grant financial execution authority. Permitted flow remains bounded; denied flow preserves Return no eligible route and deny dispatch or financial execution.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_fleet_routing.py",
+        "apps/sigil/tests/test_governed_ai_fleet_routing.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "knowledge-vs-runtime-truth",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/sigil/evidence/HERMES_WIKI_STAGE7_CERTIFICATION.json",
+        "docs/sigil/evidence/ECOSYSTEM_CATALOG_STAGE8_CERTIFICATION.json"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/hermes_wiki_adapter.py",
+        "apps/sigil/src/sigil/ecosystem_catalog.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove knowledge and catalog content remain non-authoritative. Permitted flow remains bounded; denied flow preserves Reject or quarantine conflicting or unverifiable knowledge.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_hermes_wiki_adapter.py",
+        "apps/sigil/tests/test_ecosystem_catalog.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "paper-vs-live-execution",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/beta/post-phase9/SIGIL_BOUNDARY.md",
+        "apps/sigil/tests/test_sigil_bridge.py"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/desktop_bridge/paper_execution.py",
+        "apps/sigil/src/sigil/autonomous_paper/service.py",
+        "apps/sigil/src/sigil/order_execution/paper_adapter.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove paper execution cannot cross into live execution without separate certification. Permitted flow remains bounded; denied flow preserves Remain paper-only and reject any live execution request.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_governed_paper_runtime_execution.py",
+        "apps/sigil/tests/test_autonomous_alpaca_paper_execution.py",
+        "apps/sigil/tests/test_governed_broker_adapter_paper_certification.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "paperclip-assignment-vs-execution",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/sigil/evidence/PAPERCLIP_STAGE4_CERTIFICATION.json"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/paperclip_adapter.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove organizational assignment never becomes execution authority. Permitted flow remains bounded; denied flow preserves Reject or quarantine the assignment without executing it.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_paperclip_adapter.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "registry-vs-execution",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/sigil/evidence/INTEGRATION_REGISTRY_STAGE1_CERTIFICATION.json"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/integration_registry.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove registry membership cannot independently grant execution authority. Permitted flow remains bounded; denied flow preserves Reject the requested operation and preserve disabled state.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_governed_integration_registry.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "research-proposal-vs-broker-submission",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/beta/post-phase9/SIGIL_BOUNDARY.md",
+        "apps/sigil/tests/test_sigil_bridge.py"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/desktop_bridge/production_research.py",
+        "apps/sigil/src/sigil/desktop_bridge/paper_execution.py",
+        "apps/sigil/src/sigil/order_execution/paper_adapter.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove research and proposal state cannot reach broker submission. Permitted flow remains bounded; denied flow preserves Preserve proposal or paper state and reject live submission.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_sigil_bridge.py",
+        "apps/sigil/tests/test_governed_broker_adapter_paper_certification.py",
+        "apps/sigil/tests/test_governed_order_intent_approval.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "self-evolution-vs-promotion",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/sigil/evidence/SELF_EVOLUTION_STAGE9_CERTIFICATION.json"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/self_evolution.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove candidate generation cannot promote or alter governance. Permitted flow remains bounded; denied flow preserves Reject or quarantine the proposal and preserve current policy.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_self_evolution.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "webui-visibility-vs-mutation",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/sigil/evidence/HERMES_WEBUI_STAGE3_CERTIFICATION.json"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/hermes_webui_adapter.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove UI visibility cannot mutate authoritative backend state. Permitted flow remains bounded; denied flow preserves Suppress the projection and preserve disconnected read-only state.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_hermes_webui_adapter.py"
+      ]
+    },
+    {
+      "authoritative_side_proven": true,
+      "authority_denials_proven": true,
+      "boundary_id": "worker-acceptance-vs-dispatch",
+      "broker_submission_disabled_proven": true,
+      "denied_flow_proven": true,
+      "deterministic_proven": true,
+      "evidence_references": [
+        "docs/sigil/evidence/WORKER_JOB_CONTRACT_STAGE2_CERTIFICATION.json"
+      ],
+      "fail_closed_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/worker_contract.py"
+      ],
+      "paper_only_proven": true,
+      "permitted_flow_proven": true,
+      "proof_summary": "Prove accepted contracts remain non-dispatching until separately authorized. Permitted flow remains bounded; denied flow preserves Reject or cancel the job without dispatching it.",
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_governed_worker_contract.py"
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "source_manifest_identity": "sha256:4804f0b10d1fd32921fde2f7c2370fb4c0e215c1ac589404f0bf2e07f48cbf9a",
+  "validation": {
+    "boundary_count": 13,
+    "broker_submission_disabled_confirmed": true,
+    "certified": true,
+    "feature_expansion_prohibited_confirmed": true,
+    "focused_tests": {
+      "command": "PYTHONPATH=apps/sigil/src python -m pytest apps/sigil/tests/test_ecosystem_certification_manifest.py apps/sigil/tests/test_ecosystem_boundary_certification.py -q",
+      "failed": 0,
+      "passed": 36
+    },
+    "paper_only_confirmed": true,
+    "repository_reference_errors": []
+  }
+}

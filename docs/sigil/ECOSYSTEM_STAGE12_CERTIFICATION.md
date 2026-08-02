@@ -204,9 +204,90 @@ Golden Master readiness requires:
 ## Current status
 
 - Stage 12A: certified
-- Stage 12B: not certified
+- Stage 12B: certified
 - Stage 12C: not certified
 - Stage 12D: not certified
 - Golden Master readiness: not established
 
 Stage 12A is not full ecosystem certification.
+
+## Stage 12B boundary matrix certification
+
+Stage 12B certifies the 13 producer-consumer authority boundaries declared by
+the Stage 12A manifest.
+
+The authoritative implementation is:
+
+`apps/sigil/src/sigil/ecosystem_boundary_certification.py`
+
+The focused certification tests are:
+
+`apps/sigil/tests/test_ecosystem_boundary_certification.py`
+
+The machine-readable evidence artifact is:
+
+`docs/sigil/evidence/ECOSYSTEM_STAGE12B_BOUNDARY_MATRIX.json`
+
+### Certified boundary requirements
+
+Each boundary proof records and validates:
+
+- permitted flow remains explicitly bounded
+- denied flow is covered by negative tests
+- the authoritative side remains explicit
+- malformed or unauthorized activity fails closed
+- canonical output is deterministic
+- Sigil remains paper-only
+- broker submission remains disabled
+- execution, approval, capital, portfolio, policy, credential, shell,
+  filesystem, governance-bypass, activation, and installation authority remain
+  denied unless explicitly owned by an existing governed backend component
+
+The matrix rejects:
+
+- duplicate proof identifiers
+- missing or unexpected boundaries
+- unsupported schema versions
+- contradictory proof status
+- uncertified boundaries
+- Stage 12A manifest identity mismatch
+- Stage 12B matrix identity mismatch
+- non-paper state
+- broker-submission enablement
+- feature expansion
+- missing implementation, test, or evidence references
+
+### Stage 12B certified boundaries
+
+1. Registry membership versus execution authority
+2. Worker acceptance versus dispatch authority
+3. WebUI visibility versus backend mutation
+4. Paperclip assignment versus execution authority
+5. Buzz event transport versus command authority
+6. Buzznode registration versus placement authority
+7. Wiki and catalog knowledge versus runtime truth
+8. Agent Reach public-read access versus private or mutating access
+9. Self-evolution proposal generation versus promotion authority
+10. Fleet placement versus financial execution authority
+11. Desktop projection versus backend authority
+12. Research and proposal state versus broker submission
+13. Paper execution versus live execution
+
+### Stage 12B validation result
+
+The focused Stage 12A and Stage 12B certification suite completed with:
+
+- 36 tests passed
+- 0 tests failed
+- 13 boundaries certified
+- repository reference errors: none
+- paper-only confirmed
+- broker submission disabled confirmed
+- feature expansion prohibited confirmed
+
+The canonical Stage 12B matrix identity is:
+
+`sha256:582cd06b082c4f634bdd0845ffc5bf0d193bf272d97c19c7599421f0755104a3`
+
+Stage 12B certifies the declared authority boundaries. It does not yet certify
+deterministic replay, interruption recovery, or Golden Master readiness.
