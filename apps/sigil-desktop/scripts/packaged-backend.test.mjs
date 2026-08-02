@@ -91,6 +91,9 @@ describe('packaged Python backend release gate', () => {
       'PASS: runtime_snapshot bridge returned valid JSON with ok=true'
     )
     expect(output).toContain(
+      'PASS: packaged integration registry starts disabled, empty, and non-authoritative'
+    )
+    expect(output).toContain(
       'PASS: control_paper_cycle stopped the local paper runtime'
     )
     expect(output).toContain(

@@ -27,6 +27,7 @@ import type {
   AssetCatalogStatus,
   AuditEvent,
   MarketUniverseQuote,
+  MarketUniverseQuoteResult,
   MarketUniverseSearchResult,
   MarketUniverseStatus,
   PaperExecutionStatus,
@@ -1281,7 +1282,7 @@ function MarketUniversePanel({
   }, [results])
 
   useEffect(() => {
-    const api = window.sigilDesktop?.getMarketUniverseQuotes
+    const api = desktopApi()?.getMarketUniverseQuotes
     const symbols = rankedResults.slice(0, 20).map(item => item.symbol)
 
     if (!api || symbols.length === 0) {
@@ -1751,9 +1752,245 @@ type ProviderResponse =
   | { ok: true; result: SigilProviderSnapshot }
   | { ok: false; error: string; message: string }
 
+export type AIStatus = {
+  enabled: boolean
+  service_state: string
+  configured_model_count: number
+  available_provider_count: number
+  local_gemma_health: string
+  mac_ollama?: {
+    enabled: boolean
+    device_identity?: string
+    fleet_role?: string
+    endpoint_classification?: string
+    embedding_adapter?: string
+    health?: string
+    roles?: Record<'primary' | 'fast' | 'embedding' | 'fallback', {
+      configured: boolean
+      model_identity: string
+      health: string
+      identity_match: boolean
+      readiness: string
+      reason: string | null
+      deprecated: boolean
+      enabled: boolean
+      admission_state: string
+      upstream_revision_evidence: string
+      license_evidence: string
+    }>
+    paper_only: true
+    broker_submission: false
+    execution_authorized: false
+    approval_authority: false
+  }
+  evidence_ledger_health: string
+  artifact_store_health: string
+  artifact_count: number
+  last_successful_analysis_at: string | null
+  latest_analysis_summary?: string | null
+  last_failure_classification: string | null
+  finbert?: {
+    enabled: boolean
+    available: boolean
+    health: string
+    sentiment_artifact_count: number
+    latest_sentiment: {
+      label: string
+      confidence: number
+      source_identity: string
+      freshness: string | null
+      limitations: string[]
+    } | null
+  }
+  embeddinggemma?: {
+    enabled: boolean
+    available: boolean
+    health: string
+    vector_dimension: number
+    corpus_count: number
+    source_count: number
+    chunk_count: number
+    embedding_count: number
+    vector_store_health: string
+    latest_retrieval: {
+      result_count: number
+      freshness: string[]
+      limitations: string[]
+    } | null
+  }
+  kronos?: {
+    enabled: boolean
+    available: boolean
+    health: string
+    model_id: string
+    tokenizer_id: string
+    supported_intervals: string[]
+    maximum_sequence_length: number
+    maximum_horizon: number
+    forecast_artifact_count: number
+    evaluation_artifact_count: number
+    last_successful_forecast: {
+      symbol: string
+      interval: string
+      forecast_horizon: number
+      created_at: string
+      uncertainty_available: boolean
+      freshness: string
+      limitations: string[]
+    } | null
+  }
+  orchestration?: {
+    enabled: boolean
+    health: string
+    active_count: number
+    completed_count: number
+    partial_count: number
+    failed_count: number
+    paused_count: number
+    pending_human_interactions: number
+    buzz: string
+    atlas: string
+    openworker: string
+    latest: {
+      orchestration_id: string
+      plan_id: string
+      state: string
+      capabilities: string[]
+      completed_steps: number
+      failed_steps: number
+      artifact_id: string | null
+      evidence_identities: string[]
+      failure_classification: string | null
+      limitations: string[]
+      updated_at: string
+    } | null
+  }
+  fleet?: {
+    enabled: boolean
+    health: string
+    store_health: string
+    registered_node_count: number
+    healthy_node_count: number
+    nodes: Record<'titan' | 'mac' | 'prime', { node_id: string; state: string; capabilities: string[]; load: number } | null>
+    active_tasks: number
+    queued_tasks: number
+    completion_unknown_tasks: number
+    clock_warnings: number
+    latest_route: { node_id: string | null; state: string; created_at: string } | null
+    latest_failover: { node_id: string | null; failure: string | null } | null
+    recent_failures: number
+    paper_only: true
+    execution_authorized: false
+    broker_submission: false
+  }
+  integration_registry?: {
+    enabled: boolean
+    state: 'disabled' | 'empty' | 'healthy' | 'degraded' | 'invalid'
+    store_health: string
+    reason: string | null
+    schema_version: number
+    registry_revision: string
+    entry_count: number
+    counts_by_lifecycle: Record<string, number>
+    counts_by_category: Record<string, number>
+    pinned_count: number
+    unpinned_count: number
+    valid_count: number
+    invalid_count: number
+    certified_count: number
+    quarantined_count: number
+    deprecated_count: number
+    latest_lifecycle_evidence_identity: string | null
+    paper_only: true
+    broker_submission: false
+    activation_authorized: false
+    installation_authorized: false
+    approval_authority: false
+  }
+  paper_only: true
+  broker_submission: false
+}
+
+export function IntegrationRegistryPanel({ status }: { status: AIStatus['integration_registry'] | null | undefined }) {
+  const lifecycle = status
+    ? Object.entries(status.counts_by_lifecycle)
+      .filter(([, count]) => count > 0)
+      .map(([state, count]) => `${state} ${count}`)
+      .join(' · ') || 'No entries'
+    : 'Unavailable'
+
+  const reason = status?.reason ?? (status?.entry_count === 0 ? 'No tracked integration entries.' : null)
+  const tone: SigilTone = status?.state === 'invalid' ? 'danger' : status?.state === 'healthy' ? 'success' : 'muted'
+
+  return (
+    <section aria-labelledby="integration-registry-title" className={cn('border-b border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)} data-testid="integration-registry-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="integration-registry-title">Integration Registry</h2>
+          <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">Pinned governance metadata · read-only inspection</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusLabel tone={tone}>{status?.state ?? 'unavailable'}</StatusLabel>
+          <StatusLabel tone="muted">Paper only</StatusLabel>
+          <StatusLabel tone="danger">Broker disabled</StatusLabel>
+          <StatusLabel tone="danger">No activation authority</StatusLabel>
+        </div>
+      </div>
+      <dl className="mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-xs sm:grid-cols-2 lg:grid-cols-4">
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Registry revision</dt><dd className="mt-1 break-all font-mono">{status?.registry_revision ?? 'unavailable'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Entries / validation</dt><dd className="mt-1 font-mono">{status?.entry_count ?? 0} entries · {status?.valid_count ?? 0} valid · {status?.invalid_count ?? 0} invalid</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Pinning</dt><dd className="mt-1 font-mono">{status?.pinned_count ?? 0} pinned · {status?.unpinned_count ?? 0} unpinned</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Certified / quarantine</dt><dd className="mt-1 font-mono">{status?.certified_count ?? 0} certified · {status?.quarantined_count ?? 0} quarantined · {status?.deprecated_count ?? 0} deprecated</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3 sm:col-span-2"><dt className="text-(--ui-text-tertiary)">Lifecycle</dt><dd className="mt-1 break-words font-mono">{lifecycle}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3 sm:col-span-2"><dt className="text-(--ui-text-tertiary)">Authority</dt><dd className="mt-1 break-words font-mono">installation denied · activation denied · approval denied · paper only · broker disabled</dd></div>
+        {reason ? <div className="min-w-0 bg-(--ui-bg-secondary) p-3 sm:col-span-2 lg:col-span-4"><dt className="text-(--ui-text-tertiary)">Registry state reason</dt><dd className="mt-1 break-words font-mono">{reason}</dd></div> : null}
+      </dl>
+    </section>
+  )
+}
+
+export function AIFoundationPanel({ status }: { status: AIStatus | null }) {
+  return (
+    <section aria-labelledby="ai-foundation-title" className={cn('border-b border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="ai-foundation-title">AI Foundation</h2>
+          <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">AI analysis is advisory only.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusLabel tone={status?.enabled ? 'success' : 'muted'}>{status?.service_state ?? 'unavailable'}</StatusLabel>
+          <StatusLabel tone="danger">No execution authority</StatusLabel>
+          <StatusLabel tone="muted">Paper only</StatusLabel>
+        </div>
+      </div>
+      <dl className="mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-xs sm:grid-cols-2 lg:grid-cols-4">
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Local Gemma</dt><dd className="mt-1 font-mono">{status?.local_gemma_health ?? 'unavailable'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Mac Ollama profile</dt><dd className="mt-1 break-words font-mono">{status?.mac_ollama?.enabled ? 'enabled' : 'disabled'} · {status?.mac_ollama?.endpoint_classification ?? status?.mac_ollama?.health ?? 'unavailable'} · {status?.mac_ollama?.fleet_role ?? 'mac'} · paper only</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Ollama primary / fast</dt><dd className="mt-1 break-words font-mono">{status?.mac_ollama?.roles?.primary.health ?? 'unavailable'} · {status?.mac_ollama?.roles?.primary.model_identity ?? 'not configured'} / {status?.mac_ollama?.roles?.fast.health ?? 'unavailable'} · {status?.mac_ollama?.roles?.fast.model_identity ?? 'not configured'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Ollama embedding / fallback</dt><dd className="mt-1 break-words font-mono">{status?.mac_ollama?.embedding_adapter ?? 'unconfigured'} · {status?.mac_ollama?.roles?.embedding.health ?? 'unavailable'} / fallback {status?.mac_ollama?.roles?.fallback.admission_state ?? 'rejected'} · deprecated</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">FinBERT sentiment</dt><dd className="mt-1 font-mono">{status?.finbert?.health ?? 'unavailable'} · {status?.finbert?.sentiment_artifact_count ?? 0} artifacts</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">EmbeddingGemma retrieval</dt><dd className="mt-1 font-mono">{status?.embeddinggemma?.health ?? 'unavailable'} · {status?.embeddinggemma?.source_count ?? 0} sources · {status?.embeddinggemma?.embedding_count ?? 0} embeddings</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Kronos forecasting</dt><dd className="mt-1 font-mono">{status?.kronos?.health ?? 'unavailable'} · {status?.kronos?.forecast_artifact_count ?? 0} forecasts · {status?.kronos?.evaluation_artifact_count ?? 0} evaluations</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Hermes orchestration</dt><dd className="mt-1 font-mono">{status?.orchestration?.health ?? 'unavailable'} · {status?.orchestration?.latest?.state ?? 'idle'} · {status?.orchestration?.pending_human_interactions ?? 0} pending input</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Coordination surfaces</dt><dd className="mt-1 font-mono">Buzz {status?.orchestration?.buzz ?? 'unavailable'} · Atlas {status?.orchestration?.atlas ?? 'unavailable'} · OpenWorker {status?.orchestration?.openworker ?? 'unavailable'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Orchestration evidence</dt><dd className="mt-1 break-all font-mono">{status?.orchestration?.latest ? `${status.orchestration.latest.capabilities.join(', ') || 'no capabilities'} · ${status.orchestration.latest.artifact_id ?? 'no artifact'} · ${status.orchestration.latest.evidence_identities[0] ?? 'no evidence'}` : 'none'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Orchestration limitations</dt><dd className="mt-1 break-words font-mono">{status?.orchestration?.latest?.limitations.join(' · ') || 'none'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Governed fleet</dt><dd className="mt-1 font-mono">{status?.fleet?.health ?? 'unavailable'} · {status?.fleet?.healthy_node_count ?? 0}/{status?.fleet?.registered_node_count ?? 0} healthy · {status?.fleet?.active_tasks ?? 0} active · {status?.fleet?.queued_tasks ?? 0} queued</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Titan / Mac / Prime</dt><dd className="mt-1 font-mono">Titan {status?.fleet?.nodes.titan?.state ?? 'unavailable'} · Mac {status?.fleet?.nodes.mac?.state ?? 'unavailable'} · Prime {status?.fleet?.nodes.prime?.state ?? 'unavailable'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Fleet route / failover</dt><dd className="mt-1 break-words font-mono">{status?.fleet?.latest_route?.node_id ?? 'none'} · failover {status?.fleet?.latest_failover?.node_id ?? 'none'} · {status?.fleet?.completion_unknown_tasks ?? 0} completion unknown</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Fleet evidence / clocks</dt><dd className="mt-1 font-mono">{status?.fleet?.store_health ?? 'unavailable'} · {status?.fleet?.clock_warnings ?? 0} clock warnings · paper only · broker disabled</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Registry</dt><dd className="mt-1 font-mono">{status?.configured_model_count ?? 0} models · {status?.available_provider_count ?? 0} available</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Evidence / artifacts</dt><dd className="mt-1 font-mono">{status?.evidence_ledger_health ?? 'unavailable'} · {status?.artifact_store_health ?? 'unavailable'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Latest result</dt><dd className="mt-1 break-words font-mono">{status?.last_failure_classification ?? (status?.orchestration?.latest ? `${status.orchestration.latest.state} · ${status.orchestration.latest.completed_steps} completed · ${status.orchestration.latest.failed_steps} failed` : status?.kronos?.last_successful_forecast ? `${status.kronos.last_successful_forecast.symbol} · ${status.kronos.last_successful_forecast.interval} · ${status.kronos.last_successful_forecast.forecast_horizon} points · ${status.kronos.last_successful_forecast.freshness}` : status?.embeddinggemma?.latest_retrieval ? `${status.embeddinggemma.latest_retrieval.result_count} retrieval results · ${status.embeddinggemma.latest_retrieval.freshness.join(', ') || 'no matches'}` : status?.finbert?.latest_sentiment ? `${status.finbert.latest_sentiment.label} · ${Math.round(status.finbert.latest_sentiment.confidence * 100)}% · ${status.finbert.latest_sentiment.source_identity}` : status?.latest_analysis_summary ?? status?.last_successful_analysis_at ?? 'none')}</dd></div>
+      </dl>
+    </section>
+  )
+}
+
 interface MissionControlDesktopApi {
   getRuntimeSnapshot?: () => Promise<unknown>
   getProviderSnapshot?: () => Promise<ProviderResponse>
+  getAIStatus?: () => Promise<{ ok: true; result: AIStatus } | { ok: false; error: string; message: string }>
   getAlpacaMarketDataStatus?: () => Promise<
     { ok: true; result: AlpacaMarketDataStatus } | { ok: false; error: string; message: string }
   >
@@ -1767,6 +2004,11 @@ interface MissionControlDesktopApi {
     payload: Readonly<Record<string, unknown>>
   ) => Promise<
     { ok: true; result: MarketUniverseSearchResult } | { ok: false; error: string; message: string }
+  >
+  getMarketUniverseQuotes?: (
+    payload: Readonly<Record<string, unknown>>
+  ) => Promise<
+    { ok: true; result: MarketUniverseQuoteResult } | { ok: false; error: string; message: string }
   >
   getAssetCatalogStatus?: () => Promise<
     { ok: true; result: AssetCatalogStatus } | { ok: false; error: string; message: string }
@@ -1846,6 +2088,7 @@ export function SigilOperatorView({
   const [providerSnapshot, setProviderSnapshot] = useState<SigilProviderSnapshot | null>(null)
   const [providerLoading, setProviderLoading] = useState(false)
   const [providerError, setProviderError] = useState<string | null>(null)
+  const [aiStatus, setAIStatus] = useState<AIStatus | null>(null)
   const [alpacaMarketData, setAlpacaMarketData] = useState<AlpacaMarketDataStatus | null>(null)
   const [alpacaControlAction, setAlpacaControlAction] = useState<string | null>(null)
   const [alpacaControlMessage, setAlpacaControlMessage] = useState<string | null>(null)
@@ -2088,6 +2331,34 @@ export function SigilOperatorView({
 
     return () => window.clearInterval(providerTimer)
   }, [refreshProviders])
+
+  useEffect(() => {
+    const request = desktopApi()?.getAIStatus
+
+    if (!request) {
+      return
+    }
+
+    let cancelled = false
+
+    const refresh = (): void => {
+      void request()
+        .then(response => {
+          if (!cancelled && response.ok) {
+            setAIStatus(response.result)
+          }
+        })
+        .catch(() => undefined)
+    }
+
+    refresh()
+    const timer = window.setInterval(refresh, 30_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
 
   useEffect(() => {
     controlAlpaca('refresh_status')
@@ -2568,6 +2839,8 @@ export function SigilOperatorView({
                 onRefresh={refreshProviders}
                 snapshot={providerSnapshot}
               />
+              <AIFoundationPanel status={aiStatus} />
+              <IntegrationRegistryPanel status={aiStatus?.integration_registry} />
               <AutonomousPaperPanel
                 onAction={setPendingPaperExecutionAction}
                 status={paperExecution}

@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "certification_scope": "post_phase9_stage1_governed_integration_registry",
+  "base_sha": "8a00b8447ad4f873706895e6d8e194991b1a3863",
+  "branch": "beta-post9-01-integration-registry",
+  "operational_result": "passed",
+  "registry_schema_version": 1,
+  "default_state": {
+    "enabled": false,
+    "entry_count": 0,
+    "store_health": "empty"
+  },
+  "validation": {
+    "focused_registry_tests": 26,
+    "ai_registry_and_inspection_tests": 51,
+    "evidence_and_ledger_tests": 117,
+    "signed_hermes_link_tests": 27,
+    "full_sigil_python_tests": 1371,
+    "desktop_test_files": 17,
+    "desktop_tests": 88,
+    "packaged_backend_assertions": 25,
+    "desktop_typecheck": "passed",
+    "desktop_lint": "passed",
+    "production_build": "passed",
+    "git_diff_check": "passed"
+  },
+  "warnings": [
+    "Two Python 3.13 multiprocessing fork deprecation warnings in the existing concurrent portfolio ledger test.",
+    "Existing generated CSS optimizer unexpected-token warning.",
+    "Existing large icon barrel and output chunk size build warnings."
+  ],
+  "build_identity": "8a00b8447-20260801.214531",
+  "deterministic_coverage": [
+    "immutable_entry_schema_and_digest",
+    "immutable_commit_or_release_digest_pinning",
+    "duplicate_and_malformed_identity_rejection",
+    "explicit_fail_closed_lifecycle_transitions",
+    "independent_lifecycle_decision",
+    "append_only_hash_linked_lifecycle_evidence",
+    "atomic_registry_replacement",
+    "corrupt_storage_fail_closed",
+    "sanitized_read_only_inspection",
+    "mission_control_actual_state_projection",
+    "empty_disabled_packaged_default",
+    "installation_and_activation_authority_denial"
+  ],
+  "governance": {
+    "paper_only": true,
+    "broker_submission": false,
+    "execution_authorized": false,
+    "approval_authority": false,
+    "capital_authority": false,
+    "portfolio_mutation": false,
+    "policy_mutation": false,
+    "credential_access": false,
+    "arbitrary_shell": false,
+    "arbitrary_filesystem": false,
+    "governance_bypass": false,
+    "activation_authorized": false,
+    "installation_authorized": false
+  },
+  "external_integrations_installed_or_activated": false,
+  "stage2_worker_contract_implemented": false
+}

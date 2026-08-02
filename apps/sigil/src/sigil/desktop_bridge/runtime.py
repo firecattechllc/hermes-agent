@@ -34,6 +34,7 @@ from .paper_execution import (
 from .paper_execution import (
     submit as _submit_order,
 )
+from .bridge import build_default_aggregate_snapshot
 
 SCHEMA_VERSION = 5
 CYCLE_SECONDS = 5
@@ -123,6 +124,10 @@ def _initial_state(now: datetime) -> dict[str, Any]:
         "simulation": True,
         "execution_authorized": False,
         "broker_submission_available": False,
+        "sigil_bridge": build_default_aggregate_snapshot(
+            observed_at=timestamp,
+            snapshot_revision=1,
+        ).projection(),
         "balances": {"cash": "10000.00", "portfolio_value": "0.00", "currency": "USD"},
         "positions": [],
         "automation": {
@@ -259,7 +264,44 @@ def _append_reset_evidence(
     return reset_id, previous_state_sha256
 
 
+def _upgrade_bridge_projection(state: dict[str, Any]) -> None:
+    generated_at = str(state.get("generated_at", ""))
+    revision = int(state.get("revision", 1))
+
+    current = state.get("sigil_bridge")
+    if not isinstance(current, dict):
+        state["sigil_bridge"] = build_default_aggregate_snapshot(
+            observed_at=generated_at,
+            snapshot_revision=max(1, revision),
+        ).projection()
+        return
+
+    required_denials = {
+        "paper_only": True,
+        "broker_submission": False,
+        "execution_authorized": False,
+        "approval_authority": False,
+        "capital_authority": False,
+        "portfolio_mutation": False,
+        "policy_mutation": False,
+        "credential_access": False,
+        "arbitrary_shell": False,
+        "arbitrary_filesystem": False,
+        "governance_bypass": False,
+        "activation_authorized": False,
+        "installation_authorized": False,
+        "connection_authorized": False,
+        "dispatch_authorized": False,
+    }
+    if any(current.get(key) != value for key, value in required_denials.items()):
+        state["sigil_bridge"] = build_default_aggregate_snapshot(
+            observed_at=generated_at,
+            snapshot_revision=max(1, revision),
+        ).projection()
+
+
 def _upgrade_runtime_state(state: dict[str, Any]) -> None:
+    _upgrade_bridge_projection(state)
     initialize_execution_state(state)
     state["schema_version"] = SCHEMA_VERSION
     automation = state.setdefault("automation", {})
@@ -1465,7 +1507,12 @@ def runtime_snapshot(*, now: datetime | None = None) -> dict[str, Any]:
             [] if market_data_ready or provider_status == "unverified" else ["market_data"]
         )
         state["runtime_visibility"] = _runtime_visibility(state, observed_at)
-        state["revision"] = int(state["revision"]) + 1
+        next_revision = int(state["revision"]) + 1
+        state["sigil_bridge"] = build_default_aggregate_snapshot(
+            observed_at=_timestamp(observed_at),
+            snapshot_revision=next_revision,
+        ).projection()
+        state["revision"] = next_revision
         state["generated_at"] = _timestamp(observed_at)
         state["connection"]["last_refresh_at"] = _timestamp(observed_at)
         _persist(state_path, state)
@@ -1519,10 +1566,77 @@ def cancel_paper_order(order_id: str, *, now: datetime | None = None) -> dict[st
 
 def runtime_mission_control_status() -> dict[str, Any]:
     """Return the bounded paper-runtime status required by Mission Control."""
+
     with _locked_state() as (state_path, state):
+        _upgrade_bridge_projection(state)
         result = mission_control_status(state)
+
+        bridge = state.get("sigil_bridge")
+        if not isinstance(bridge, dict):
+            bridge = build_default_aggregate_snapshot(
+                observed_at=str(state.get("generated_at", "")),
+                snapshot_revision=max(
+                    1,
+                    int(state.get("revision", 1)),
+                ),
+            ).projection()
+            state["sigil_bridge"] = bridge
+
+        # Preserve the existing Mission Control projection while exposing
+        # the authoritative paper-runtime boundaries expected by the UI.
+        result.setdefault("environment", str(state.get("environment", "paper")))
+        result.setdefault("simulation", bool(state.get("simulation", True)))
+        result.setdefault(
+            "execution_authorized",
+            bool(state.get("execution_authorized", False)),
+        )
+        result.setdefault(
+            "broker_submission_available",
+            bool(state.get("broker_submission_available", False)),
+        )
+
+        result["sigil_bridge"] = bridge
+        result["ecosystem"] = {
+            "state": str(
+                bridge.get("bridge", {}).get(
+                    "lifecycle_state",
+                    "disconnected",
+                )
+            ),
+            "health": "blocked",
+            "integration_count": int(
+                bridge.get("summary", {}).get(
+                    "integration_count",
+                    0,
+                )
+            ),
+            "connected_integration_count": int(
+                bridge.get("summary", {}).get(
+                    "connected_integration_count",
+                    0,
+                )
+            ),
+            "activated_integration_count": 0,
+            "paper_only": True,
+            "broker_submission": False,
+            "execution_authorized": False,
+            "approval_authority": False,
+            "capital_authority": False,
+            "portfolio_mutation": False,
+            "policy_mutation": False,
+            "credential_access": False,
+            "arbitrary_shell": False,
+            "arbitrary_filesystem": False,
+            "governance_bypass": False,
+            "activation_authorized": False,
+            "installation_authorized": False,
+            "connection_authorized": False,
+            "dispatch_authorized": False,
+            "rollback_execution_authorized": False,
+        }
+
         _persist(state_path, state)
-        return result
+        return json.loads(json.dumps(result))
 
 
 def control_paper_cycle(action: object, *, now: datetime | None = None) -> dict[str, Any]:

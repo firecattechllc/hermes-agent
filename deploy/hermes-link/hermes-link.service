@@ -1,0 +1,38 @@
+[Unit]
+Description=Governed Signed Hermes Link Service
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/opt/hermes-link/current:/opt/hermes-link/current/apps/sigil/src
+ExecStart=/opt/hermes-link/venv/bin/python -m hermes_cli.hermes_link.runtime --config /etc/hermes-link/service.json
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+MemoryMax=4G
+CPUQuota=200%
+TasksMax=64
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/opt/hermes/current /opt/hermes-link /etc/hermes-link
+ReadWritePaths=/var/lib/hermes-link
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

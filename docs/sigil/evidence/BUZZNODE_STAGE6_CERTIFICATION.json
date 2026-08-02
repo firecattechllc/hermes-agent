@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "certification_scope": "post_phase9_stage6_buzznode_adapter",
+  "branch": "beta-post9-06-buzznode",
+  "base_commit": "2e315339c",
+  "certified_at": "2026-08-02T00:02:00Z",
+  "status": "passed",
+  "implementation": {
+    "adapter": "apps/sigil/src/sigil/buzznode_adapter.py",
+    "tests": "apps/sigil/tests/test_buzznode_adapter.py",
+    "architecture_document": "docs/beta/post-phase9/BUZZNODE_ADAPTER.md",
+    "disabled_by_default": true,
+    "live_node_connected": false,
+    "node_provisioned": false,
+    "external_integration_installed_or_activated": false
+  },
+  "modeled_concepts": [
+    "node_machine_identity",
+    "worker_host_role",
+    "platform_architecture",
+    "worker_profile",
+    "bounded_resources",
+    "capability_declarations",
+    "isolated_workspace_references",
+    "browser_session_references",
+    "lease_evidence",
+    "heartbeat_evidence",
+    "worker_contract_compatibility",
+    "job_correlation_idempotency",
+    "node_health_projection",
+    "worker_lifecycle_projection"
+  ],
+  "validation": {
+    "focused_stage1_through_stage6_tests": {
+      "result": "passed",
+      "passed": 184
+    },
+    "full_sigil_python_tests": {
+      "result": "passed",
+      "passed": 1529,
+      "warnings": 2,
+      "warning_class": "multiprocessing_fork_deprecation"
+    },
+    "ruff": {
+      "result": "passed"
+    },
+    "git_diff_check": {
+      "result": "passed"
+    }
+  },
+  "authority": {
+    "paper_only": true,
+    "broker_submission": false,
+    "execution_authorized": false,
+    "approval_authority": false,
+    "capital_authority": false,
+    "portfolio_mutation": false,
+    "policy_mutation": false,
+    "credential_access": false,
+    "arbitrary_shell": false,
+    "arbitrary_filesystem": false,
+    "governance_bypass": false,
+    "activation_authorized": false,
+    "installation_authorized": false
+  },
+  "deferred": [
+    "buzznode_installation",
+    "node_provisioning",
+    "node_discovery",
+    "ssh_connectivity",
+    "authentication",
+    "credential_mounts",
+    "live_heartbeat_collection",
+    "real_lease_acquisition",
+    "workspace_creation",
+    "browser_launch",
+    "browser_automation",
+    "job_execution",
+    "remote_cancellation",
+    "mission_control_projection",
+    "fleet_routing"
+  ],
+  "stage6_buzznode_integration_implemented": true,
+  "stage7_hermes_wiki_integration_implemented": false
+}

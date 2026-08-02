@@ -10,6 +10,9 @@ describe('standalone Sigil Mission Control', () => {
 
     expect(await screen.findByTestId('sigil-operator')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Mission Control', level: 2 })).toBeTruthy()
+    expect(await screen.findByText('AI analysis is advisory only.')).toBeTruthy()
+    expect(screen.getByText('No execution authority')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /AI|Gemma|artifact/i })).toBeNull()
 
     for (const label of ['Overview', 'Portfolio', 'Proposals', 'Launch', 'Executions', 'Reconciliation', 'Audit', 'Settings']) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy()

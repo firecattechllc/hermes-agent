@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "certification_scope": "post_phase9_stage10_routing_fleet_convergence",
+  "branch": "beta-post9-10-routing-fleet-convergence",
+  "base_commit": "3984fd14c",
+  "certified_at": "2026-08-02T00:45:00Z",
+  "status": "passed",
+  "implementation": {
+    "router": "apps/sigil/src/sigil/fleet_routing.py",
+    "tests": "apps/sigil/tests/test_fleet_routing.py",
+    "architecture_document": "docs/beta/post-phase9/ROUTING_FLEET_CONVERGENCE.md",
+    "disabled_by_default": true,
+    "live_dispatch_enabled": false,
+    "node_provisioning_enabled": false,
+    "ssh_enabled": false,
+    "credential_resolution_enabled": false,
+    "automatic_failover_enabled": false,
+    "integration_installation_or_activation_enabled": false
+  },
+  "modeled_concepts": [
+    "fleet_node_identity",
+    "machine_identity",
+    "node_role",
+    "node_priority",
+    "trust_tier",
+    "worker_contract_schema",
+    "capabilities",
+    "machine_profile_compatibility",
+    "hourly_cost",
+    "health_state",
+    "lease_state",
+    "job_capacity",
+    "memory_capacity",
+    "compute_capacity",
+    "running_work",
+    "failure_penalty",
+    "latency_penalty",
+    "evidence_freshness",
+    "route_eligibility",
+    "deterministic_route_scoring",
+    "primary_selection",
+    "ordered_fallback_selection",
+    "explicit_exclusion_reasons",
+    "deterministic_route_decision_digest"
+  ],
+  "validation": {
+    "focused_stage10_tests": {
+      "result": "passed",
+      "passed": 26
+    },
+    "cumulative_stage1_through_stage10_tests": {
+      "result": "passed",
+      "passed": 360
+    },
+    "full_sigil_python_tests": {
+      "result": "passed",
+      "passed": 1705,
+      "warnings": 2,
+      "warning_class": "multiprocessing_fork_deprecation"
+    },
+    "ruff": {
+      "result": "passed"
+    },
+    "git_diff_check": {
+      "result": "passed"
+    }
+  },
+  "authority": {
+    "paper_only": true,
+    "broker_submission": false,
+    "execution_authorized": false,
+    "approval_authority": false,
+    "capital_authority": false,
+    "portfolio_mutation": false,
+    "policy_mutation": false,
+    "credential_access": false,
+    "arbitrary_shell": false,
+    "arbitrary_filesystem": false,
+    "governance_bypass": false,
+    "activation_authorized": false,
+    "installation_authorized": false
+  },
+  "deferred": [
+    "live_node_discovery",
+    "live_health_collection",
+    "live_lease_management",
+    "node_provisioning",
+    "ssh",
+    "authentication",
+    "credential_resolution",
+    "worker_dispatch",
+    "remote_execution",
+    "remote_cancellation",
+    "automatic_failover",
+    "integration_installation",
+    "integration_activation",
+    "mission_control_execution_controls",
+    "live_sigil_bridge_wiring"
+  ],
+  "stage10_routing_and_fleet_convergence_implemented": true,
+  "stage11_sigil_bridge_implemented": false
+}
