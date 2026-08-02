@@ -1,0 +1,152 @@
+"""Governed Claude provider foundation backed by the Hermes runtime."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from .evidence import build_invocation_evidence
+from .models import (
+    Capability,
+    CostClass,
+    ExecutionLocation,
+    InputType,
+    ModelRegistration,
+    PrivacyTier,
+    ProviderHealth,
+    ProviderIdentity,
+    Responsibility,
+    TrustTier,
+)
+from .provider import (
+    ProviderFailure,
+    ProviderFailureClass,
+    ProviderInvocation,
+    ProviderResult,
+)
+
+CLAUDE_PROVIDER_ID = "hermes-claude"
+CLAUDE_MODEL_ID = "claude-sonnet-governed"
+CLAUDE_MODEL_FAMILY = "claude"
+CLAUDE_MODEL_VERSION = "gamma-foundation-v1"
+
+CLAUDE_CAPABILITIES = frozenset(
+    {
+        Capability.REASONING,
+        Capability.STRUCTURED_GENERATION,
+        Capability.SUMMARIZATION,
+        Capability.CODING,
+    }
+)
+
+CLAUDE_RESPONSIBILITIES = frozenset(
+    {
+        Responsibility.ANALYSIS,
+        Responsibility.EXPLANATION,
+        Responsibility.RESEARCH,
+        Responsibility.CODE_ASSISTANCE,
+        Responsibility.RESEARCH_ANALYSIS,
+        Responsibility.PROPOSAL_SUPPORT,
+        Responsibility.EVIDENCE_SUMMARIZATION,
+        Responsibility.RISK_ANALYSIS,
+        Responsibility.MARKET_CONTEXT,
+        Responsibility.ORCHESTRATION_PLANNING,
+        Responsibility.ORCHESTRATION_SUPPORT,
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ClaudeConfig:
+    """Credential-free governed configuration for Claude registration."""
+
+    enabled: bool = False
+    model_id: str = CLAUDE_MODEL_ID
+    context_limit: int = 200_000
+    request_timeout_ms: int = 60_000
+
+    def __post_init__(self) -> None:
+        if self.context_limit < 1:
+            raise ValueError("Claude context_limit must be positive")
+        if self.request_timeout_ms < 1:
+            raise ValueError("Claude request_timeout_ms must be positive")
+
+
+class HermesClaudeProvider:
+    """Fail-closed Claude provider until governed Hermes execution is connected."""
+
+    input_contract = "application/json;schema=sigil.ai.input.v1"
+    output_contract = "application/json;schema=sigil.ai.output.v1"
+    capabilities = CLAUDE_CAPABILITIES
+    model_family = CLAUDE_MODEL_FAMILY
+
+    def __init__(self, config: ClaudeConfig | None = None) -> None:
+        self.config = config or ClaudeConfig()
+        self.model_id = self.config.model_id
+        self.model_version = CLAUDE_MODEL_VERSION
+        self.request_timeout_ms = self.config.request_timeout_ms
+
+        # Enabling configuration does not imply that the Hermes transport,
+        # credentials, or selected Claude model have been verified.
+        self.identity = ProviderIdentity(
+            provider_id=CLAUDE_PROVIDER_ID,
+            execution_location=ExecutionLocation.EXTERNAL,
+            health=ProviderHealth.UNAVAILABLE,
+            enabled=self.config.enabled,
+            metadata=(("adapter", "hermes-claude-gamma-v1"),),
+        )
+
+    def registration(self) -> ModelRegistration:
+        return ModelRegistration(
+            model_id=self.model_id,
+            provider_id=self.identity.provider_id,
+            family=self.model_family,
+            version=self.model_version,
+            capabilities=self.capabilities,
+            execution_location=self.identity.execution_location,
+            context_limit=self.config.context_limit,
+            supported_input_types=frozenset(
+                {
+                    InputType.TEXT,
+                    InputType.STRUCTURED_JSON,
+                }
+            ),
+            structured_output=True,
+            cost_class=CostClass.HIGH,
+            trust_tier=TrustTier.RESTRICTED,
+            privacy_tier=PrivacyTier.EXTERNAL_APPROVED,
+            health=self.identity.health,
+            enabled=self.identity.enabled,
+            allowed_responsibilities=CLAUDE_RESPONSIBILITIES,
+        )
+
+    def invoke(self, invocation: ProviderInvocation) -> ProviderResult:
+        failure = ProviderFailure(
+            classification=ProviderFailureClass.UNAVAILABLE,
+            message="Governed Hermes Claude execution is not connected.",
+            retryable=False,
+        )
+
+        evidence = build_invocation_evidence(
+            request_id=invocation.request_id,
+            task_correlation_id=invocation.task_correlation_id,
+            provider_id=self.identity.provider_id,
+            model_id=invocation.model_id,
+            registry_revision=invocation.registry_revision,
+            capability=invocation.capability,
+            execution_location=self.identity.execution_location,
+            started_at=invocation.started_at,
+            ended_at=invocation.ended_at,
+            succeeded=False,
+            failure_classification=failure.classification.value,
+            input_payload=dict(invocation.input_payload),
+            output_payload=None,
+            provider_metadata=(("adapter", "hermes-claude-gamma-v1"),),
+        )
+
+        return ProviderResult(
+            output=None,
+            failure=failure,
+            evidence=evidence,
+            broker_submission=False,
+            paper_only=True,
+        )
