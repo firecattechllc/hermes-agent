@@ -78,6 +78,13 @@ from .cross_provider_validation_certification import (
     cross_provider_certification_manifest,
 )
 
+from .gamma_reliability_certification import (
+    GAMMA_RELIABILITY_CERTIFICATION_VERSION,
+    GammaReliabilityCertification,
+    certify_gamma_reliability,
+    gamma_reliability_manifest,
+)
+
 from .evidence import InvocationEvidence, build_invocation_evidence
 from .finbert import (
     FINBERT_RESPONSIBILITIES,
@@ -373,9 +380,11 @@ __all__ = [
     "GenericAnalysisPayload",
     "GovernedAIEvidenceRecord",
     "GovernedAnalysisArtifact",
+    "GAMMA_RELIABILITY_CERTIFICATION_VERSION",
     "GovernedAnalysisRequest",
     "GovernedAnalysisResponse",
     "GovernedAnalysisService",
+    "GammaReliabilityCertification",
     "GovernedClaudeInspectionService",
     "GovernedAnalysisStatus",
     "GovernedAtlasProjection",
@@ -498,6 +507,8 @@ __all__ = [
     "claude_inspection_status",
     "cross_provider_validation_status",
     "certify_cross_provider_validation",
+    "certify_gamma_reliability",
+    "gamma_reliability_manifest",
     "cross_provider_certification_manifest",
     "certification_manifest",
     "certify_claude_inspection",
