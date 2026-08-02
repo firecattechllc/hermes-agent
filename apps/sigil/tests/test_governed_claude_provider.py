@@ -48,14 +48,17 @@ def test_claude_provider_is_disabled_and_unavailable_by_default() -> None:
 
 
 def test_enabled_configuration_does_not_claim_verified_health() -> None:
-    provider = HermesClaudeProvider(ClaudeConfig(enabled=True))
+    provider = HermesClaudeProvider(
+        ClaudeConfig(enabled=True),
+        credential_resolver=lambda: None,
+    )
 
     assert provider.identity.enabled is True
-    assert provider.identity.health == ProviderHealth.UNAVAILABLE
+    assert provider.identity.health == ProviderHealth.DEGRADED
 
     registration = provider.registration()
     assert registration.enabled is True
-    assert registration.health == ProviderHealth.UNAVAILABLE
+    assert registration.health == ProviderHealth.DEGRADED
 
 
 def test_claude_registration_is_external_restricted_and_advisory_only() -> None:
@@ -187,3 +190,88 @@ def test_empty_claude_model_id_fails_closed() -> None:
                 "SIGIL_AI_CLAUDE_MODEL_ID": "   ",
             }
         )
+
+
+def test_disabled_claude_health_probe_does_not_resolve_credentials() -> None:
+    calls = []
+
+    def resolver() -> str | None:
+        calls.append("called")
+        return "should-not-be-read"
+
+    provider = HermesClaudeProvider(
+        ClaudeConfig(enabled=False),
+        credential_resolver=resolver,
+    )
+
+    health = provider.health_probe()
+
+    assert calls == []
+    assert health.health == ProviderHealth.UNAVAILABLE
+    assert health.classification == "provider_disabled"
+    assert health.credentials_available is False
+    assert health.paper_only is True
+    assert health.broker_submission is False
+
+
+def test_enabled_claude_without_credentials_remains_degraded() -> None:
+    provider = HermesClaudeProvider(
+        ClaudeConfig(enabled=True),
+        credential_resolver=lambda: None,
+    )
+
+    health = provider.health_probe()
+
+    assert health.health == ProviderHealth.DEGRADED
+    assert health.classification == "credentials_unavailable"
+    assert health.credentials_available is False
+    assert provider.identity.health == ProviderHealth.DEGRADED
+    assert provider.registration().health == ProviderHealth.DEGRADED
+
+
+def test_enabled_claude_with_credentials_remains_degraded_until_transport() -> None:
+    secret = "claude-secret-must-not-escape"
+    provider = HermesClaudeProvider(
+        ClaudeConfig(enabled=True),
+        credential_resolver=lambda: secret,
+    )
+
+    health = provider.health_probe()
+
+    assert health.health == ProviderHealth.DEGRADED
+    assert health.classification == "transport_unverified"
+    assert health.credentials_available is True
+    assert secret not in repr(health)
+    assert secret not in repr(provider.identity)
+    assert secret not in repr(provider.registration())
+
+
+def test_claude_credential_resolution_failure_fails_closed() -> None:
+    def resolver() -> str | None:
+        raise RuntimeError("credential backend unavailable")
+
+    provider = HermesClaudeProvider(
+        ClaudeConfig(enabled=True),
+        credential_resolver=resolver,
+    )
+
+    health = provider.health_probe()
+
+    assert health.health == ProviderHealth.UNAVAILABLE
+    assert health.classification == "credential_resolution_failed"
+    assert health.credentials_available is False
+    assert provider.identity.health == ProviderHealth.UNAVAILABLE
+
+
+def test_claude_health_metadata_never_contains_credentials() -> None:
+    secret = "sk-ant-secret-value"
+    provider = HermesClaudeProvider(
+        ClaudeConfig(enabled=True),
+        credential_resolver=lambda: secret,
+    )
+
+    provider.health_probe()
+
+    metadata = dict(provider.identity.metadata)
+    assert metadata == {"adapter": "hermes-claude-gamma-v1"}
+    assert secret not in repr(metadata)

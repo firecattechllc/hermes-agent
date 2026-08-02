@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Callable, Mapping
 
 from .evidence import build_invocation_evidence
 from .models import (
@@ -96,6 +96,26 @@ def _environment_positive_int(
 
 
 @dataclass(frozen=True, slots=True)
+class ClaudeHealth:
+    """Credential-safe readiness result for governed Claude access."""
+
+    health: ProviderHealth
+    classification: str
+    credentials_available: bool
+    provider_id: str = CLAUDE_PROVIDER_ID
+    broker_submission: bool = False
+    paper_only: bool = True
+
+
+def _resolve_hermes_anthropic_credential() -> str | None:
+    """Resolve Claude credentials inside the Hermes backend boundary."""
+
+    from agent.anthropic_adapter import resolve_anthropic_token
+
+    return resolve_anthropic_token()
+
+
+@dataclass(frozen=True, slots=True)
 class ClaudeConfig:
     """Credential-free governed configuration for Claude registration."""
 
@@ -150,18 +170,76 @@ class HermesClaudeProvider:
     capabilities = CLAUDE_CAPABILITIES
     model_family = CLAUDE_MODEL_FAMILY
 
-    def __init__(self, config: ClaudeConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: ClaudeConfig | None = None,
+        *,
+        credential_resolver: Callable[[], str | None] | None = None,
+    ) -> None:
         self.config = config or ClaudeConfig()
+        self.credential_resolver = (
+            credential_resolver or _resolve_hermes_anthropic_credential
+        )
         self.model_id = self.config.model_id
         self.model_version = CLAUDE_MODEL_VERSION
         self.request_timeout_ms = self.config.request_timeout_ms
 
-        # Enabling configuration does not imply that the Hermes transport,
-        # credentials, or selected Claude model have been verified.
+        # Enabled Claude begins degraded until credentials and the governed
+        # Hermes transport have both been verified.
         self.identity = ProviderIdentity(
             provider_id=CLAUDE_PROVIDER_ID,
             execution_location=ExecutionLocation.EXTERNAL,
-            health=ProviderHealth.UNAVAILABLE,
+            health=(
+                ProviderHealth.DEGRADED
+                if self.config.enabled
+                else ProviderHealth.UNAVAILABLE
+            ),
+            enabled=self.config.enabled,
+            metadata=(("adapter", "hermes-claude-gamma-v1"),),
+        )
+
+    def health_probe(self) -> ClaudeHealth:
+        if not self.config.enabled:
+            self._set_health(ProviderHealth.UNAVAILABLE)
+            return ClaudeHealth(
+                ProviderHealth.UNAVAILABLE,
+                "provider_disabled",
+                False,
+            )
+
+        try:
+            credential = self.credential_resolver()
+        except Exception:
+            self._set_health(ProviderHealth.UNAVAILABLE)
+            return ClaudeHealth(
+                ProviderHealth.UNAVAILABLE,
+                "credential_resolution_failed",
+                False,
+            )
+
+        credentials_available = bool(
+            isinstance(credential, str) and credential.strip()
+        )
+        self._set_health(ProviderHealth.DEGRADED)
+
+        if not credentials_available:
+            return ClaudeHealth(
+                ProviderHealth.DEGRADED,
+                "credentials_unavailable",
+                False,
+            )
+
+        return ClaudeHealth(
+            ProviderHealth.DEGRADED,
+            "transport_unverified",
+            True,
+        )
+
+    def _set_health(self, health: ProviderHealth) -> None:
+        self.identity = ProviderIdentity(
+            provider_id=CLAUDE_PROVIDER_ID,
+            execution_location=ExecutionLocation.EXTERNAL,
+            health=health,
             enabled=self.config.enabled,
             metadata=(("adapter", "hermes-claude-gamma-v1"),),
         )

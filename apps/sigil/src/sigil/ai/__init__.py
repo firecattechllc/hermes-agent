@@ -24,6 +24,7 @@ from .claude import (
     CLAUDE_PROVIDER_ID,
     CLAUDE_RESPONSIBILITIES,
     ClaudeConfig,
+    ClaudeHealth,
     HermesClaudeProvider,
 )
 from .evidence import InvocationEvidence, build_invocation_evidence
@@ -267,6 +268,7 @@ __all__ = [
     "CandidateEvaluation",
     "Capability",
     "ClaudeConfig",
+    "ClaudeHealth",
     "CostClass",
     "DeterministicProvider",
     "DeterministicProviderMode",
