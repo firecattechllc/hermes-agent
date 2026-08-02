@@ -334,3 +334,351 @@ def _failure_report(
         completed_at=completed_at,
         failure=failure,
     )
+
+_ZERO_HASH = "0" * 64
+
+
+class ClaudeInspectionStoreError(RuntimeError):
+    """Base error for durable Claude inspection persistence."""
+
+
+class ClaudeInspectionStoreCorruptionError(ClaudeInspectionStoreError):
+    """Inspection report history failed integrity validation."""
+
+
+class ClaudeInspectionStoreConflictError(ClaudeInspectionStoreError):
+    """An inspection report identity is already committed."""
+
+
+class DurableClaudeInspectionStore:
+    """Append-only, hash-chained storage for sanitized inspection reports."""
+
+    def __init__(self, state_root):
+        import fcntl
+        import os
+        from pathlib import Path
+
+        if not isinstance(state_root, Path) or not state_root.is_absolute():
+            raise ClaudeInspectionStoreError(
+                "inspection state root must be an absolute Path"
+            )
+        if state_root.is_symlink() or not state_root.exists() or not state_root.is_dir():
+            raise ClaudeInspectionStoreError(
+                "inspection state root must be an existing non-symlink directory"
+            )
+        self._fcntl = fcntl
+        self._os = os
+        self.directory = state_root / "governed-claude-inspections-v1"
+        self.path = self.directory / "inspections.jsonl"
+        self.lock_path = self.directory / "inspections.lock"
+        self.directory.mkdir(mode=0o700, exist_ok=True)
+        if self.directory.is_symlink() or self.path.is_symlink() or self.lock_path.is_symlink():
+            raise ClaudeInspectionStoreError("inspection paths cannot use symlinks")
+        descriptor = os.open(
+            self.lock_path,
+            os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
+            0o600,
+        )
+        os.close(descriptor)
+
+    def _locked(self):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def manager():
+            descriptor = self._os.open(
+                self.lock_path,
+                self._os.O_RDWR | self._os.O_NOFOLLOW,
+            )
+            try:
+                self._fcntl.flock(descriptor, self._fcntl.LOCK_EX)
+                yield
+            finally:
+                self._fcntl.flock(descriptor, self._fcntl.LOCK_UN)
+                self._os.close(descriptor)
+
+        return manager()
+
+    def append(self, report: ClaudeInspectionReport) -> ClaudeInspectionReport:
+        with self._locked():
+            records = self._read_unlocked(recover_truncated_tail=True)
+            if any(item.inspection_id == report.inspection_id for item in records):
+                raise ClaudeInspectionStoreConflictError(
+                    "duplicate Claude inspection identity"
+                )
+            previous = self._last_entry_hash() if records else _ZERO_HASH
+            envelope = {
+                "report": _inspection_report_payload(report),
+                "entry_hash": "",
+                "previous_entry_hash": previous,
+                "sequence": len(records) + 1,
+                "store_version": INSPECTION_CONTRACT_VERSION,
+            }
+            envelope["entry_hash"] = canonical_digest(
+                {key: value for key, value in envelope.items() if key != "entry_hash"}
+            )
+            encoded = (
+                json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode()
+                + b"\n"
+            )
+            descriptor = self._os.open(
+                self.path,
+                self._os.O_CREAT
+                | self._os.O_APPEND
+                | self._os.O_WRONLY
+                | self._os.O_NOFOLLOW,
+                0o600,
+            )
+            try:
+                remaining = memoryview(encoded)
+                while remaining:
+                    written = self._os.write(descriptor, remaining)
+                    if written <= 0:
+                        raise ClaudeInspectionStoreError(
+                            "inspection report write made no progress"
+                        )
+                    remaining = remaining[written:]
+                self._os.fsync(descriptor)
+            finally:
+                self._os.close(descriptor)
+            self._fsync_directory()
+            return report
+
+    def read_reports(
+        self,
+        *,
+        recover_truncated_tail: bool = True,
+    ) -> tuple[ClaudeInspectionReport, ...]:
+        with self._locked():
+            return self._read_unlocked(
+                recover_truncated_tail=recover_truncated_tail
+            )
+
+    def _read_unlocked(
+        self,
+        *,
+        recover_truncated_tail: bool,
+    ) -> tuple[ClaudeInspectionReport, ...]:
+        if not self.path.exists():
+            return ()
+        if self.path.is_symlink() or not self.path.is_file():
+            raise ClaudeInspectionStoreCorruptionError(
+                "inspection store path is unsafe"
+            )
+        raw = self.path.read_bytes()
+        if raw and not raw.endswith(b"\n"):
+            boundary = raw.rfind(b"\n") + 1
+            if not recover_truncated_tail:
+                raise ClaudeInspectionStoreCorruptionError(
+                    "inspection store has a truncated tail"
+                )
+            descriptor = self._os.open(
+                self.path,
+                self._os.O_WRONLY | self._os.O_NOFOLLOW,
+            )
+            try:
+                self._os.ftruncate(descriptor, boundary)
+                self._os.fsync(descriptor)
+            finally:
+                self._os.close(descriptor)
+            self._fsync_directory()
+            raw = raw[:boundary]
+
+        reports = []
+        identities = set()
+        previous = _ZERO_HASH
+        self._validated_last_hash = _ZERO_HASH
+
+        for number, line in enumerate(raw.splitlines(), 1):
+            try:
+                envelope = json.loads(line)
+                if set(envelope) != {
+                    "report",
+                    "entry_hash",
+                    "previous_entry_hash",
+                    "sequence",
+                    "store_version",
+                }:
+                    raise ClaudeInspectionStoreCorruptionError(
+                        "inspection envelope shape is invalid"
+                    )
+                if envelope["store_version"] != INSPECTION_CONTRACT_VERSION:
+                    raise ClaudeInspectionStoreCorruptionError(
+                        "unsupported inspection store schema"
+                    )
+                if envelope["sequence"] != number:
+                    raise ClaudeInspectionStoreCorruptionError(
+                        "inspection sequence mismatch"
+                    )
+                if envelope["previous_entry_hash"] != previous:
+                    raise ClaudeInspectionStoreCorruptionError(
+                        "inspection hash chain mismatch"
+                    )
+                expected = canonical_digest(
+                    {
+                        key: value
+                        for key, value in envelope.items()
+                        if key != "entry_hash"
+                    }
+                )
+                if envelope["entry_hash"] != expected:
+                    raise ClaudeInspectionStoreCorruptionError(
+                        "inspection entry hash mismatch"
+                    )
+                report = _decode_inspection_report(envelope["report"])
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+                json.JSONDecodeError,
+            ) as error:
+                raise ClaudeInspectionStoreCorruptionError(
+                    f"corrupt inspection report line {number}"
+                ) from error
+            if report.inspection_id in identities:
+                raise ClaudeInspectionStoreCorruptionError(
+                    "duplicate inspection identity"
+                )
+            identities.add(report.inspection_id)
+            reports.append(report)
+            previous = envelope["entry_hash"]
+            self._validated_last_hash = previous
+
+        return tuple(reports)
+
+    def _last_entry_hash(self) -> str:
+        return getattr(self, "_validated_last_hash", _ZERO_HASH)
+
+    def _fsync_directory(self) -> None:
+        descriptor = self._os.open(
+            self.directory,
+            self._os.O_RDONLY | self._os.O_DIRECTORY,
+        )
+        try:
+            self._os.fsync(descriptor)
+        finally:
+            self._os.close(descriptor)
+
+
+def _inspection_report_payload(
+    report: ClaudeInspectionReport,
+) -> dict[str, object]:
+    from dataclasses import asdict
+
+    payload = asdict(report)
+    payload["failure"] = None if report.failure is None else report.failure.value
+    return payload
+
+
+def _decode_inspection_report(payload: object) -> ClaudeInspectionReport:
+    if not isinstance(payload, dict):
+        raise ClaudeInspectionStoreCorruptionError(
+            "inspection report payload shape is invalid"
+        )
+    findings = tuple(
+        ClaudeInspectionFinding(
+            finding_id=item["finding_id"],
+            severity=item["severity"],
+            category=item["category"],
+            summary=item["summary"],
+            evidence_references=tuple(item["evidence_references"]),
+            recommendation=item["recommendation"],
+        )
+        for item in payload["findings"]
+    )
+    failure_value = payload["failure"]
+    return ClaudeInspectionReport(
+        inspection_id=payload["inspection_id"],
+        target_revision=payload["target_revision"],
+        target_digest=payload["target_digest"],
+        provider_id=payload["provider_id"],
+        model_id=payload["model_id"],
+        findings=findings,
+        limitations=tuple(payload["limitations"]),
+        report_digest=payload["report_digest"],
+        completed_at=payload["completed_at"],
+        failure=None
+        if failure_value is None
+        else ClaudeInspectionFailure(failure_value),
+        paper_only=payload["paper_only"],
+        broker_submission=payload["broker_submission"],
+        execution_authorized=payload["execution_authorized"],
+        approval_authority=payload["approval_authority"],
+        portfolio_mutation=payload["portfolio_mutation"],
+        tool_execution=payload["tool_execution"],
+    )
+
+
+def claude_inspection_status(state_root) -> dict[str, object]:
+    """Return a sanitized read-only projection of durable inspection history."""
+
+    try:
+        store = DurableClaudeInspectionStore(state_root)
+        reports = store.read_reports(recover_truncated_tail=False)
+    except ClaudeInspectionStoreCorruptionError:
+        return _empty_inspection_status("invalid", "corrupt")
+    except ClaudeInspectionStoreError:
+        return _empty_inspection_status("unavailable", "unavailable")
+
+    latest = reports[-1] if reports else None
+    return {
+        "state": "ready" if reports else "empty",
+        "store_health": "healthy" if reports else "empty",
+        "report_count": len(reports),
+        "successful_report_count": sum(item.succeeded for item in reports),
+        "failed_report_count": sum(not item.succeeded for item in reports),
+        "latest_report": None
+        if latest is None
+        else {
+            "inspection_id": latest.inspection_id,
+            "target_revision": latest.target_revision,
+            "target_digest": latest.target_digest,
+            "provider_id": latest.provider_id,
+            "model_id": latest.model_id,
+            "finding_count": len(latest.findings),
+            "highest_severity": _highest_severity(latest.findings),
+            "failure": None if latest.failure is None else latest.failure.value,
+            "report_digest": latest.report_digest,
+            "completed_at": latest.completed_at,
+        },
+        "paper_only": True,
+        "broker_submission": False,
+        "execution_authorized": False,
+        "approval_authority": False,
+        "portfolio_mutation": False,
+        "tool_execution": False,
+    }
+
+
+def _empty_inspection_status(state: str, health: str) -> dict[str, object]:
+    return {
+        "state": state,
+        "store_health": health,
+        "report_count": 0,
+        "successful_report_count": 0,
+        "failed_report_count": 0,
+        "latest_report": None,
+        "paper_only": True,
+        "broker_submission": False,
+        "execution_authorized": False,
+        "approval_authority": False,
+        "portfolio_mutation": False,
+        "tool_execution": False,
+    }
+
+
+def _highest_severity(
+    findings: tuple[ClaudeInspectionFinding, ...],
+) -> str | None:
+    order = {
+        "info": 0,
+        "low": 1,
+        "medium": 2,
+        "high": 3,
+        "critical": 4,
+    }
+    return (
+        None
+        if not findings
+        else max(findings, key=lambda item: order[item.severity]).severity
+    )
