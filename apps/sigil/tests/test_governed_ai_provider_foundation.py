@@ -76,6 +76,7 @@ def request(
     privacy: PrivacyTier = PrivacyTier.LOCAL_ONLY,
     trust: TrustTier = TrustTier.RESTRICTED,
     fallback: bool = True,
+    allowed_provider_ids: frozenset[str] | None = None,
 ) -> RoutingRequest:
     return RoutingRequest(
         request_id="request-001",
@@ -94,6 +95,7 @@ def request(
         minimum_trust_tier=trust,
         timeout_ms=1_000,
         fallback_allowed=fallback,
+        allowed_provider_ids=allowed_provider_ids,
     )
 
 
@@ -369,3 +371,99 @@ def test_capability_mismatch_is_structured_and_paper_only() -> None:
     assert result.failure.classification == ProviderFailureClass.CAPABILITY_MISMATCH
     assert result.evidence.broker_submission is False
     assert result.evidence.paper_only is True
+
+
+def test_provider_admission_blocks_unlisted_external_fallback() -> None:
+    external = model(
+        "claude-advisory",
+        "hermes-claude",
+        "claude",
+        ExecutionLocation.EXTERNAL,
+        frozenset({Capability.REASONING}),
+        privacy=PrivacyTier.EXTERNAL_APPROVED,
+        trust=TrustTier.RESTRICTED,
+        cost=CostClass.STANDARD,
+    )
+    decision = GovernedModelRouter(registry(external)).route(
+        request(
+            privacy=PrivacyTier.EXTERNAL_APPROVED,
+            allowed_provider_ids=frozenset({"local-runtime"}),
+        ),
+        decision_timestamp="2026-08-01T12:00:00Z",
+    )
+
+    assert decision.failure_class == RoutingFailureClass.NO_SUITABLE_MODEL
+    assert decision.selected_provider_id is None
+    assert decision.selected_model_id is None
+    assert decision.considered_candidates[0].rejection_reasons == (
+        "provider_not_allowed",
+    )
+
+
+def test_explicit_provider_admission_allows_advisory_external_route() -> None:
+    external = model(
+        "claude-advisory",
+        "hermes-claude",
+        "claude",
+        ExecutionLocation.EXTERNAL,
+        frozenset({Capability.REASONING}),
+        privacy=PrivacyTier.EXTERNAL_APPROVED,
+        trust=TrustTier.RESTRICTED,
+        cost=CostClass.STANDARD,
+    )
+    router = GovernedModelRouter(registry(external))
+    route_request = request(
+        privacy=PrivacyTier.EXTERNAL_APPROVED,
+        allowed_provider_ids=frozenset({"hermes-claude"}),
+    )
+
+    first = router.route(
+        route_request,
+        decision_timestamp="2026-08-01T12:00:00Z",
+    )
+    second = router.route(
+        route_request,
+        decision_timestamp="2026-08-01T12:00:00Z",
+    )
+
+    assert first.selected_provider_id == "hermes-claude"
+    assert first.selected_model_id == "claude-advisory"
+    assert first.fallback is True
+    assert first.evidence_identity == second.evidence_identity
+    assert first.considered_candidates == second.considered_candidates
+    assert first.paper_only is True
+    assert first.broker_submission is False
+
+
+def test_provider_admission_does_not_override_prohibited_responsibility() -> None:
+    external = model(
+        "claude-advisory",
+        "hermes-claude",
+        "claude",
+        ExecutionLocation.EXTERNAL,
+        frozenset({Capability.REASONING}),
+        privacy=PrivacyTier.EXTERNAL_APPROVED,
+        trust=TrustTier.RESTRICTED,
+        cost=CostClass.STANDARD,
+    )
+    decision = GovernedModelRouter(registry(external)).route(
+        request(
+            responsibility=Responsibility.SUBMIT_BROKER_ORDER,
+            privacy=PrivacyTier.EXTERNAL_APPROVED,
+            allowed_provider_ids=frozenset({"hermes-claude"}),
+        ),
+        decision_timestamp="2026-08-01T12:00:00Z",
+    )
+
+    assert decision.failure_class == RoutingFailureClass.PROHIBITED_RESPONSIBILITY
+    assert decision.selected_provider_id is None
+    assert decision.selected_model_id is None
+    assert decision.broker_submission is False
+
+
+def test_provider_admission_validation_fails_closed() -> None:
+    with pytest.raises(ValueError, match="cannot be empty"):
+        request(allowed_provider_ids=frozenset())
+
+    with pytest.raises(ValueError, match="stable lowercase"):
+        request(allowed_provider_ids=frozenset({"Invalid Provider"}))

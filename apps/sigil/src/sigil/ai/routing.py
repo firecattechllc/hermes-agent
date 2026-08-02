@@ -42,6 +42,7 @@ class RoutingRequest:
     minimum_trust_tier: TrustTier
     timeout_ms: int
     fallback_allowed: bool
+    allowed_provider_ids: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
         validate_identifier(self.request_id, "request_id")
@@ -49,6 +50,11 @@ class RoutingRequest:
         validate_identifier(self.evidence_correlation_id, "evidence_correlation_id")
         if self.preferred_model_family is not None:
             validate_identifier(self.preferred_model_family, "preferred_model_family")
+        if self.allowed_provider_ids is not None:
+            if not self.allowed_provider_ids:
+                raise ValueError("allowed_provider_ids cannot be empty")
+            for provider_id in sorted(self.allowed_provider_ids):
+                validate_identifier(provider_id, "allowed_provider_ids")
         if not self.required_capabilities:
             raise ValueError("routing requires at least one capability")
         if not self.execution_location_preference:
@@ -166,6 +172,11 @@ class GovernedModelRouter:
 
     def _evaluate(self, model, provider, request: RoutingRequest) -> CandidateEvaluation:
         reasons: list[str] = []
+        if (
+            request.allowed_provider_ids is not None
+            and provider.provider_id not in request.allowed_provider_ids
+        ):
+            reasons.append("provider_not_allowed")
         if not provider.enabled:
             reasons.append("provider_disabled")
         if provider.health != ProviderHealth.HEALTHY:
