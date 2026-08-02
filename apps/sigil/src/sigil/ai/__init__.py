@@ -27,6 +27,12 @@ from .claude import (
     ClaudeHealth,
     HermesClaudeProvider,
 )
+from .hermes_claude_transport import (
+    ClaudeTransportError,
+    ClaudeTransportFailure,
+    ClaudeTransportResult,
+    HermesClaudeTransport,
+)
 from .evidence import InvocationEvidence, build_invocation_evidence
 from .finbert import (
     FINBERT_RESPONSIBILITIES,
@@ -352,6 +358,10 @@ __all__ = [
     "GovernedWorkerRequest",
     "GovernedWorkerResult",
     "HermesClaudeProvider",
+    "ClaudeTransportError",
+    "ClaudeTransportFailure",
+    "ClaudeTransportResult",
+    "HermesClaudeTransport",
     "HorizonMetric",
     "HumanInteractionKind",
     "InputType",

@@ -9,6 +9,9 @@ from sigil.ai import (
     CLAUDE_RESPONSIBILITIES,
     Capability,
     ClaudeConfig,
+    ClaudeTransportError,
+    ClaudeTransportFailure,
+    ClaudeTransportResult,
     ExecutionLocation,
     HermesClaudeProvider,
     PrivacyTier,
@@ -275,3 +278,295 @@ def test_claude_health_metadata_never_contains_credentials() -> None:
     metadata = dict(provider.identity.metadata)
     assert metadata == {"adapter": "hermes-claude-gamma-v1"}
     assert secret not in repr(metadata)
+
+
+class FakeClaudeTransport:
+    def __init__(
+        self,
+        *,
+        result: ClaudeTransportResult | None = None,
+        error: ClaudeTransportError | None = None,
+    ) -> None:
+        self.result = result
+        self.error = error
+        self.calls = []
+
+    def invoke(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        timeout_ms: int,
+        max_output_tokens: int,
+    ) -> ClaudeTransportResult:
+        self.calls.append(
+            {
+                "model": model,
+                "prompt": prompt,
+                "timeout_ms": timeout_ms,
+                "max_output_tokens": max_output_tokens,
+            }
+        )
+        if self.error is not None:
+            raise self.error
+        assert self.result is not None
+        return self.result
+
+
+def runtime_config(**overrides) -> ClaudeConfig:
+    values = {
+        "enabled": True,
+        "runtime_model": "claude-sonnet-4-6",
+        "request_timeout_ms": 30_000,
+        "max_output_tokens": 4_096,
+    }
+    values.update(overrides)
+    return ClaudeConfig(**values)
+
+
+def prompt_invocation(
+    *,
+    prompt: str = "Analyze the governed evidence.",
+    timeout_ms: int = 60_000,
+    model_id: str = CLAUDE_MODEL_ID,
+    capability: Capability = Capability.REASONING,
+) -> ProviderInvocation:
+    original = invocation(model_id=model_id, capability=capability)
+    return ProviderInvocation(
+        request_id=original.request_id,
+        task_correlation_id=original.task_correlation_id,
+        model_id=original.model_id,
+        registry_revision=original.registry_revision,
+        capability=original.capability,
+        input_payload={"prompt": prompt},
+        timeout_ms=timeout_ms,
+        started_at=original.started_at,
+        ended_at=original.ended_at,
+    )
+
+
+def test_governed_claude_transport_success_is_sanitized() -> None:
+    secret_prompt = "private prompt that must not enter evidence"
+    transport = FakeClaudeTransport(
+        result=ClaudeTransportResult(
+            content="Governed analysis complete.",
+            finish_reason="stop",
+            input_tokens=120,
+            output_tokens=30,
+            total_tokens=150,
+        )
+    )
+    provider = HermesClaudeProvider(
+        runtime_config(),
+        credential_resolver=lambda: "not-used-by-fake",
+        transport=transport,
+    )
+
+    result = provider.invoke(prompt_invocation(prompt=secret_prompt))
+
+    assert result.succeeded is True
+    assert result.failure is None
+    assert result.output is not None
+    assert result.output["content"] == "Governed analysis complete."
+    assert result.output["finish_reason"] == "stop"
+    assert result.output["usage"] == {
+        "input_tokens": 120,
+        "output_tokens": 30,
+        "total_tokens": 150,
+    }
+    assert result.output["paper_only"] is True
+    assert result.output["execution_authorized"] is False
+    assert result.output["broker_submission"] is False
+    assert result.output["portfolio_mutation"] is False
+    assert result.output["approval_authority"] is False
+    assert result.output["tool_execution"] is False
+    assert result.broker_submission is False
+    assert result.paper_only is True
+    assert provider.identity.health == ProviderHealth.HEALTHY
+
+    assert transport.calls == [
+        {
+            "model": "claude-sonnet-4-6",
+            "prompt": secret_prompt,
+            "timeout_ms": 30_000,
+            "max_output_tokens": 4_096,
+        }
+    ]
+
+    assert secret_prompt not in repr(result.evidence)
+    assert "Governed analysis complete." not in repr(result.evidence)
+    assert result.evidence.input_digest.startswith("sha256:")
+    assert result.evidence.output_digest is not None
+
+
+def test_claude_provider_requires_runtime_model() -> None:
+    transport = FakeClaudeTransport(
+        result=ClaudeTransportResult(
+            content="unused",
+            finish_reason="stop",
+            input_tokens=0,
+            output_tokens=0,
+            total_tokens=0,
+        )
+    )
+    provider = HermesClaudeProvider(
+        ClaudeConfig(enabled=True),
+        credential_resolver=lambda: "unused",
+        transport=transport,
+    )
+
+    result = provider.invoke(prompt_invocation())
+
+    assert result.output is None
+    assert result.failure is not None
+    assert result.failure.classification == ProviderFailureClass.UNAVAILABLE
+    assert result.failure.retryable is False
+    assert transport.calls == []
+
+
+def test_claude_provider_rejects_empty_prompt_before_transport() -> None:
+    transport = FakeClaudeTransport(
+        result=ClaudeTransportResult(
+            content="unused",
+            finish_reason="stop",
+            input_tokens=0,
+            output_tokens=0,
+            total_tokens=0,
+        )
+    )
+    provider = HermesClaudeProvider(
+        runtime_config(),
+        credential_resolver=lambda: "unused",
+        transport=transport,
+    )
+
+    result = provider.invoke(prompt_invocation(prompt="   "))
+
+    assert result.output is None
+    assert result.failure is not None
+    assert result.failure.classification == ProviderFailureClass.MALFORMED_OUTPUT
+    assert result.failure.retryable is False
+    assert transport.calls == []
+
+
+@pytest.mark.parametrize(
+    ("transport_failure", "provider_failure", "retryable"),
+    [
+        (
+            ClaudeTransportFailure.UNAVAILABLE,
+            ProviderFailureClass.UNAVAILABLE,
+            True,
+        ),
+        (
+            ClaudeTransportFailure.TIMEOUT,
+            ProviderFailureClass.TIMEOUT,
+            True,
+        ),
+        (
+            ClaudeTransportFailure.MALFORMED,
+            ProviderFailureClass.MALFORMED_OUTPUT,
+            False,
+        ),
+    ],
+)
+def test_claude_transport_failures_are_normalized(
+    transport_failure,
+    provider_failure,
+    retryable,
+) -> None:
+    secret = "credential-or-provider-detail-must-not-escape"
+    transport = FakeClaudeTransport(
+        error=ClaudeTransportError(
+            transport_failure,
+            secret,
+        )
+    )
+    provider = HermesClaudeProvider(
+        runtime_config(),
+        credential_resolver=lambda: "unused",
+        transport=transport,
+    )
+
+    result = provider.invoke(prompt_invocation())
+
+    assert result.output is None
+    assert result.failure is not None
+    assert result.failure.classification == provider_failure
+    assert result.failure.retryable is retryable
+    assert result.failure.message == "Governed Claude transport failed safely."
+    assert secret not in repr(result)
+    assert provider.identity.health == ProviderHealth.UNAVAILABLE
+
+
+def test_claude_invocation_rejects_model_identity_mismatch() -> None:
+    transport = FakeClaudeTransport(
+        result=ClaudeTransportResult(
+            content="unused",
+            finish_reason="stop",
+            input_tokens=0,
+            output_tokens=0,
+            total_tokens=0,
+        )
+    )
+    provider = HermesClaudeProvider(
+        runtime_config(),
+        credential_resolver=lambda: "unused",
+        transport=transport,
+    )
+
+    result = provider.invoke(
+        prompt_invocation(model_id="different-registered-model")
+    )
+
+    assert result.failure is not None
+    assert (
+        result.failure.classification
+        == ProviderFailureClass.MODEL_IDENTITY_MISMATCH
+    )
+    assert transport.calls == []
+
+
+def test_claude_invocation_rejects_unsupported_capability() -> None:
+    transport = FakeClaudeTransport(
+        result=ClaudeTransportResult(
+            content="unused",
+            finish_reason="stop",
+            input_tokens=0,
+            output_tokens=0,
+            total_tokens=0,
+        )
+    )
+    provider = HermesClaudeProvider(
+        runtime_config(),
+        credential_resolver=lambda: "unused",
+        transport=transport,
+    )
+
+    result = provider.invoke(
+        prompt_invocation(capability=Capability.EMBEDDINGS)
+    )
+
+    assert result.failure is not None
+    assert result.failure.classification == ProviderFailureClass.CAPABILITY_MISMATCH
+    assert transport.calls == []
+
+
+def test_claude_invocation_uses_stricter_timeout_bound() -> None:
+    transport = FakeClaudeTransport(
+        result=ClaudeTransportResult(
+            content="bounded",
+            finish_reason="stop",
+            input_tokens=1,
+            output_tokens=1,
+            total_tokens=2,
+        )
+    )
+    provider = HermesClaudeProvider(
+        runtime_config(request_timeout_ms=45_000),
+        credential_resolver=lambda: "unused",
+        transport=transport,
+    )
+
+    provider.invoke(prompt_invocation(timeout_ms=5_000))
+
+    assert transport.calls[0]["timeout_ms"] == 5_000

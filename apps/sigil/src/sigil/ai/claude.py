@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from typing import Callable, Mapping
 
 from .evidence import build_invocation_evidence
+from .hermes_claude_transport import (
+    ClaudeTransportError,
+    ClaudeTransportFailure,
+    HermesClaudeTransport,
+)
 from .models import (
     Capability,
     CostClass,
@@ -121,16 +126,22 @@ class ClaudeConfig:
 
     enabled: bool = False
     model_id: str = CLAUDE_MODEL_ID
+    runtime_model: str | None = None
     context_limit: int = 200_000
     request_timeout_ms: int = 60_000
+    max_output_tokens: int = 8_192
 
     def __post_init__(self) -> None:
         if not self.model_id.strip():
             raise ValueError("Claude model_id must not be empty")
+        if self.runtime_model is not None and not self.runtime_model.strip():
+            raise ValueError("Claude runtime_model must not be empty")
         if self.context_limit < 1:
             raise ValueError("Claude context_limit must be positive")
         if self.request_timeout_ms < 1:
             raise ValueError("Claude request_timeout_ms must be positive")
+        if self.max_output_tokens < 1:
+            raise ValueError("Claude max_output_tokens must be positive")
 
     @classmethod
     def from_environment(
@@ -149,6 +160,11 @@ class ClaudeConfig:
                 "SIGIL_AI_CLAUDE_MODEL_ID",
                 CLAUDE_MODEL_ID,
             ).strip(),
+            runtime_model=(
+                source["SIGIL_AI_CLAUDE_RUNTIME_MODEL"].strip()
+                if "SIGIL_AI_CLAUDE_RUNTIME_MODEL" in source
+                else None
+            ),
             context_limit=_environment_positive_int(
                 source,
                 "SIGIL_AI_CLAUDE_CONTEXT_LIMIT",
@@ -158,6 +174,11 @@ class ClaudeConfig:
                 source,
                 "SIGIL_AI_CLAUDE_REQUEST_TIMEOUT_MS",
                 60_000,
+            ),
+            max_output_tokens=_environment_positive_int(
+                source,
+                "SIGIL_AI_CLAUDE_MAX_OUTPUT_TOKENS",
+                8_192,
             ),
         )
 
@@ -175,10 +196,14 @@ class HermesClaudeProvider:
         config: ClaudeConfig | None = None,
         *,
         credential_resolver: Callable[[], str | None] | None = None,
+        transport: HermesClaudeTransport | None = None,
     ) -> None:
         self.config = config or ClaudeConfig()
         self.credential_resolver = (
             credential_resolver or _resolve_hermes_anthropic_credential
+        )
+        self.transport = transport or HermesClaudeTransport(
+            credential_resolver=self.credential_resolver,
         )
         self.model_id = self.config.model_id
         self.model_version = CLAUDE_MODEL_VERSION
@@ -269,11 +294,98 @@ class HermesClaudeProvider:
         )
 
     def invoke(self, invocation: ProviderInvocation) -> ProviderResult:
-        failure = ProviderFailure(
-            classification=ProviderFailureClass.UNAVAILABLE,
-            message="Governed Hermes Claude execution is not connected.",
-            retryable=False,
-        )
+        failure: ProviderFailure | None = None
+        output: dict[str, object] | None = None
+
+        if not self.config.enabled:
+            failure = ProviderFailure(
+                ProviderFailureClass.UNAVAILABLE,
+                "Governed Claude provider is disabled.",
+                False,
+            )
+        elif invocation.model_id != self.model_id:
+            failure = ProviderFailure(
+                ProviderFailureClass.MODEL_IDENTITY_MISMATCH,
+                "Invocation model does not match governed Claude registration.",
+                False,
+            )
+        elif invocation.capability not in self.capabilities:
+            failure = ProviderFailure(
+                ProviderFailureClass.CAPABILITY_MISMATCH,
+                "Claude does not declare the requested capability.",
+                False,
+            )
+        elif invocation.timeout_ms < 1:
+            failure = ProviderFailure(
+                ProviderFailureClass.TIMEOUT,
+                "Claude invocation timeout must be positive.",
+                True,
+            )
+        elif self.config.runtime_model is None:
+            failure = ProviderFailure(
+                ProviderFailureClass.UNAVAILABLE,
+                "Claude runtime model is not configured.",
+                False,
+            )
+        else:
+            prompt = invocation.input_payload.get("prompt")
+            if not isinstance(prompt, str) or not prompt.strip():
+                failure = ProviderFailure(
+                    ProviderFailureClass.MALFORMED_OUTPUT,
+                    "Claude invocation requires a non-empty prompt.",
+                    False,
+                )
+            else:
+                try:
+                    result = self.transport.invoke(
+                        model=self.config.runtime_model,
+                        prompt=prompt,
+                        timeout_ms=min(
+                            invocation.timeout_ms,
+                            self.request_timeout_ms,
+                        ),
+                        max_output_tokens=self.config.max_output_tokens,
+                    )
+                    output = {
+                        "schema_version": 1,
+                        "status": "ok",
+                        "request_id": invocation.request_id,
+                        "model_id": self.model_id,
+                        "runtime_model": self.config.runtime_model,
+                        "content": result.content,
+                        "finish_reason": result.finish_reason,
+                        "usage": {
+                            "input_tokens": result.input_tokens,
+                            "output_tokens": result.output_tokens,
+                            "total_tokens": result.total_tokens,
+                        },
+                        "paper_only": True,
+                        "execution_authorized": False,
+                        "broker_submission": False,
+                        "portfolio_mutation": False,
+                        "approval_authority": False,
+                        "tool_execution": False,
+                    }
+                    self._set_health(ProviderHealth.HEALTHY)
+                except ClaudeTransportError as error:
+                    self._set_health(ProviderHealth.UNAVAILABLE)
+                    failure = ProviderFailure(
+                        _provider_failure_class(error.classification),
+                        "Governed Claude transport failed safely.",
+                        error.classification
+                        in {
+                            ClaudeTransportFailure.TIMEOUT,
+                            ClaudeTransportFailure.UNAVAILABLE,
+                        },
+                    )
+
+        evidence_output = None
+        if output is not None:
+            evidence_output = {
+                key: value
+                for key, value in output.items()
+                if key != "content"
+            }
 
         evidence = build_invocation_evidence(
             request_id=invocation.request_id,
@@ -285,17 +397,36 @@ class HermesClaudeProvider:
             execution_location=self.identity.execution_location,
             started_at=invocation.started_at,
             ended_at=invocation.ended_at,
-            succeeded=False,
-            failure_classification=failure.classification.value,
-            input_payload=dict(invocation.input_payload),
-            output_payload=None,
-            provider_metadata=(("adapter", "hermes-claude-gamma-v1"),),
+            succeeded=failure is None,
+            failure_classification=(
+                None if failure is None else failure.classification.value
+            ),
+            input_payload={
+                key: value
+                for key, value in invocation.input_payload.items()
+                if key != "prompt"
+            },
+            output_payload=evidence_output,
+            provider_metadata=(
+                ("adapter", "hermes-claude-gamma-v1"),
+                ("transport", "hermes-anthropic-v1"),
+            ),
         )
 
         return ProviderResult(
-            output=None,
+            output=output,
             failure=failure,
             evidence=evidence,
             broker_submission=False,
             paper_only=True,
         )
+
+
+def _provider_failure_class(
+    classification: ClaudeTransportFailure,
+) -> ProviderFailureClass:
+    if classification == ClaudeTransportFailure.TIMEOUT:
+        return ProviderFailureClass.TIMEOUT
+    if classification == ClaudeTransportFailure.MALFORMED:
+        return ProviderFailureClass.MALFORMED_OUTPUT
+    return ProviderFailureClass.UNAVAILABLE
