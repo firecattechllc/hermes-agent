@@ -33,6 +33,16 @@ from .hermes_claude_transport import (
     ClaudeTransportResult,
     HermesClaudeTransport,
 )
+from .claude_inspection import (
+    INSPECTION_CONTRACT_VERSION,
+    ClaudeInspectionFailure,
+    ClaudeInspectionFinding,
+    ClaudeInspectionReport,
+    ClaudeInspectionRequest,
+    ClaudeInspectionValidationError,
+    GovernedClaudeInspectionService,
+)
+
 from .evidence import InvocationEvidence, build_invocation_evidence
 from .finbert import (
     FINBERT_RESPONSIBILITIES,
@@ -275,6 +285,11 @@ __all__ = [
     "Capability",
     "ClaudeConfig",
     "ClaudeHealth",
+    "ClaudeInspectionFailure",
+    "ClaudeInspectionFinding",
+    "ClaudeInspectionReport",
+    "ClaudeInspectionRequest",
+    "ClaudeInspectionValidationError",
     "CostClass",
     "DeterministicProvider",
     "DeterministicProviderMode",
@@ -316,6 +331,7 @@ __all__ = [
     "GovernedAnalysisRequest",
     "GovernedAnalysisResponse",
     "GovernedAnalysisService",
+    "GovernedClaudeInspectionService",
     "GovernedAnalysisStatus",
     "GovernedAtlasProjection",
     "GovernedBuzzGateway",
@@ -364,6 +380,7 @@ __all__ = [
     "HermesClaudeTransport",
     "HorizonMetric",
     "HumanInteractionKind",
+    "INSPECTION_CONTRACT_VERSION",
     "InputType",
     "InvocationEvidence",
     "KronosConfig",
