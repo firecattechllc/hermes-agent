@@ -206,8 +206,8 @@ Golden Master readiness requires:
 - Stage 12A: certified
 - Stage 12B: certified
 - Stage 12C: certified
-- Stage 12D: not certified
-- Golden Master readiness: not established
+- Stage 12D: certified
+- Golden Master readiness: READY for explicit operator promotion
 
 Stage 12A is not full ecosystem certification.
 
@@ -383,3 +383,112 @@ The canonical Stage 12C certification identity is:
 
 Stage 12C certifies replay and recovery behavior. It does not issue the final
 Golden Master readiness decision.
+
+## Stage 12D Golden Master readiness
+
+Stage 12D aggregates the immutable Stage 12A, Stage 12B, and Stage 12C
+certification identities with the repository's actual backend, desktop,
+packaging, release-verification, safety-boundary, and working-tree validation
+results.
+
+The authoritative implementation is:
+
+`apps/sigil/src/sigil/ecosystem_golden_master.py`
+
+The focused certification tests are:
+
+`apps/sigil/tests/test_ecosystem_golden_master.py`
+
+The final machine-readable readiness evidence is:
+
+`docs/sigil/evidence/ECOSYSTEM_STAGE12D_GOLDEN_MASTER_READINESS.json`
+
+### Readiness scope
+
+This Golden Master recommendation covers:
+
+- the governed Sigil Beta source baseline
+- the local paper-only runtime
+- the desktop application and Python bridge
+- deterministic Stage 12 certification artifacts
+- packaged backend correctness
+- production renderer and Electron bundle generation
+- unsigned-test package verification
+- release artifact presence and classification
+
+It does not automatically:
+
+- create a Git tag
+- merge or promote a branch
+- publish a GitHub release
+- sign the macOS application
+- notarize the macOS application
+- staple notarization tickets
+- publish an App Store or public distribution build
+- enable broker submission
+- enable live execution
+
+Signing, notarization, stapling, tagging, merging, and publication remain
+separate explicit operator actions.
+
+### Validation results
+
+The Stage 12D readiness assessment records:
+
+- 73 Stage 12 focused tests passed
+- 1,850 Sigil backend tests passed
+- Python critical Ruff validation passed
+- Python source compilation passed
+- Sigil import and paper-runtime boundary validation passed
+- desktop TypeScript validation passed
+- 88 desktop tests passed across 17 files
+- desktop ESLint validation passed
+- packaged backend certification passed
+- production desktop build passed
+- Release Guardian passed under its intended Vitest runner
+- unsigned-test release verification completed successfully
+- paper-only source scan passed
+- broker-submission enablement was not found
+- git diff validation passed
+- only expected Stage 12D files were present in the working tree
+
+The production build emitted non-blocking optimization warnings concerning a
+large JavaScript chunk, a large icon barrel module, and generated CSS parsing.
+The build completed successfully. These warnings do not alter runtime
+authority, paper-only behavior, broker restrictions, or certification
+correctness and are not Golden Master blockers.
+
+### Golden Master decision
+
+The Stage 12D decision is `READY` for promotion of the certified governed Beta
+source and unsigned-test package baseline to a Golden Master candidate.
+
+Golden Master promotion is not performed automatically.
+
+A signed and notarized public macOS distribution remains a later operator
+release action requiring the appropriate Apple signing identity and
+notarization credentials.
+
+### Promotion checklist
+
+Before promoting the certified baseline, the operator must:
+
+- review the Stage 12A through Stage 12D evidence artifacts
+- confirm the branch and intended commit
+- confirm the working tree is clean after the Stage 12D commit
+- preserve paper-only and broker-disabled configuration
+- create any Golden Master tag only through an explicit operator command
+- avoid enabling live execution during promotion
+- retain the immutable evidence artifact digests
+
+### Rollback checklist
+
+If a defect is discovered after promotion:
+
+- stop promotion or distribution immediately
+- preserve the failing artifact and validation evidence
+- return to the last certified commit
+- keep broker submission and live execution disabled
+- quarantine corrupt or contradictory state
+- rerun Stage 12A through Stage 12D certification
+- issue a new readiness identity rather than modifying prior evidence
