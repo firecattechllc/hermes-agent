@@ -1,0 +1,191 @@
+{
+  "authority_escalation": false,
+  "broker_submission": false,
+  "certification_identity": "sha256:35226b8b2f0641ebf989aee8f6bf116a29365cb45c530ccd87fd859d632513f9",
+  "certification_stage": "12C",
+  "certification_status": "certified",
+  "feature_expansion_prohibited": true,
+  "paper_only": true,
+  "proofs": [
+    {
+      "authority_non_escalation_proven": true,
+      "broker_submission_disabled_proven": true,
+      "category": "atomic_persistence",
+      "corruption_fails_closed_proven": true,
+      "deterministic_replay_proven": true,
+      "duplicate_prevention_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/autonomous_paper/store.py"
+      ],
+      "paper_only_proven": true,
+      "proof_id": "atomic-paper-store-persistence",
+      "proof_summary": "Paper execution state uses canonical checksums, atomic replacement, file locking, and fail-closed integrity checks.",
+      "recovery_proven": true,
+      "side_effect_free_replay_proven": true,
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_autonomous_alpaca_paper_execution.py"
+      ]
+    },
+    {
+      "authority_non_escalation_proven": true,
+      "broker_submission_disabled_proven": true,
+      "category": "interruption_recovery",
+      "corruption_fails_closed_proven": true,
+      "deterministic_replay_proven": true,
+      "duplicate_prevention_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/desktop_bridge/runtime.py"
+      ],
+      "paper_only_proven": true,
+      "proof_id": "interrupted-cycle-recovery",
+      "proof_summary": "Stale cycle claims recover to paused safety state without broker submission, automatic resume, or authority escalation.",
+      "recovery_proven": true,
+      "side_effect_free_replay_proven": true,
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_paper_single_flight_execution.py"
+      ]
+    },
+    {
+      "authority_non_escalation_proven": true,
+      "broker_submission_disabled_proven": true,
+      "category": "financial_state_recovery",
+      "corruption_fails_closed_proven": true,
+      "deterministic_replay_proven": true,
+      "duplicate_prevention_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/desktop_bridge/runtime.py",
+        "apps/sigil/src/sigil/desktop_bridge/paper_execution.py"
+      ],
+      "paper_only_proven": true,
+      "proof_id": "paper-order-restart-recovery",
+      "proof_summary": "Orders, fills, balances, reserved cash, positions, and audit state survive restart deterministically in the local simulator.",
+      "recovery_proven": true,
+      "side_effect_free_replay_proven": true,
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_governed_paper_runtime_execution.py"
+      ]
+    },
+    {
+      "authority_non_escalation_proven": true,
+      "broker_submission_disabled_proven": true,
+      "category": "quarantine",
+      "corruption_fails_closed_proven": true,
+      "deterministic_replay_proven": true,
+      "duplicate_prevention_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/desktop_bridge/runtime.py"
+      ],
+      "paper_only_proven": true,
+      "proof_id": "paper-runtime-corruption-quarantine",
+      "proof_summary": "Malformed or checksum-invalid runtime state is quarantined and replaced by a safe paper-only state.",
+      "recovery_proven": true,
+      "side_effect_free_replay_proven": true,
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_paper_runtime_state_recovery.py"
+      ]
+    },
+    {
+      "authority_non_escalation_proven": true,
+      "broker_submission_disabled_proven": true,
+      "category": "restart_recovery",
+      "corruption_fails_closed_proven": true,
+      "deterministic_replay_proven": true,
+      "duplicate_prevention_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/desktop_bridge/runtime.py"
+      ],
+      "paper_only_proven": true,
+      "proof_id": "paper-runtime-state-recovery",
+      "proof_summary": "Persisted paper runtime state restores deterministically without enabling broker submission.",
+      "recovery_proven": true,
+      "side_effect_free_replay_proven": true,
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_paper_runtime_state_recovery.py",
+        "apps/sigil/tests/test_governed_paper_runtime_execution.py"
+      ]
+    },
+    {
+      "authority_non_escalation_proven": true,
+      "broker_submission_disabled_proven": true,
+      "category": "idempotency",
+      "corruption_fails_closed_proven": true,
+      "deterministic_replay_proven": true,
+      "duplicate_prevention_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/desktop_bridge/runtime.py"
+      ],
+      "paper_only_proven": true,
+      "proof_id": "single-flight-duplicate-prevention",
+      "proof_summary": "Repeated starts, active persisted claims, and duplicate proposals cannot create duplicate execution.",
+      "recovery_proven": true,
+      "side_effect_free_replay_proven": true,
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_paper_single_flight_execution.py"
+      ]
+    },
+    {
+      "authority_non_escalation_proven": true,
+      "broker_submission_disabled_proven": true,
+      "category": "corruption_detection",
+      "corruption_fails_closed_proven": true,
+      "deterministic_replay_proven": true,
+      "duplicate_prevention_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/worker_contract.py"
+      ],
+      "paper_only_proven": true,
+      "proof_id": "worker-corruption-detection",
+      "proof_summary": "Malformed, reordered, truncated, or hash-mismatched worker evidence fails closed.",
+      "recovery_proven": true,
+      "side_effect_free_replay_proven": true,
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_governed_worker_contract.py"
+      ]
+    },
+    {
+      "authority_non_escalation_proven": true,
+      "broker_submission_disabled_proven": true,
+      "category": "evidence_chain",
+      "corruption_fails_closed_proven": true,
+      "deterministic_replay_proven": true,
+      "duplicate_prevention_proven": true,
+      "implementation_references": [
+        "apps/sigil/src/sigil/worker_contract.py"
+      ],
+      "paper_only_proven": true,
+      "proof_id": "worker-evidence-chain",
+      "proof_summary": "Worker transition evidence is chained through canonical previous-record and entry hashes.",
+      "recovery_proven": true,
+      "side_effect_free_replay_proven": true,
+      "status": "certified",
+      "test_references": [
+        "apps/sigil/tests/test_governed_worker_contract.py"
+      ]
+    }
+  ],
+  "replay_external_side_effects": false,
+  "schema_version": 1,
+  "source_boundary_matrix_identity": "sha256:582cd06b082c4f634bdd0845ffc5bf0d193bf272d97c19c7599421f0755104a3",
+  "validation": {
+    "authority_escalation_confirmed_absent": true,
+    "broker_submission_disabled_confirmed": true,
+    "certified": true,
+    "external_replay_side_effects_confirmed_absent": true,
+    "feature_expansion_prohibited_confirmed": true,
+    "focused_tests": {
+      "command": "PYTHONPATH=apps/sigil/src python -m pytest apps/sigil/tests/test_ecosystem_certification_manifest.py apps/sigil/tests/test_ecosystem_boundary_certification.py apps/sigil/tests/test_ecosystem_replay_certification.py -q",
+      "failed": 0,
+      "passed": 54
+    },
+    "paper_only_confirmed": true,
+    "proof_count": 8,
+    "repository_reference_errors": []
+  }
+}

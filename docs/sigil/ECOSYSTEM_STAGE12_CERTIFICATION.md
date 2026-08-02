@@ -205,7 +205,7 @@ Golden Master readiness requires:
 
 - Stage 12A: certified
 - Stage 12B: certified
-- Stage 12C: not certified
+- Stage 12C: certified
 - Stage 12D: not certified
 - Golden Master readiness: not established
 
@@ -291,3 +291,95 @@ The canonical Stage 12B matrix identity is:
 
 Stage 12B certifies the declared authority boundaries. It does not yet certify
 deterministic replay, interruption recovery, or Golden Master readiness.
+
+## Stage 12C deterministic replay and recovery certification
+
+Stage 12C certifies the existing replay, persistence, restart recovery,
+corruption detection, quarantine, idempotency, and duplicate-prevention
+behavior.
+
+The authoritative implementation is:
+
+`apps/sigil/src/sigil/ecosystem_replay_certification.py`
+
+The focused certification tests are:
+
+`apps/sigil/tests/test_ecosystem_replay_certification.py`
+
+The machine-readable evidence artifact is:
+
+`docs/sigil/evidence/ECOSYSTEM_STAGE12C_REPLAY_CERTIFICATION.json`
+
+### Certified replay and recovery proofs
+
+Stage 12C certifies:
+
+1. Worker transition evidence hash chaining
+2. Worker evidence corruption detection
+3. Paper runtime restart recovery
+4. Paper runtime corruption quarantine
+5. Single-flight duplicate prevention
+6. Interrupted-cycle fail-closed recovery
+7. Atomic checksummed paper-store persistence
+8. Paper order and portfolio state restart recovery
+
+### Stage 12C invariants
+
+The replay and recovery certification requires:
+
+- identical certification inputs produce identical canonical output
+- replay and certification construction perform no network access
+- replay and certification construction perform no subprocess execution
+- persisted evidence chains validate previous-record and entry hashes
+- malformed, truncated, corrupt, reordered, or hash-mismatched evidence fails
+  closed
+- invalid runtime state is quarantined
+- safe paper-only state is restored after invalid persisted runtime state
+- restart recovery cannot enable broker submission
+- restart recovery cannot escalate approval, execution, credential, capital,
+  portfolio, policy, installation, activation, filesystem, or shell authority
+- repeated starts and active cycle claims cannot create duplicate execution
+- stale cycle claims recover to a paused safety state
+- handled failures remain failed and do not become false interrupted-recovery
+  events after restart
+- recovery never invents approvals, fills, balances, positions, evidence, or
+  successful execution
+- Stage 12 remains certification-only
+
+The certification rejects:
+
+- duplicate replay proof identifiers
+- missing or unexpected proofs
+- unsupported schema versions
+- contradictory proof status
+- uncertified replay proofs
+- Stage 12B identity mismatch
+- Stage 12C identity mismatch
+- non-paper state
+- broker submission enablement
+- external replay side effects
+- authority escalation
+- feature expansion
+- missing implementation or test references
+
+### Stage 12C validation result
+
+The focused Stage 12A, Stage 12B, and Stage 12C certification suite completed
+with:
+
+- 54 tests passed
+- 0 tests failed
+- 8 replay and recovery proofs certified
+- repository reference errors: none
+- paper-only confirmed
+- broker submission disabled confirmed
+- external replay side effects absent
+- authority escalation absent
+- feature expansion prohibited confirmed
+
+The canonical Stage 12C certification identity is:
+
+`sha256:35226b8b2f0641ebf989aee8f6bf116a29365cb45c530ccd87fd859d632513f9`
+
+Stage 12C certifies replay and recovery behavior. It does not issue the final
+Golden Master readiness decision.
