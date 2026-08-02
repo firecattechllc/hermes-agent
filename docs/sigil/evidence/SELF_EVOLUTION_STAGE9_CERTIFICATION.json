@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "certification_scope": "post_phase9_stage9_self_evolution_framework",
+  "branch": "beta-post9-09-self-evolution",
+  "base_commit": "30606eb49",
+  "certified_at": "2026-08-02T00:35:00Z",
+  "status": "passed",
+  "implementation": {
+    "framework": "apps/sigil/src/sigil/self_evolution.py",
+    "tests": "apps/sigil/tests/test_self_evolution.py",
+    "architecture_document": "docs/beta/post-phase9/SELF_EVOLUTION_FRAMEWORK.md",
+    "disabled_by_default": true,
+    "source_modification_enabled": false,
+    "experiment_execution_enabled": false,
+    "git_commit_or_push_enabled": false,
+    "pull_request_creation_enabled": false,
+    "dependency_installation_enabled": false,
+    "policy_or_route_mutation_enabled": false,
+    "self_approval_enabled": false,
+    "promotion_enabled": false
+  },
+  "modeled_concepts": [
+    "improvement_opportunity",
+    "evidence_and_provenance",
+    "affected_components_and_integrations",
+    "improvement_proposal",
+    "expected_benefits",
+    "risk_assessment",
+    "blast_radius",
+    "isolated_experiment_plan",
+    "success_and_guardrail_metrics",
+    "required_tests",
+    "certification_requirements",
+    "bounded_runtime_attempt_compute_and_byte_budgets",
+    "exact_decimal_cost_budget",
+    "rollback_plan",
+    "independent_review",
+    "experiment_result",
+    "regression_evidence",
+    "promotion_readiness",
+    "allowlisted_lifecycle_transitions",
+    "append_only_hash_linked_lifecycle_evidence"
+  ],
+  "validation": {
+    "focused_stage9_tests": {
+      "result": "passed",
+      "passed": 30
+    },
+    "cumulative_stage1_through_stage9_tests": {
+      "result": "passed",
+      "passed": 334
+    },
+    "full_sigil_python_tests": {
+      "result": "passed",
+      "passed": 1679,
+      "warnings": 2,
+      "warning_class": "multiprocessing_fork_deprecation"
+    },
+    "ruff": {
+      "result": "passed"
+    },
+    "git_diff_check": {
+      "result": "passed"
+    }
+  },
+  "authority": {
+    "paper_only": true,
+    "broker_submission": false,
+    "execution_authorized": false,
+    "approval_authority": false,
+    "capital_authority": false,
+    "portfolio_mutation": false,
+    "policy_mutation": false,
+    "credential_access": false,
+    "arbitrary_shell": false,
+    "arbitrary_filesystem": false,
+    "governance_bypass": false,
+    "activation_authorized": false,
+    "installation_authorized": false
+  },
+  "deferred": [
+    "automated_source_modification",
+    "automated_experiment_execution",
+    "automated_test_execution",
+    "automated_rollback",
+    "git_commits",
+    "git_pushes",
+    "pull_request_creation",
+    "dependency_installation",
+    "model_replacement",
+    "prompt_mutation",
+    "routing_mutation",
+    "policy_mutation",
+    "deployment",
+    "promotion",
+    "live_integration_activation"
+  ],
+  "stage9_self_evolution_framework_implemented": true,
+  "stage10_routing_and_fleet_convergence_implemented": false
+}
