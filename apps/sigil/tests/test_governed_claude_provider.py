@@ -135,3 +135,55 @@ def test_claude_evidence_digests_input_without_persisting_prompt() -> None:
 def test_invalid_claude_configuration_fails_closed(field, value, message) -> None:
     with pytest.raises(ValueError, match=message):
         ClaudeConfig(**{field: value})
+
+
+def test_claude_configuration_loads_from_environment() -> None:
+    config = ClaudeConfig.from_environment(
+        {
+            "SIGIL_AI_CLAUDE_ENABLED": "true",
+            "SIGIL_AI_CLAUDE_MODEL_ID": "claude-sonnet-governed-test",
+            "SIGIL_AI_CLAUDE_CONTEXT_LIMIT": "100000",
+            "SIGIL_AI_CLAUDE_REQUEST_TIMEOUT_MS": "45000",
+        }
+    )
+
+    assert config.enabled is True
+    assert config.model_id == "claude-sonnet-governed-test"
+    assert config.context_limit == 100_000
+    assert config.request_timeout_ms == 45_000
+
+
+def test_claude_configuration_is_disabled_by_default_from_environment() -> None:
+    config = ClaudeConfig.from_environment({})
+
+    assert config.enabled is False
+    assert config.model_id == CLAUDE_MODEL_ID
+    assert config.context_limit == 200_000
+    assert config.request_timeout_ms == 60_000
+
+
+@pytest.mark.parametrize(
+    ("name", "value", "message"),
+    [
+        ("SIGIL_AI_CLAUDE_ENABLED", "maybe", "boolean"),
+        ("SIGIL_AI_CLAUDE_CONTEXT_LIMIT", "zero", "integer"),
+        ("SIGIL_AI_CLAUDE_CONTEXT_LIMIT", "0", "positive"),
+        ("SIGIL_AI_CLAUDE_REQUEST_TIMEOUT_MS", "-1", "positive"),
+    ],
+)
+def test_invalid_claude_environment_configuration_fails_closed(
+    name,
+    value,
+    message,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        ClaudeConfig.from_environment({name: value})
+
+
+def test_empty_claude_model_id_fails_closed() -> None:
+    with pytest.raises(ValueError, match="model_id"):
+        ClaudeConfig.from_environment(
+            {
+                "SIGIL_AI_CLAUDE_MODEL_ID": "   ",
+            }
+        )

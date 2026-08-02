@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from typing import Mapping
 
 from .evidence import build_invocation_evidence
 from .models import (
@@ -55,6 +57,44 @@ CLAUDE_RESPONSIBILITIES = frozenset(
 )
 
 
+def _environment_bool(
+    environment: Mapping[str, str],
+    name: str,
+    default: bool,
+) -> bool:
+    raw = environment.get(name)
+    if raw is None:
+        return default
+
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+
+    raise ValueError(f"{name} must be a boolean value")
+
+
+def _environment_positive_int(
+    environment: Mapping[str, str],
+    name: str,
+    default: int,
+) -> int:
+    raw = environment.get(name)
+    if raw is None:
+        return default
+
+    try:
+        value = int(raw.strip())
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+
+    if value < 1:
+        raise ValueError(f"{name} must be positive")
+
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class ClaudeConfig:
     """Credential-free governed configuration for Claude registration."""
@@ -65,10 +105,41 @@ class ClaudeConfig:
     request_timeout_ms: int = 60_000
 
     def __post_init__(self) -> None:
+        if not self.model_id.strip():
+            raise ValueError("Claude model_id must not be empty")
         if self.context_limit < 1:
             raise ValueError("Claude context_limit must be positive")
         if self.request_timeout_ms < 1:
             raise ValueError("Claude request_timeout_ms must be positive")
+
+    @classmethod
+    def from_environment(
+        cls,
+        environment: Mapping[str, str] | None = None,
+    ) -> "ClaudeConfig":
+        source = os.environ if environment is None else environment
+
+        return cls(
+            enabled=_environment_bool(
+                source,
+                "SIGIL_AI_CLAUDE_ENABLED",
+                False,
+            ),
+            model_id=source.get(
+                "SIGIL_AI_CLAUDE_MODEL_ID",
+                CLAUDE_MODEL_ID,
+            ).strip(),
+            context_limit=_environment_positive_int(
+                source,
+                "SIGIL_AI_CLAUDE_CONTEXT_LIMIT",
+                200_000,
+            ),
+            request_timeout_ms=_environment_positive_int(
+                source,
+                "SIGIL_AI_CLAUDE_REQUEST_TIMEOUT_MS",
+                60_000,
+            ),
+        )
 
 
 class HermesClaudeProvider:
