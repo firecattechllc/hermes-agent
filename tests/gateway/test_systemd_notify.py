@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import socket
+import sys
 
 import pytest
 
@@ -17,7 +19,10 @@ def test_notify_without_notify_socket_is_a_noop(monkeypatch):
 
 
 def test_notify_sends_real_unix_datagram(tmp_path, monkeypatch):
-    address = str(tmp_path / "notify.sock")
+    import tempfile
+
+    short_dir = tempfile.mkdtemp(prefix="sdn_", dir="/tmp")
+    address = os.path.join(short_dir, "n.sock")
     receiver = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
     receiver.bind(address)
     receiver.settimeout(1.0)
@@ -31,7 +36,8 @@ def test_notify_sends_real_unix_datagram(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(
-    not hasattr(socket, "AF_UNIX"), reason="Unix datagram sockets are unavailable"
+    sys.platform != "linux" or not hasattr(socket, "AF_UNIX"),
+    reason="Abstract Unix sockets are Linux-only",
 )
 def test_notify_supports_systemd_abstract_socket(monkeypatch):
     name = "\0hermes-test-notify"

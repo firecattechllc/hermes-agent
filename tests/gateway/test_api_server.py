@@ -823,13 +823,47 @@ class TestHealthDetailedEndpoint:
     async def test_health_detailed_returns_ok(self, adapter):
         """GET /health/detailed returns status, platform, and runtime fields."""
         app = _create_app(adapter)
-        with patch("gateway.status.read_runtime_status", return_value={
-            "gateway_state": "running",
-            "platforms": {"telegram": {"state": "connected"}},
-            "active_agents": 2,
-            "exit_reason": None,
-            "updated_at": "2026-04-14T00:00:00Z",
-        }), patch("gateway.run._resolve_gateway_model", return_value="test/model"):
+        with (
+            patch(
+                "gateway.status.read_runtime_status",
+                return_value={
+                    "gateway_state": "running",
+                    "platforms": {"telegram": {"state": "connected"}},
+                    "active_agents": 2,
+                    "exit_reason": None,
+                    "updated_at": "2026-04-14T00:00:00Z",
+                },
+            ),
+            patch("gateway.run._resolve_gateway_model", return_value="test/model"),
+            patch(
+                "gateway.platforms.api_server.collect_runtime_readiness",
+                return_value={
+                    "status": "ok",
+                    "checks": {
+                        "state_db": {"status": "ok"},
+                        "config": {"status": "ok"},
+                        "model": {"status": "ok"},
+                        "disk": {
+                            "status": "ok",
+                            "used_percent": 10.0,
+                            "free_bytes": 1_000_000_000,
+                        },
+                        "gateway": {
+                            "status": "ok",
+                            "state": "running",
+                            "connected_platforms": 1,
+                            "platforms": 1,
+                        },
+                        "background_queues": {
+                            "status": "ok",
+                            "active_api_runs": 0,
+                            "process_completions": 0,
+                            "active_delegations": 0,
+                        },
+                    },
+                },
+            ),
+        ):
             async with TestClient(TestServer(app)) as cli:
                 resp = await cli.get("/health/detailed")
                 assert resp.status == 200

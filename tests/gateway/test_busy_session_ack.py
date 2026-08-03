@@ -607,8 +607,15 @@ class TestBusySessionAck:
         assert "10 min" in content  # elapsed
 
     @pytest.mark.asyncio
-    async def test_telegram_omits_status_detail_by_default(self):
+    async def test_telegram_omits_status_detail_by_default(self, monkeypatch):
         """Telegram busy acks stay concise unless busy_ack_detail is enabled."""
+        from gateway import run as gateway_run
+
+        # This test verifies the built-in Telegram platform default. Keep it
+        # isolated from the operator's config and configuration mutated by
+        # earlier tests in the same process.
+        monkeypatch.setattr(gateway_run, "_load_gateway_config", lambda: {})
+
         runner, sentinel = _make_runner()
         runner._busy_input_mode = "interrupt"
         adapter = _make_adapter()
