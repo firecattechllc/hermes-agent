@@ -34,8 +34,8 @@ uv run pytest \
 - Failed: 0
 - Skipped: 15
 - Deselected: 14
-- Warnings: 287
-- Duration: 424.75 seconds
+- Warnings: 285
+- Duration: 391.86 seconds
 - Python: 3.13.14
 - pytest: 9.0.2
 - Platform: macOS Darwin
