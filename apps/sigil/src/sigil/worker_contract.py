@@ -7,11 +7,15 @@ policy, or grant financial/execution authority.
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 import re
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation
 from enum import Enum
+from pathlib import Path
 from typing import Mapping
 
 from sigil.ai.registry import canonical_digest
@@ -506,10 +510,6 @@ def evaluate_job_admission(
     decision.validate_for(job)
     return decision
 
-from contextlib import contextmanager
-from pathlib import Path
-import fcntl
-import os
 
 
 @dataclass(frozen=True, slots=True)

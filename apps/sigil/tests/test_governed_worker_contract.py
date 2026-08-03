@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -15,12 +15,15 @@ from sigil.integration_registry import (
 )
 from sigil.worker_contract import (
     ApprovalRequirements,
+    DurableWorkerContractStore,
     EvidenceRequirements,
     GovernedWorkerJob,
     GovernedWorkerResult,
     JobBudget,
     JobState,
+    JobStateTransition,
     ResultState,
+    WorkerContractStorageError,
     WorkerContractValidationError,
     WorkerUsage,
     evaluate_job_admission,
@@ -272,13 +275,6 @@ def test_failed_result_requires_normalized_error_and_rejects_secrets() -> None:
             error_message="api_key=sk-secretvalue",
         )
 
-from pathlib import Path
-
-from sigil.worker_contract import (
-    DurableWorkerContractStore,
-    JobStateTransition,
-    WorkerContractStorageError,
-)
 
 
 def transition(**changes: object) -> JobStateTransition:
