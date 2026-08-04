@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from enum import Enum
 
+from .gamma_claude_production_status import GammaClaudeProductionStatus
 from .gamma_release_readiness import GammaReleaseReadinessManifest
 from .registry import canonical_digest
 
-GAMMA_RELEASE_REVIEW_VERSION = 1
+GAMMA_RELEASE_REVIEW_VERSION = 2
 
 
 class GammaReleaseReviewState(str, Enum):
@@ -21,6 +22,12 @@ class GammaReleaseReview:
     manifest_digest: str
     golden_master_revision: str
     gamma_revision: str
+    reliability_certification_digest: str
+    governance_evidence_id: str
+    governance_evidence_digest: str
+    claude_subsystem_status: GammaClaudeProductionStatus
+    claude_production_integrated: bool
+    claude_production_enabled: bool
     state: GammaReleaseReviewState
     blockers: tuple[str, ...]
     reviewed_guarantees: tuple[str, ...]
@@ -43,6 +50,23 @@ class GammaReleaseReview:
             raise ValueError("release review manifest digest must be SHA-256")
         if not self.review_digest.startswith("sha256:"):
             raise ValueError("release review digest must be SHA-256")
+        if not self.reliability_certification_digest.startswith("sha256:"):
+            raise ValueError(
+                "release review reliability certification digest must be SHA-256"
+            )
+        if not self.governance_evidence_digest.startswith("sha256:"):
+            raise ValueError(
+                "release review governance evidence digest must be SHA-256"
+            )
+        if not self.governance_evidence_id:
+            raise ValueError("release review governance evidence id cannot be blank")
+        if self.claude_subsystem_status not in set(GammaClaudeProductionStatus):
+            raise ValueError("release review Claude subsystem status is malformed")
+        if self.claude_production_enabled and not self.claude_production_integrated:
+            raise ValueError(
+                "release review cannot claim Claude is production-enabled "
+                "without also being production-integrated"
+            )
         if not self.reviewed_guarantees:
             raise ValueError("release review requires evaluated guarantees")
         if tuple(sorted(self.reviewed_guarantees)) != self.reviewed_guarantees:
@@ -125,6 +149,8 @@ def review_gamma_release_readiness(
                 "manifest_digest": manifest.manifest_digest,
                 "golden_master_revision": manifest.golden_master_revision,
                 "gamma_revision": manifest.gamma_revision,
+                "reliability_certification_digest": manifest.reliability_certification_digest,
+                "governance_evidence_id": manifest.governance_evidence_id,
                 "reviewed_guarantees": guarantees,
                 "blockers": blockers,
             }
@@ -138,6 +164,12 @@ def review_gamma_release_readiness(
         "manifest_digest": manifest.manifest_digest,
         "golden_master_revision": manifest.golden_master_revision,
         "gamma_revision": manifest.gamma_revision,
+        "reliability_certification_digest": manifest.reliability_certification_digest,
+        "governance_evidence_id": manifest.governance_evidence_id,
+        "governance_evidence_digest": manifest.governance_evidence_digest,
+        "claude_subsystem_status": manifest.claude_subsystem_status.value,
+        "claude_production_integrated": manifest.claude_production_integrated,
+        "claude_production_enabled": manifest.claude_production_enabled,
         "state": state.value,
         "blockers": blockers,
         "reviewed_guarantees": guarantees,
@@ -159,6 +191,12 @@ def review_gamma_release_readiness(
         manifest_digest=manifest.manifest_digest,
         golden_master_revision=manifest.golden_master_revision,
         gamma_revision=manifest.gamma_revision,
+        reliability_certification_digest=manifest.reliability_certification_digest,
+        governance_evidence_id=manifest.governance_evidence_id,
+        governance_evidence_digest=manifest.governance_evidence_digest,
+        claude_subsystem_status=manifest.claude_subsystem_status,
+        claude_production_integrated=manifest.claude_production_integrated,
+        claude_production_enabled=manifest.claude_production_enabled,
         state=state,
         blockers=blockers,
         reviewed_guarantees=guarantees,
@@ -173,4 +211,5 @@ def gamma_release_review_projection(
 ) -> dict[str, object]:
     payload = asdict(review)
     payload["state"] = review.state.value
+    payload["claude_subsystem_status"] = review.claude_subsystem_status.value
     return payload

@@ -1,10 +1,16 @@
 name: Sigil Alpha Certification
 
+# Despite the workflow name (kept stable so branch-protection required-check
+# bindings do not break), this also covers Gamma and Golden Master release
+# branches: the backend job runs the full pytest suite, which includes the
+# Gamma certification regression tests (test_gamma_*.py).
 on:
   workflow_dispatch:
   pull_request:
     branches:
       - sigil-alpha
+      - "sigil-gamma-*"
+      - sigil-golden-master
     paths:
       - "apps/sigil/**"
       - "apps/sigil-desktop/**"
@@ -12,6 +18,8 @@ on:
   push:
     branches:
       - sigil-alpha
+      - "sigil-gamma-*"
+      - sigil-golden-master
     paths:
       - "apps/sigil/**"
       - "apps/sigil-desktop/**"
