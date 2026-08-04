@@ -5,10 +5,13 @@ from dataclasses import replace
 import pytest
 
 from sigil.ai import (
+    GAMMA_RELIABILITY_OUTCOME_FIELDS,
+    GAMMA_RELIABILITY_SUITE_ID,
     GammaEvidenceError,
     GammaEvidenceOutcome,
     GammaEvidenceVerification,
     GammaReliabilityCertification,
+    GammaReliabilityOutcomes,
     build_gamma_test_evidence,
     certify_gamma_reliability,
     gamma_reliability_manifest,
@@ -19,16 +22,23 @@ REVISION = "862b1e611"
 OTHER_REVISION = "26d38ee30"
 
 
+def reliability_outcomes(**overrides) -> GammaReliabilityOutcomes:
+    values = {name: True for name in GAMMA_RELIABILITY_OUTCOME_FIELDS}
+    values.update(overrides)
+    return GammaReliabilityOutcomes(**values)
+
+
 def passing_evidence(**overrides) -> object:
     values = {
         "target_revision": REVISION,
-        "suite_id": "sigil-gamma-reliability-v1",
+        "suite_id": GAMMA_RELIABILITY_SUITE_ID,
         "outcome": GammaEvidenceOutcome.PASSED,
         "passed_count": 42,
         "failed_count": 0,
         "executed_at": NOW,
         "run_id": "local-cert-run-0001",
         "verification_status": GammaEvidenceVerification.VERIFIED,
+        "reliability_outcomes": reliability_outcomes(),
     }
     values.update(overrides)
     return build_gamma_test_evidence(**values)
@@ -255,3 +265,28 @@ def test_certification_fails_closed_on_forged_digest() -> None:
 
     with pytest.raises(GammaEvidenceError, match="does not match recorded evidence"):
         replace(evidence, evidence_digest="sha256:" + "f" * 64)
+
+
+def test_certification_fails_closed_on_unrelated_suite_id() -> None:
+    with pytest.raises(GammaEvidenceError, match="does not match the expected"):
+        certify_gamma_reliability(
+            target_revision=REVISION,
+            certified_at=NOW,
+            evidence=passing_evidence(suite_id="some-other-passing-suite-v1"),
+        )
+
+
+@pytest.mark.parametrize("field", GAMMA_RELIABILITY_OUTCOME_FIELDS)
+def test_certification_fails_closed_on_false_reliability_outcome(field: str) -> None:
+    # Proves the six guarantee fields are read from evidence rather than
+    # assigned as unconditional literals: a single false per-guarantee
+    # outcome in otherwise-clean, expected-suite, verified evidence is
+    # enough to block certification outright.
+    with pytest.raises(GammaEvidenceError, match="not all verified true"):
+        certify_gamma_reliability(
+            target_revision=REVISION,
+            certified_at=NOW,
+            evidence=passing_evidence(
+                reliability_outcomes=reliability_outcomes(**{field: False}),
+            ),
+        )

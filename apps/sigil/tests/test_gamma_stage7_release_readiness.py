@@ -5,10 +5,16 @@ from dataclasses import replace
 import pytest
 
 from sigil.ai import (
+    GAMMA_GOVERNANCE_INVARIANT_FIELDS,
+    GAMMA_RELIABILITY_OUTCOME_FIELDS,
+    GAMMA_RELIABILITY_SUITE_ID,
     GammaClaudeProductionStatus,
     GammaEvidenceOutcome,
     GammaEvidenceVerification,
+    GammaGovernanceEvidenceError,
+    GammaReliabilityOutcomes,
     GammaStageEvidence,
+    build_gamma_governance_evidence,
     build_gamma_release_readiness_manifest,
     build_gamma_test_evidence,
     certify_gamma_reliability,
@@ -17,18 +23,26 @@ from sigil.ai import (
 
 NOW = "2026-08-03T00:00:00Z"
 GAMMA_REVISION = "514d83be5"
+OTHER_REVISION = "26d38ee30"
+
+
+def reliability_outcomes(**overrides) -> GammaReliabilityOutcomes:
+    values = {name: True for name in GAMMA_RELIABILITY_OUTCOME_FIELDS}
+    values.update(overrides)
+    return GammaReliabilityOutcomes(**values)
 
 
 def evidence(target_revision: str = GAMMA_REVISION):
     return build_gamma_test_evidence(
         target_revision=target_revision,
-        suite_id="sigil-gamma-reliability-v1",
+        suite_id=GAMMA_RELIABILITY_SUITE_ID,
         outcome=GammaEvidenceOutcome.PASSED,
         passed_count=42,
         failed_count=0,
         executed_at=NOW,
         run_id="local-cert-run-0001",
         verification_status=GammaEvidenceVerification.VERIFIED,
+        reliability_outcomes=reliability_outcomes(),
     )
 
 
@@ -38,6 +52,21 @@ def reliability_certification(target_revision: str = GAMMA_REVISION):
         certified_at=NOW,
         evidence=evidence(target_revision),
     )
+
+
+def governance_evidence(gamma_revision: str = GAMMA_REVISION, **overrides):
+    values = {
+        "gamma_revision": gamma_revision,
+        "paper_only_preserved": True,
+        "broker_submission_disabled": True,
+        "external_provider_explicit_admission": True,
+        "claude_advisory_only": True,
+        "human_release_review_required": True,
+        "verified_by": "release-engineering",
+        "verified_at": NOW,
+    }
+    values.update(overrides)
+    return build_gamma_governance_evidence(**values)
 
 
 def stage_evidence() -> tuple[GammaStageEvidence, ...]:
@@ -79,6 +108,7 @@ def manifest(
     *,
     gamma_revision: str = GAMMA_REVISION,
     reliability_certification_override=None,
+    governance_evidence_override=None,
     claude_wired_into_production_runtime: bool = False,
     claude_config_enabled: bool = False,
 ):
@@ -91,6 +121,11 @@ def manifest(
             reliability_certification(gamma_revision)
             if reliability_certification_override is None
             else reliability_certification_override
+        ),
+        governance_evidence=(
+            governance_evidence(gamma_revision)
+            if governance_evidence_override is None
+            else governance_evidence_override
         ),
         claude_wired_into_production_runtime=claude_wired_into_production_runtime,
         claude_config_enabled=claude_config_enabled,
@@ -139,6 +174,14 @@ def test_release_readiness_preserves_governance_boundaries() -> None:
     assert result.paper_only is True
 
 
+def test_release_readiness_governance_fields_are_evidence_bound() -> None:
+    evidence_record = governance_evidence()
+    result = manifest(governance_evidence_override=evidence_record)
+
+    assert result.governance_evidence_id == evidence_record.evidence_id
+    assert result.governance_evidence_digest == evidence_record.evidence_digest
+
+
 def test_release_readiness_manifest_is_deterministic() -> None:
     first = manifest()
     second = manifest()
@@ -167,6 +210,7 @@ def test_release_readiness_rejects_missing_or_unordered_stages() -> None:
             gamma_revision=GAMMA_REVISION,
             stage_evidence=stage_evidence()[:-1],
             reliability_certification=reliability_certification(),
+            governance_evidence=governance_evidence(),
             claude_wired_into_production_runtime=False,
             claude_config_enabled=False,
             generated_at=NOW,
@@ -179,6 +223,7 @@ def test_release_readiness_rejects_missing_or_unordered_stages() -> None:
             gamma_revision=GAMMA_REVISION,
             stage_evidence=tuple(reversed(stage_evidence())),
             reliability_certification=reliability_certification(),
+            governance_evidence=governance_evidence(),
             claude_wired_into_production_runtime=False,
             claude_config_enabled=False,
             generated_at=NOW,
@@ -235,6 +280,7 @@ def test_release_readiness_requires_a_verified_reliability_certification() -> No
             gamma_revision=GAMMA_REVISION,
             stage_evidence=stage_evidence(),
             reliability_certification=None,
+            governance_evidence=governance_evidence(),
             claude_wired_into_production_runtime=False,
             claude_config_enabled=False,
             generated_at=NOW,
@@ -246,6 +292,49 @@ def test_release_readiness_fails_closed_on_reliability_revision_mismatch() -> No
 
     with pytest.raises(ValueError, match="does not match the Gamma revision"):
         manifest(reliability_certification_override=mismatched)
+
+
+def test_release_readiness_requires_verified_governance_evidence() -> None:
+    with pytest.raises(
+        GammaGovernanceEvidenceError, match="verified Gamma governance evidence"
+    ):
+        build_gamma_release_readiness_manifest(
+            golden_master_revision="26d38ee30",
+            golden_master_tag="sigil-golden-master-v3.5.0",
+            gamma_revision=GAMMA_REVISION,
+            stage_evidence=stage_evidence(),
+            reliability_certification=reliability_certification(),
+            governance_evidence=None,
+            claude_wired_into_production_runtime=False,
+            claude_config_enabled=False,
+            generated_at=NOW,
+        )
+
+
+def test_release_readiness_fails_closed_on_governance_revision_mismatch() -> None:
+    mismatched = governance_evidence(OTHER_REVISION)
+
+    with pytest.raises(GammaGovernanceEvidenceError, match="does not match"):
+        manifest(governance_evidence_override=mismatched)
+
+
+@pytest.mark.parametrize("field", GAMMA_GOVERNANCE_INVARIANT_FIELDS)
+def test_release_readiness_fails_closed_on_any_false_governance_invariant(
+    field: str,
+) -> None:
+    with pytest.raises(GammaGovernanceEvidenceError, match="not all verified true"):
+        manifest(governance_evidence_override=governance_evidence(**{field: False}))
+
+
+def test_release_readiness_fails_closed_on_tampered_governance_evidence() -> None:
+    valid = governance_evidence()
+    broken = object.__new__(type(valid))
+    for field in valid.__dataclass_fields__:
+        object.__setattr__(broken, field, getattr(valid, field))
+    object.__setattr__(broken, "paper_only_preserved", False)
+
+    with pytest.raises(GammaGovernanceEvidenceError, match="not all verified true"):
+        manifest(governance_evidence_override=broken)
 
 
 def test_release_readiness_reports_truthful_claude_production_status() -> None:

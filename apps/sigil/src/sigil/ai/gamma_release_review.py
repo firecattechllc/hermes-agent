@@ -7,7 +7,7 @@ from .gamma_claude_production_status import GammaClaudeProductionStatus
 from .gamma_release_readiness import GammaReleaseReadinessManifest
 from .registry import canonical_digest
 
-GAMMA_RELEASE_REVIEW_VERSION = 1
+GAMMA_RELEASE_REVIEW_VERSION = 2
 
 
 class GammaReleaseReviewState(str, Enum):
@@ -23,6 +23,8 @@ class GammaReleaseReview:
     golden_master_revision: str
     gamma_revision: str
     reliability_certification_digest: str
+    governance_evidence_id: str
+    governance_evidence_digest: str
     claude_subsystem_status: GammaClaudeProductionStatus
     claude_production_integrated: bool
     claude_production_enabled: bool
@@ -52,6 +54,12 @@ class GammaReleaseReview:
             raise ValueError(
                 "release review reliability certification digest must be SHA-256"
             )
+        if not self.governance_evidence_digest.startswith("sha256:"):
+            raise ValueError(
+                "release review governance evidence digest must be SHA-256"
+            )
+        if not self.governance_evidence_id:
+            raise ValueError("release review governance evidence id cannot be blank")
         if self.claude_subsystem_status not in set(GammaClaudeProductionStatus):
             raise ValueError("release review Claude subsystem status is malformed")
         if self.claude_production_enabled and not self.claude_production_integrated:
@@ -142,6 +150,7 @@ def review_gamma_release_readiness(
                 "golden_master_revision": manifest.golden_master_revision,
                 "gamma_revision": manifest.gamma_revision,
                 "reliability_certification_digest": manifest.reliability_certification_digest,
+                "governance_evidence_id": manifest.governance_evidence_id,
                 "reviewed_guarantees": guarantees,
                 "blockers": blockers,
             }
@@ -156,6 +165,8 @@ def review_gamma_release_readiness(
         "golden_master_revision": manifest.golden_master_revision,
         "gamma_revision": manifest.gamma_revision,
         "reliability_certification_digest": manifest.reliability_certification_digest,
+        "governance_evidence_id": manifest.governance_evidence_id,
+        "governance_evidence_digest": manifest.governance_evidence_digest,
         "claude_subsystem_status": manifest.claude_subsystem_status.value,
         "claude_production_integrated": manifest.claude_production_integrated,
         "claude_production_enabled": manifest.claude_production_enabled,
@@ -181,6 +192,8 @@ def review_gamma_release_readiness(
         golden_master_revision=manifest.golden_master_revision,
         gamma_revision=manifest.gamma_revision,
         reliability_certification_digest=manifest.reliability_certification_digest,
+        governance_evidence_id=manifest.governance_evidence_id,
+        governance_evidence_digest=manifest.governance_evidence_digest,
         claude_subsystem_status=manifest.claude_subsystem_status,
         claude_production_integrated=manifest.claude_production_integrated,
         claude_production_enabled=manifest.claude_production_enabled,

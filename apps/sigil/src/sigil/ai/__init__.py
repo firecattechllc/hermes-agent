@@ -81,13 +81,17 @@ from .cross_provider_validation_certification import (
 )
 
 from .gamma_evidence import (
+    GAMMA_RELIABILITY_OUTCOME_FIELDS,
     GAMMA_TEST_EVIDENCE_VERSION,
     GammaEvidenceError,
     GammaEvidenceOutcome,
     GammaEvidenceVerification,
+    GammaReliabilityOutcomes,
     GammaTestEvidence,
     build_gamma_test_evidence,
+    require_expected_suite,
     require_passing_evidence,
+    require_reliability_outcomes,
 )
 
 from .gamma_claude_production_status import (
@@ -97,8 +101,18 @@ from .gamma_claude_production_status import (
     gamma_claude_production_status,
 )
 
+from .gamma_governance_evidence import (
+    GAMMA_GOVERNANCE_EVIDENCE_VERSION,
+    GAMMA_GOVERNANCE_INVARIANT_FIELDS,
+    GammaGovernanceEvidence,
+    GammaGovernanceEvidenceError,
+    build_gamma_governance_evidence,
+    require_verified_governance_evidence,
+)
+
 from .gamma_reliability_certification import (
     GAMMA_RELIABILITY_CERTIFICATION_VERSION,
+    GAMMA_RELIABILITY_SUITE_ID,
     GammaReliabilityCertification,
     certify_gamma_reliability,
     gamma_reliability_manifest,
@@ -424,6 +438,10 @@ __all__ = [
     "GenericAnalysisPayload",
     "GovernedAIEvidenceRecord",
     "GovernedAnalysisArtifact",
+    "GAMMA_GOVERNANCE_EVIDENCE_VERSION",
+    "GAMMA_GOVERNANCE_INVARIANT_FIELDS",
+    "GAMMA_RELIABILITY_OUTCOME_FIELDS",
+    "GAMMA_RELIABILITY_SUITE_ID",
     "GAMMA_RELEASE_READINESS_VERSION",
     "GAMMA_RELEASE_REVIEW_VERSION",
     "GAMMA_SIGNOFF_VERSION",
@@ -433,6 +451,9 @@ __all__ = [
     "GammaEvidenceError",
     "GammaEvidenceOutcome",
     "GammaEvidenceVerification",
+    "GammaGovernanceEvidence",
+    "GammaGovernanceEvidenceError",
+    "GammaReliabilityOutcomes",
     "GammaTestEvidence",
     "GovernedAnalysisRequest",
     "GovernedAnalysisResponse",
@@ -563,6 +584,7 @@ __all__ = [
     "build_embedding_artifact",
     "build_forecast_artifact",
     "build_invocation_evidence",
+    "build_gamma_governance_evidence",
     "build_gamma_release_readiness_manifest",
     "build_gamma_signoff",
     "build_gamma_test_evidence",
@@ -574,7 +596,10 @@ __all__ = [
     "certify_gamma_reliability",
     "gamma_claude_production_status",
     "gamma_reliability_manifest",
+    "require_expected_suite",
     "require_passing_evidence",
+    "require_reliability_outcomes",
+    "require_verified_governance_evidence",
     "gamma_release_readiness_projection",
     "gamma_release_review_projection",
     "gamma_signoff_projection",

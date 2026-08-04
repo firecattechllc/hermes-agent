@@ -5,11 +5,15 @@ from dataclasses import replace
 import pytest
 
 from sigil.ai import (
+    GAMMA_RELIABILITY_OUTCOME_FIELDS,
+    GAMMA_RELIABILITY_SUITE_ID,
     GammaClaudeProductionStatus,
     GammaEvidenceOutcome,
     GammaEvidenceVerification,
     GammaReleaseReviewState,
+    GammaReliabilityOutcomes,
     GammaStageEvidence,
+    build_gamma_governance_evidence,
     build_gamma_release_readiness_manifest,
     build_gamma_test_evidence,
     certify_gamma_reliability,
@@ -21,16 +25,23 @@ NOW = "2026-08-03T00:30:00Z"
 GAMMA_REVISION = "aaad4a554"
 
 
+def reliability_outcomes(**overrides) -> GammaReliabilityOutcomes:
+    values = {name: True for name in GAMMA_RELIABILITY_OUTCOME_FIELDS}
+    values.update(overrides)
+    return GammaReliabilityOutcomes(**values)
+
+
 def evidence(target_revision: str = GAMMA_REVISION):
     return build_gamma_test_evidence(
         target_revision=target_revision,
-        suite_id="sigil-gamma-reliability-v1",
+        suite_id=GAMMA_RELIABILITY_SUITE_ID,
         outcome=GammaEvidenceOutcome.PASSED,
         passed_count=7,
         failed_count=0,
         executed_at=NOW,
         run_id="local-cert-run-0002",
         verification_status=GammaEvidenceVerification.VERIFIED,
+        reliability_outcomes=reliability_outcomes(),
     )
 
 
@@ -39,6 +50,19 @@ def reliability_certification(target_revision: str = GAMMA_REVISION):
         target_revision=target_revision,
         certified_at=NOW,
         evidence=evidence(target_revision),
+    )
+
+
+def governance_evidence(gamma_revision: str = GAMMA_REVISION):
+    return build_gamma_governance_evidence(
+        gamma_revision=gamma_revision,
+        paper_only_preserved=True,
+        broker_submission_disabled=True,
+        external_provider_explicit_admission=True,
+        claude_advisory_only=True,
+        human_release_review_required=True,
+        verified_by="release-engineering",
+        verified_at=NOW,
     )
 
 
@@ -60,6 +84,7 @@ def readiness(
             GammaStageEvidence(6, "514d83be5", "Reliability certification"),
         ),
         reliability_certification=reliability_certification(),
+        governance_evidence=governance_evidence(),
         claude_wired_into_production_runtime=claude_wired_into_production_runtime,
         claude_config_enabled=claude_config_enabled,
         generated_at=NOW,
@@ -102,6 +127,14 @@ def test_review_carries_truthful_claude_production_status() -> None:
     )
     assert review.claude_production_integrated is False
     assert review.claude_production_enabled is False
+
+
+def test_review_preserves_governance_evidence_identity_and_digest() -> None:
+    manifest = readiness()
+    review = review_gamma_release_readiness(manifest, reviewed_at=NOW)
+
+    assert review.governance_evidence_id == manifest.governance_evidence_id
+    assert review.governance_evidence_digest == manifest.governance_evidence_digest
 
 
 def test_missing_guarantee_blocks_release_review() -> None:

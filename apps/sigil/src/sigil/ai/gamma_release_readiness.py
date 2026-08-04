@@ -9,10 +9,14 @@ from .gamma_claude_production_status import (
     claude_production_integrated,
     gamma_claude_production_status,
 )
+from .gamma_governance_evidence import (
+    GammaGovernanceEvidence,
+    require_verified_governance_evidence,
+)
 from .gamma_reliability_certification import GammaReliabilityCertification
 from .registry import canonical_digest
 
-GAMMA_RELEASE_READINESS_VERSION = 2
+GAMMA_RELEASE_READINESS_VERSION = 3
 _SHA = re.compile(r"^[0-9a-f]{9,40}$")
 _REQUIRED_STAGES = (1, 2, 3, 4, 5, 6)
 
@@ -41,6 +45,8 @@ class GammaReleaseReadinessManifest:
     stage_evidence: tuple[GammaStageEvidence, ...]
     reliability_certification_id: str
     reliability_certification_digest: str
+    governance_evidence_id: str
+    governance_evidence_digest: str
     claude_subsystem_status: GammaClaudeProductionStatus
     claude_production_integrated: bool
     claude_production_enabled: bool
@@ -86,6 +92,14 @@ class GammaReleaseReadinessManifest:
         if not self.reliability_certification_id:
             raise ValueError(
                 "release readiness reliability certification id cannot be blank"
+            )
+        if not self.governance_evidence_digest.startswith("sha256:"):
+            raise ValueError(
+                "release readiness governance evidence digest must be SHA-256"
+            )
+        if not self.governance_evidence_id:
+            raise ValueError(
+                "release readiness governance evidence id cannot be blank"
             )
         if self.claude_subsystem_status not in set(GammaClaudeProductionStatus):
             raise ValueError("release readiness Claude subsystem status is malformed")
@@ -146,6 +160,7 @@ def build_gamma_release_readiness_manifest(
     gamma_revision: str,
     stage_evidence: tuple[GammaStageEvidence, ...],
     reliability_certification: GammaReliabilityCertification,
+    governance_evidence: GammaGovernanceEvidence,
     claude_wired_into_production_runtime: bool,
     claude_config_enabled: bool,
     generated_at: str,
@@ -158,6 +173,18 @@ def build_gamma_release_readiness_manifest(
     :mod:`sigil.ai.gamma_reliability_certification`), so a revision mismatch
     here means the caller is trying to attach reliability evidence for the
     wrong build, which fails closed rather than being silently accepted.
+
+    ``governance_evidence`` must be a real
+    :class:`~sigil.ai.gamma_governance_evidence.GammaGovernanceEvidence`
+    bound to ``gamma_revision`` with every Stage-7 governance invariant
+    (paper-only runtime, no broker submission, explicit external-provider
+    admission, Claude advisory-only, mandatory human review) verified true.
+    This function never inspects live runtime state itself — it only reads
+    a caller-supplied, digest-verified evidence record, and fails closed if
+    that record is missing, of the wrong type, bound to a different
+    revision, tampered with, or asserts anything less than a clean pass on
+    every invariant (see
+    :mod:`sigil.ai.gamma_governance_evidence`).
 
     ``claude_wired_into_production_runtime`` and ``claude_config_enabled``
     must reflect real, checkable state; this function derives the Claude
@@ -178,6 +205,9 @@ def build_gamma_release_readiness_manifest(
             "release readiness reliability certification revision does not "
             "match the Gamma revision"
         )
+    governance_evidence = require_verified_governance_evidence(
+        governance_evidence, gamma_revision=gamma_revision
+    )
 
     claude_status = gamma_claude_production_status(
         wired_into_production_runtime=claude_wired_into_production_runtime,
@@ -196,16 +226,17 @@ def build_gamma_release_readiness_manifest(
     deterministic_replay_certified = reliability_certification.replay_deterministic
     corruption_fail_closed_certified = reliability_certification.corruption_fails_closed
 
-    # These reflect fixed Sigil governance invariants that are independently
-    # enforced by the "cannot receive authority" checks below and throughout
-    # the codebase (paper-only runtime, no broker submission, explicit
-    # external-provider admission, Claude advisory-only) rather than
-    # unverifiable test outcomes.
-    paper_only_preserved = True
-    broker_submission_disabled = True
-    external_provider_explicit_admission = True
-    claude_advisory_only = True
-    human_release_review_required = True
+    # Derived directly from the verified GammaGovernanceEvidence record
+    # above, not asserted here — require_verified_governance_evidence has
+    # already failed closed unless every one of these was an explicit
+    # verified True bound to this exact gamma_revision.
+    paper_only_preserved = governance_evidence.paper_only_preserved
+    broker_submission_disabled = governance_evidence.broker_submission_disabled
+    external_provider_explicit_admission = (
+        governance_evidence.external_provider_explicit_admission
+    )
+    claude_advisory_only = governance_evidence.claude_advisory_only
+    human_release_review_required = governance_evidence.human_release_review_required
 
     release_ready_for_review = all(
         (
@@ -232,6 +263,7 @@ def build_gamma_release_readiness_manifest(
                 "gamma_revision": gamma_revision,
                 "stage_evidence": [asdict(item) for item in stage_evidence],
                 "reliability_certification_id": reliability_certification.certification_id,
+                "governance_evidence_id": governance_evidence.evidence_id,
             }
         )
     )
@@ -245,6 +277,8 @@ def build_gamma_release_readiness_manifest(
         "stage_evidence": [asdict(item) for item in stage_evidence],
         "reliability_certification_id": reliability_certification.certification_id,
         "reliability_certification_digest": reliability_certification.certification_digest,
+        "governance_evidence_id": governance_evidence.evidence_id,
+        "governance_evidence_digest": governance_evidence.evidence_digest,
         "claude_subsystem_status": claude_status.value,
         "claude_production_integrated": claude_integrated,
         "claude_production_enabled": claude_enabled,
@@ -278,6 +312,8 @@ def build_gamma_release_readiness_manifest(
         stage_evidence=stage_evidence,
         reliability_certification_id=reliability_certification.certification_id,
         reliability_certification_digest=reliability_certification.certification_digest,
+        governance_evidence_id=governance_evidence.evidence_id,
+        governance_evidence_digest=governance_evidence.evidence_digest,
         claude_subsystem_status=claude_status,
         claude_production_integrated=claude_integrated,
         claude_production_enabled=claude_enabled,
