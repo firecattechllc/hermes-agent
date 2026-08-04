@@ -5,6 +5,9 @@ on:
   pull_request:
     branches:
       - sigil-alpha
+      - "sigil-gamma-*"
+      - "sigil-gm-*"
+      - "sigil-golden-master*"
     paths:
       - "apps/sigil/**"
       - "apps/sigil-desktop/**"
@@ -12,6 +15,9 @@ on:
   push:
     branches:
       - sigil-alpha
+      - "sigil-gamma-*"
+      - "sigil-gm-*"
+      - "sigil-golden-master*"
     paths:
       - "apps/sigil/**"
       - "apps/sigil-desktop/**"
@@ -73,6 +79,18 @@ jobs:
       - name: Compile Python sources
         run: |
           uv run python -m compileall -q src tests scripts
+
+      - name: Verify real-money Public execution client stays unreachable
+        run: uv run python scripts/verify_public_execution_isolation.py
+
+      - name: Verify certification evidence integrity
+        env:
+          # Explicit import contract for `sigil.certification.evidence`,
+          # rather than relying on the apps/sigil editable install alone.
+          # Absolute (via github.workspace) so it resolves correctly
+          # regardless of this step's working directory.
+          PYTHONPATH: ${{ github.workspace }}/apps/sigil/src
+        run: uv run python scripts/verify_certification_evidence.py
 
       - name: Import Sigil and verify paper runtime
         env:
