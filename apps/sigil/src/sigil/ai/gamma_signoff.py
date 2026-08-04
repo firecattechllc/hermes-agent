@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from enum import Enum
 
+from .gamma_claude_production_status import GammaClaudeProductionStatus
 from .gamma_release_review import (
     GammaReleaseReview,
     GammaReleaseReviewState,
@@ -25,6 +26,9 @@ class GammaSignoffRecord:
     golden_master_revision: str
     gamma_revision: str
     gamma_tag: str
+    claude_subsystem_status: GammaClaudeProductionStatus
+    claude_production_integrated: bool
+    claude_production_enabled: bool
     state: GammaSignoffState
     blockers: tuple[str, ...]
     human_promotion_decision_required: bool
@@ -50,6 +54,13 @@ class GammaSignoffRecord:
             raise ValueError("Gamma sign-off revisions cannot be blank")
         if not self.gamma_tag.startswith("sigil-gamma-"):
             raise ValueError("Gamma sign-off tag is invalid")
+        if self.claude_subsystem_status not in set(GammaClaudeProductionStatus):
+            raise ValueError("Gamma sign-off Claude subsystem status is malformed")
+        if self.claude_production_enabled and not self.claude_production_integrated:
+            raise ValueError(
+                "Gamma sign-off cannot claim Claude is production-enabled "
+                "without also being production-integrated"
+            )
         if not self.signed_at:
             raise ValueError("Gamma sign-off timestamp cannot be blank")
         if self.human_promotion_decision_required is not True:
@@ -111,6 +122,9 @@ def build_gamma_signoff(
         "golden_master_revision": review.golden_master_revision,
         "gamma_revision": review.gamma_revision,
         "gamma_tag": gamma_tag,
+        "claude_subsystem_status": review.claude_subsystem_status.value,
+        "claude_production_integrated": review.claude_production_integrated,
+        "claude_production_enabled": review.claude_production_enabled,
         "state": state.value,
         "blockers": blockers,
         "human_promotion_decision_required": True,
@@ -132,6 +146,9 @@ def build_gamma_signoff(
         golden_master_revision=review.golden_master_revision,
         gamma_revision=review.gamma_revision,
         gamma_tag=gamma_tag,
+        claude_subsystem_status=review.claude_subsystem_status,
+        claude_production_integrated=review.claude_production_integrated,
+        claude_production_enabled=review.claude_production_enabled,
         state=state,
         blockers=blockers,
         human_promotion_decision_required=True,
@@ -145,4 +162,5 @@ def gamma_signoff_projection(
 ) -> dict[str, object]:
     payload = asdict(signoff)
     payload["state"] = signoff.state.value
+    payload["claude_subsystem_status"] = signoff.claude_subsystem_status.value
     return payload

@@ -23,9 +23,11 @@ from .claude import (
     CLAUDE_MODEL_VERSION,
     CLAUDE_PROVIDER_ID,
     CLAUDE_RESPONSIBILITIES,
+    SIGIL_CLAUDE_CREDENTIAL_ENV_VAR,
     ClaudeConfig,
     ClaudeHealth,
     HermesClaudeProvider,
+    default_claude_credential_resolver,
 )
 from .hermes_claude_transport import (
     ClaudeTransportError,
@@ -76,6 +78,23 @@ from .cross_provider_validation_certification import (
     CrossProviderValidationCertificationState,
     certify_cross_provider_validation,
     cross_provider_certification_manifest,
+)
+
+from .gamma_evidence import (
+    GAMMA_TEST_EVIDENCE_VERSION,
+    GammaEvidenceError,
+    GammaEvidenceOutcome,
+    GammaEvidenceVerification,
+    GammaTestEvidence,
+    build_gamma_test_evidence,
+    require_passing_evidence,
+)
+
+from .gamma_claude_production_status import (
+    GammaClaudeProductionStatus,
+    claude_production_enabled,
+    claude_production_integrated,
+    gamma_claude_production_status,
 )
 
 from .gamma_reliability_certification import (
@@ -338,6 +357,7 @@ __all__ = [
     "ORCHESTRATION_RESPONSIBILITIES",
     "ORCHESTRATION_WORKFLOW",
     "PRIMARY_MODEL",
+    "SIGIL_CLAUDE_CREDENTIAL_ENV_VAR",
     "AIEvidenceConflictError",
     "AIEvidenceCorruptionError",
     "AIEvidenceLedgerError",
@@ -408,6 +428,12 @@ __all__ = [
     "GAMMA_RELEASE_REVIEW_VERSION",
     "GAMMA_SIGNOFF_VERSION",
     "GAMMA_RELIABILITY_CERTIFICATION_VERSION",
+    "GAMMA_TEST_EVIDENCE_VERSION",
+    "GammaClaudeProductionStatus",
+    "GammaEvidenceError",
+    "GammaEvidenceOutcome",
+    "GammaEvidenceVerification",
+    "GammaTestEvidence",
     "GovernedAnalysisRequest",
     "GovernedAnalysisResponse",
     "GovernedAnalysisService",
@@ -539,11 +565,16 @@ __all__ = [
     "build_invocation_evidence",
     "build_gamma_release_readiness_manifest",
     "build_gamma_signoff",
+    "build_gamma_test_evidence",
     "claude_inspection_status",
+    "claude_production_enabled",
+    "claude_production_integrated",
     "cross_provider_validation_status",
     "certify_cross_provider_validation",
     "certify_gamma_reliability",
+    "gamma_claude_production_status",
     "gamma_reliability_manifest",
+    "require_passing_evidence",
     "gamma_release_readiness_projection",
     "gamma_release_review_projection",
     "gamma_signoff_projection",
@@ -558,6 +589,7 @@ __all__ = [
     "build_sentiment_artifact",
     "compare_forecast_evaluations",
     "create_retrieval_source",
+    "default_claude_credential_resolver",
     "deterministic_chunks",
     "evaluate_forecast",
     "fleet_evidence",

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+from .gamma_evidence import GammaTestEvidence, require_passing_evidence
 from .registry import canonical_digest
 
-GAMMA_RELIABILITY_CERTIFICATION_VERSION = 1
+GAMMA_RELIABILITY_CERTIFICATION_VERSION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +19,8 @@ class GammaReliabilityCertification:
     partial_evidence_requires_review: bool
     timeout_failures_typed: bool
     explicit_recovery_required: bool
+    evidence_id: str
+    evidence_digest: str
     certified_at: str
     certification_digest: str
     promotion_authorized: bool = False
@@ -42,6 +45,10 @@ class GammaReliabilityCertification:
             raise ValueError("reliability certification timestamp cannot be blank")
         if not self.certification_digest.startswith("sha256:"):
             raise ValueError("reliability certification digest must be SHA-256")
+        if not self.evidence_digest.startswith("sha256:"):
+            raise ValueError("reliability certification evidence digest must be SHA-256")
+        if not self.evidence_id:
+            raise ValueError("reliability certification evidence id cannot be blank")
         if not all(
             (
                 self.replay_deterministic,
@@ -70,7 +77,21 @@ def certify_gamma_reliability(
     *,
     target_revision: str,
     certified_at: str,
+    evidence: GammaTestEvidence,
 ) -> GammaReliabilityCertification:
+    """Certify Gamma reliability from a verified, passing test evidence record.
+
+    Fails closed (raises ``GammaEvidenceError``, a ``ValueError`` subclass)
+    whenever the evidence is missing, of the wrong type, bound to a
+    different revision, unverified, not a clean pass, or has been tampered
+    with (its digest/identity would no longer match its own content — see
+    :class:`~sigil.ai.gamma_evidence.GammaTestEvidence`). The reliability
+    guarantee booleans below are only reachable once that evidence has
+    cleared every one of those checks; they are never assigned unconditionally.
+    """
+
+    require_passing_evidence(evidence, target_revision=target_revision)
+
     domains = tuple(
         sorted(
             {
@@ -90,6 +111,7 @@ def certify_gamma_reliability(
                 "version": GAMMA_RELIABILITY_CERTIFICATION_VERSION,
                 "target_revision": target_revision,
                 "certified_domains": domains,
+                "evidence_id": evidence.evidence_id,
             }
         )
     )
@@ -104,6 +126,8 @@ def certify_gamma_reliability(
         "partial_evidence_requires_review": True,
         "timeout_failures_typed": True,
         "explicit_recovery_required": True,
+        "evidence_id": evidence.evidence_id,
+        "evidence_digest": evidence.evidence_digest,
         "certified_at": certified_at,
         "promotion_authorized": False,
         "release_authority": False,
@@ -124,6 +148,8 @@ def certify_gamma_reliability(
         partial_evidence_requires_review=True,
         timeout_failures_typed=True,
         explicit_recovery_required=True,
+        evidence_id=evidence.evidence_id,
+        evidence_digest=evidence.evidence_digest,
         certified_at=certified_at,
         certification_digest=f"sha256:{canonical_digest(payload)}",
     )

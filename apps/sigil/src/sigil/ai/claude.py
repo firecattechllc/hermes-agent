@@ -32,6 +32,11 @@ from .provider import (
 )
 
 CLAUDE_PROVIDER_ID = "hermes-claude"
+
+# Dedicated Sigil credential. Preferred over the shared Hermes coding-agent
+# credential in every mode, and the *only* source consulted when running in
+# strict production-integrated mode (see ClaudeConfig.strict_credentials).
+SIGIL_CLAUDE_CREDENTIAL_ENV_VAR = "SIGIL_AI_CLAUDE_API_KEY"
 CLAUDE_MODEL_ID = "claude-sonnet-governed"
 CLAUDE_MODEL_FAMILY = "claude"
 CLAUDE_MODEL_VERSION = "gamma-foundation-v1"
@@ -112,12 +117,67 @@ class ClaudeHealth:
     paper_only: bool = True
 
 
+def _resolve_sigil_claude_credential(
+    environment: Mapping[str, str] | None = None,
+) -> str | None:
+    """Resolve the Sigil-specific, dedicated Claude credential.
+
+    This is deliberately independent of Hermes's own coding-agent credential
+    resolution — Sigil's governed Claude provider should not, by default,
+    borrow the credential the operator is using to run the Hermes CLI/coding
+    agent itself.
+    """
+
+    source = os.environ if environment is None else environment
+    value = source.get(SIGIL_CLAUDE_CREDENTIAL_ENV_VAR)
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 def _resolve_hermes_anthropic_credential() -> str | None:
-    """Resolve Claude credentials inside the Hermes backend boundary."""
+    """Resolve Claude credentials via the shared Hermes coding-agent adapter.
+
+    This is a local-development compatibility fallback only: it reuses
+    whatever credential the operator has configured for the Hermes coding
+    agent itself (OAuth token, Claude Code credential file, API key, ...).
+    It is never consulted in strict production-integrated mode — see
+    ``default_claude_credential_resolver``.
+    """
 
     from agent.anthropic_adapter import resolve_anthropic_token
 
     return resolve_anthropic_token()
+
+
+def default_claude_credential_resolver(
+    *,
+    strict_production_integrated: bool = False,
+    environment: Mapping[str, str] | None = None,
+) -> Callable[[], str | None]:
+    """Build the default credential resolver for the governed Claude provider.
+
+    Resolution order:
+      1. The Sigil-specific credential (``SIGIL_AI_CLAUDE_API_KEY``), always
+         preferred when configured.
+      2. In non-strict (local-development) mode only: the shared Hermes
+         coding-agent credential, as a documented compatibility path.
+
+    In strict production-integrated mode, step 2 never runs — an absent
+    Sigil-specific credential resolves to ``None`` (fails closed) rather than
+    silently borrowing the shared coding-agent credential.
+    """
+
+    def resolver() -> str | None:
+        sigil_credential = _resolve_sigil_claude_credential(environment)
+        if sigil_credential is not None:
+            return sigil_credential
+        if strict_production_integrated:
+            return None
+        return _resolve_hermes_anthropic_credential()
+
+    return resolver
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +190,7 @@ class ClaudeConfig:
     context_limit: int = 200_000
     request_timeout_ms: int = 60_000
     max_output_tokens: int = 8_192
+    strict_credentials: bool = False
 
     def __post_init__(self) -> None:
         if not self.model_id.strip():
@@ -180,6 +241,11 @@ class ClaudeConfig:
                 "SIGIL_AI_CLAUDE_MAX_OUTPUT_TOKENS",
                 8_192,
             ),
+            strict_credentials=_environment_bool(
+                source,
+                "SIGIL_AI_CLAUDE_STRICT_CREDENTIALS",
+                False,
+            ),
         )
 
 
@@ -199,8 +265,8 @@ class HermesClaudeProvider:
         transport: HermesClaudeTransport | None = None,
     ) -> None:
         self.config = config or ClaudeConfig()
-        self.credential_resolver = (
-            credential_resolver or _resolve_hermes_anthropic_credential
+        self.credential_resolver = credential_resolver or default_claude_credential_resolver(
+            strict_production_integrated=self.config.strict_credentials,
         )
         self.transport = transport or HermesClaudeTransport(
             credential_resolver=self.credential_resolver,

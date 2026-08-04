@@ -5,24 +5,51 @@ from dataclasses import replace
 import pytest
 
 from sigil.ai import (
+    GammaClaudeProductionStatus,
+    GammaEvidenceOutcome,
+    GammaEvidenceVerification,
     GammaReleaseReviewState,
     GammaSignoffState,
     GammaStageEvidence,
     build_gamma_release_readiness_manifest,
     build_gamma_signoff,
+    build_gamma_test_evidence,
+    certify_gamma_reliability,
     gamma_signoff_projection,
     review_gamma_release_readiness,
 )
 
 NOW = "2026-08-03T01:00:00Z"
 TAG = "sigil-gamma-v3.5.0"
+GAMMA_REVISION = "c39604e07"
+
+
+def evidence(target_revision: str = GAMMA_REVISION):
+    return build_gamma_test_evidence(
+        target_revision=target_revision,
+        suite_id="sigil-gamma-reliability-v1",
+        outcome=GammaEvidenceOutcome.PASSED,
+        passed_count=5,
+        failed_count=0,
+        executed_at=NOW,
+        run_id="local-cert-run-0003",
+        verification_status=GammaEvidenceVerification.VERIFIED,
+    )
+
+
+def reliability_certification(target_revision: str = GAMMA_REVISION):
+    return certify_gamma_reliability(
+        target_revision=target_revision,
+        certified_at=NOW,
+        evidence=evidence(target_revision),
+    )
 
 
 def readiness():
     return build_gamma_release_readiness_manifest(
         golden_master_revision="26d38ee30",
         golden_master_tag="sigil-golden-master-v3.5.0",
-        gamma_revision="c39604e07",
+        gamma_revision=GAMMA_REVISION,
         stage_evidence=(
             GammaStageEvidence(1, "c9e6a7f02", "Claude provider foundation"),
             GammaStageEvidence(2, "429cb247f", "Governed Claude transport"),
@@ -31,6 +58,9 @@ def readiness():
             GammaStageEvidence(5, "c5c8f293e", "Cross-provider validation"),
             GammaStageEvidence(6, "514d83be5", "Reliability certification"),
         ),
+        reliability_certification=reliability_certification(),
+        claude_wired_into_production_runtime=False,
+        claude_config_enabled=False,
         generated_at=NOW,
     )
 
@@ -61,6 +91,20 @@ def test_clean_release_review_produces_ready_signoff() -> None:
     assert signoff.portfolio_mutation is False
     assert signoff.tool_execution is False
     assert signoff.paper_only is True
+
+
+def test_signoff_carries_truthful_claude_production_status() -> None:
+    signoff = build_gamma_signoff(
+        review(),
+        gamma_tag=TAG,
+        signed_at=NOW,
+    )
+
+    assert signoff.claude_subsystem_status == (
+        GammaClaudeProductionStatus.NOT_PRODUCTION_INTEGRATED
+    )
+    assert signoff.claude_production_integrated is False
+    assert signoff.claude_production_enabled is False
 
 
 def test_blocked_review_produces_blocked_signoff() -> None:
@@ -101,7 +145,7 @@ def test_signoff_is_deterministic_and_review_linked() -> None:
     assert first.release_review_id == release_review.review_id
     assert first.release_review_digest == release_review.review_digest
     assert first.golden_master_revision == "26d38ee30"
-    assert first.gamma_revision == "c39604e07"
+    assert first.gamma_revision == GAMMA_REVISION
     assert first.signoff_id.startswith("gamma-signoff-")
     assert first.signoff_digest.startswith("sha256:")
 
@@ -118,6 +162,7 @@ def test_signoff_projection_is_sanitized() -> None:
     assert projection["state"] == "ready_for_promotion_decision"
     assert projection["promotion_authorized"] is False
     assert projection["release_authorized"] is False
+    assert projection["claude_subsystem_status"] == "not_production_integrated"
     assert "prompt" not in projection
     assert "credential" not in projection
     assert "content" not in projection
@@ -167,4 +212,22 @@ def test_signoff_rejects_invalid_tag() -> None:
             review(),
             gamma_tag="invalid-tag",
             signed_at=NOW,
+        )
+
+
+def test_signoff_rejects_inconsistent_claude_production_claim() -> None:
+    signoff = build_gamma_signoff(
+        review(),
+        gamma_tag=TAG,
+        signed_at=NOW,
+    )
+
+    with pytest.raises(ValueError, match="production-enabled"):
+        replace(
+            signoff,
+            claude_subsystem_status=(
+                GammaClaudeProductionStatus.PRODUCTION_INTEGRATED_ENABLED
+            ),
+            claude_production_integrated=False,
+            claude_production_enabled=True,
         )
