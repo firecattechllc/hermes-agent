@@ -1,0 +1,658 @@
+# Hermes capability activation manifest — FireCat deployment (Titan + Mac).
+#
+# Schema: hermes_cli/capability_manifest.py (CapabilityManifest).
+# Load with: python -c "from hermes_cli.capability_manifest import load_capability_manifest as l; l()"
+# Validate:  python -c "from hermes_cli.capability_manifest import *; ok, w = validate_capability_manifest(load_capability_manifest()); print(ok, w)"
+#
+# States: active | available | blocked_credentials | blocked_runtime | not_selected | failed_validation
+# "active" means implemented, configured, and reachable in this repository
+# today — not merely "should work in theory." Every entry's validation_command
+# is real and was run against this exact commit during Phase 1 discovery.
+
+schema_version: 1
+generated_at: "2026-08-05"
+deployment: firecat-hermes
+
+entries:
+  # ── Core tool capabilities ──────────────────────────────────────────────
+
+  - key: persistent_memory
+    display_name: Persistent memory (MEMORY.md / USER.md)
+    category: core_tool
+    state: active
+    reason: >
+      Built-in file-backed memory tool is implemented and registered in the
+      default toolset; no external provider required.
+    validation_command: "python -c \"import tools.memory_tool\""
+    implementation_paths:
+      - tools/memory_tool.py
+      - agent/memory_provider.py
+      - agent/memory_manager.py
+    node: shared
+
+  - key: external_memory_providers
+    display_name: External memory providers (mem0, honcho, holographic, etc.)
+    category: core_tool
+    state: blocked_credentials
+    reason: >
+      Plugin-based external memory backends exist and are selectable via
+      memory.provider, but each requires its own API key/OAuth; none is
+      configured in this environment.
+    validation_command: "ls plugins/memory/"
+    implementation_paths:
+      - plugins/memory/mem0/
+      - plugins/memory/honcho/
+      - plugins/memory/holographic/
+      - plugins/memory/supermemory/
+    requires_credentials: ["<provider-specific API key, see plugins/memory/<name>/plugin.yaml>"]
+    node: shared
+
+  - key: session_search
+    display_name: Session search (FTS5)
+    category: core_tool
+    state: active
+    reason: FTS5-based session search tool registered in default toolsets.
+    validation_command: "python -c \"import tools.session_search_tool\""
+    implementation_paths: ["tools/session_search_tool.py"]
+    node: shared
+
+  - key: skills
+    display_name: Skills system
+    category: core_tool
+    state: active
+    reason: >
+      Skill discovery/invocation is wired via hermes_cli/skills_hub.py and
+      the `/skills`, `hermes skills` commands; 21 skill category directories
+      present under skills/.
+    validation_command: "hermes skills list"
+    implementation_paths:
+      - hermes_cli/skills_hub.py
+      - hermes_cli/subcommands/skills.py
+      - agent/skill_commands.py
+    node: shared
+
+  - key: skill_authoring
+    display_name: Controlled skill creation and improvement
+    category: core_tool
+    state: active
+    reason: >
+      A dedicated meta-skill exists teaching skill creation/improvement; no
+      separate activation needed beyond the skills system itself.
+    validation_command: "test -f skills/software-development/hermes-agent-skill-authoring/SKILL.md"
+    implementation_paths:
+      - skills/software-development/hermes-agent-skill-authoring/SKILL.md
+    node: shared
+
+  - key: subagents_delegation
+    display_name: Governed subagents (delegate_task)
+    category: core_tool
+    state: active
+    reason: >
+      delegate_task toolset spawns isolated-context child agents; registered
+      in toolsets.py and reachable from the default tool surface.
+    validation_command: "python -c \"import tools.delegate_tool\""
+    implementation_paths:
+      - tools/delegate_tool.py
+      - tools/async_delegation.py
+    node: shared
+
+  - key: parallel_workflows
+    display_name: Parallel workflow execution
+    category: core_tool
+    state: active
+    reason: >
+      Not a separate primitive — delivered as delegate_task's batch/parallel
+      mode. No standalone "ParallelWorkflow" module exists or is needed.
+    validation_command: "grep -n 'batch' tools/delegate_tool.py | head -1"
+    implementation_paths: ["tools/delegate_tool.py"]
+    node: shared
+
+  - key: cron_scheduler
+    display_name: Cron and scheduled automations
+    category: core_tool
+    state: active
+    reason: >
+      In-process/DB-backed scheduler (cron/scheduler.py) reachable via
+      `hermes cron`. Verified: cron-triggered tool calls route through the
+      same tools/approval.py guard as interactive calls, defaulting to
+      fail-closed (approvals.cron_mode: deny) for dangerous commands.
+    validation_command: "hermes cron status"
+    implementation_paths:
+      - cron/scheduler.py
+      - cron/jobs.py
+      - cron/lifecycle_guard.py
+      - hermes_cli/cron.py
+    node: titan
+    notes: >
+      Titan is the intended 24/7 host for this scheduler per the target
+      architecture ("scheduler and automations").
+
+  - key: browser_automation_local
+    display_name: Browser automation (local Chromium via agent-browser)
+    category: core_tool
+    state: active
+    reason: Local-mode browser automation requires no external credentials.
+    validation_command: "python -c \"import tools.browser_tool\""
+    implementation_paths: ["tools/browser_tool.py"]
+    node: mac
+    notes: "Assigned to Mac per target architecture (heavier local execution surface)."
+
+  - key: browser_automation_cloud
+    display_name: Browser automation (Browserbase / Browser Use cloud)
+    category: core_tool
+    state: blocked_credentials
+    reason: Cloud browser backends need BROWSERBASE_API_KEY or BROWSER_USE_API_KEY.
+    validation_command: "grep -n BROWSERBASE_API_KEY .env.example"
+    implementation_paths: ["tools/browser_tool.py"]
+    requires_credentials: ["BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID", "BROWSER_USE_API_KEY"]
+    node: mac
+
+  - key: computer_use
+    display_name: Computer use (macOS desktop control)
+    category: core_tool
+    state: blocked_runtime
+    reason: >
+      Fully implemented and macOS-architected (TCC permission checks,
+      desktop-shell heuristics) but requires (a) running on an actual Mac
+      with Accessibility/Screen Recording permissions granted, and (b) no
+      automatic routing exists yet from Titan to a Mac node for this
+      capability — see fleet/computer_use_mac_routing below.
+    validation_command: "hermes computer_use doctor"
+    implementation_paths:
+      - tools/computer_use/backend.py
+      - tools/computer_use/cua_backend.py
+      - tools/computer_use/permissions.py
+    node: mac
+
+  - key: vision_image_paste
+    display_name: Vision / image paste support
+    category: core_tool
+    state: active
+    reason: Vision analysis tool and clipboard image paste both implemented.
+    validation_command: "python -c \"import tools.vision_tools, hermes_cli.clipboard\""
+    implementation_paths:
+      - tools/vision_tools.py
+      - hermes_cli/clipboard.py
+    node: shared
+
+  - key: web_search_research
+    display_name: Web search / research tools
+    category: core_tool
+    state: available
+    reason: >
+      Provider-agnostic web search/extract plumbing exists (web_search_tool,
+      web_extract_tool) with pluggable backends (Exa, Firecrawl, Tavily,
+      Parallel, ddgs, searxng); no backend is selected in config.yaml for
+      this deployment yet. Free backends (ddgs, searxng) need no credential.
+    validation_command: "python -c \"import tools.web_tools\""
+    implementation_paths: ["tools/web_tools.py", "agent/web_search_provider.py"]
+    node: shared
+
+  - key: deliverable_mode
+    display_name: "\"Deliverable mode\""
+    category: core_tool
+    state: not_selected
+    reason: >
+      No distinct "deliverable mode" capability exists anywhere in this
+      codebase (verified: no config flag, CLI flag, or toolset named or
+      gated as such). Deliverable-oriented behavior is folded into
+      kanban/swarm result synthesis (hermes_cli/kanban_swarm.py) and
+      delegate_task's own summarization. Not fabricating a capability that
+      does not exist.
+    node: shared
+
+  - key: terminal_backend_local
+    display_name: Local terminal backend
+    category: core_tool
+    state: active
+    reason: Default execution backend; requires no configuration.
+    validation_command: "python -c \"import tools.environments.local\""
+    implementation_paths: ["tools/environments/local.py"]
+    node: shared
+
+  - key: terminal_backend_ssh
+    display_name: SSH terminal backend
+    category: core_tool
+    state: available
+    reason: >
+      Implemented (TERMINAL_ENV=ssh) but not configured for this deployment;
+      would need a target host and SSH key.
+    validation_command: "python -c \"import tools.environments.ssh\""
+    implementation_paths: ["tools/environments/ssh.py"]
+    requires_credentials: ["TERMINAL_SSH_KEY"]
+    node: shared
+
+  - key: terminal_backend_docker
+    display_name: Docker terminal backend
+    category: core_tool
+    state: available
+    reason: >
+      Implemented; usable where a local Docker daemon is available. Use
+      "where useful" per target architecture guidance, not by default.
+    validation_command: "python -c \"import tools.environments.docker\""
+    implementation_paths: ["tools/environments/docker.py"]
+    node: shared
+
+  - key: mcp_client
+    display_name: MCP client support (curated catalog)
+    category: core_tool
+    state: active
+    reason: >
+      hermes mcp install / picker works against a Nous-approved catalog
+      under optional-mcps/; a pattern-based security blocklist
+      (hermes_cli/mcp_security.py) rejects shell-interpreter MCP entries
+      doing network egress or OS-persistence writes at both save- and
+      spawn-time. This is a blocklist-on-a-curated-catalog design, not a
+      separate allowlist file — documented here rather than fabricating an
+      allowlist that doesn't exist.
+    validation_command: "hermes mcp list"
+    implementation_paths:
+      - hermes_cli/mcp_catalog.py
+      - hermes_cli/mcp_security.py
+      - tools/mcp_tool.py
+    node: shared
+
+  - key: model_routing_runtime
+    display_name: Live model/provider routing
+    category: core_tool
+    state: active
+    reason: >
+      The actual runtime model-selection system (distinct from the dormant
+      governance-layer model_routing.py under agent_roles/ — see
+      governance/model_routing_governance below).
+    validation_command: "hermes model list"
+    implementation_paths:
+      - hermes_cli/models.py
+      - hermes_cli/providers.py
+      - hermes_cli/model_switch.py
+    node: shared
+
+  - key: hermes_doctor
+    display_name: Runtime diagnostics (hermes doctor)
+    category: core_tool
+    state: active
+    reason: Wired CLI subcommand with real environment/config checks.
+    validation_command: "hermes doctor"
+    implementation_paths: ["hermes_cli/doctor.py", "hermes_cli/subcommands/doctor.py"]
+    node: shared
+
+  # ── Governance capabilities ─────────────────────────────────────────────
+
+  - key: mission_control
+    display_name: Mission Control telemetry
+    category: governance
+    state: active
+    reason: >
+      Append-only telemetry journal wired into the CLI and into the shared
+      AIAgent.run_conversation path (hermes_cli/mission_control/runtime.py);
+      confirmed cron and interactive turns both flow through
+      telemetry_turn() with no cron-specific exclusion.
+    validation_command: "hermes mission-control status"
+    implementation_paths:
+      - hermes_cli/mission_control/store.py
+      - hermes_cli/mission_control/runtime.py
+    node: shared
+
+  - key: approval_gates
+    display_name: Dangerous-command approval gates
+    category: governance
+    state: active
+    reason: >
+      tools/approval.py is the single source of truth for dangerous-command
+      detection, called unconditionally from tools/terminal_tool.py before
+      execution. Confirmed identical enforcement for interactive, gateway,
+      and cron-triggered calls; cron defaults to fail-closed
+      (approvals.cron_mode: deny) since no human is present to approve.
+      HERMES_YOLO_MODE is frozen at process import and cannot be toggled
+      mid-session by a job or skill.
+    validation_command: "python -c \"import tools.approval\""
+    implementation_paths: ["tools/approval.py"]
+    node: shared
+
+  - key: autonomous_backlog
+    display_name: Autonomous backlog (state tracking)
+    category: governance
+    state: active
+    reason: >
+      hermes autonomous-backlog CLI and its store/service are live and
+      reachable. Important scope note: this package only tracks backlog
+      item lifecycle state (candidate -> ... -> completed) — it does not
+      itself execute work. The intended executor
+      (hermes_cli/agent_roles/dispatcher.py) is part of the orphaned
+      agent_roles package (see below) and is not wired up, so no live code
+      path currently turns a backlog item into automatic execution; items
+      must be worked by an operator/agent invoking existing tools directly.
+    validation_command: "hermes autonomous-backlog --help"
+    implementation_paths:
+      - hermes_cli/autonomous_backlog/store.py
+      - hermes_cli/autonomous_backlog/service.py
+      - hermes_cli/autonomous_backlog_commands.py
+    node: shared
+
+  - key: specialized_agent_roles
+    display_name: Specialized agent roles (governance library)
+    category: governance
+    state: available
+    reason: >
+      78-file Pydantic governance library (hermes_cli/agent_roles/) is fully
+      implemented and unit-tested (48 test files) but has zero importers
+      anywhere outside its own package plus hermes_cli/prime/ and
+      hermes_cli/knowledge/mission_control_bridge.py (which are themselves
+      not wired to any CLI command). No `hermes` subcommand exposes it.
+      Wiring this into a live dispatch path is a substantial separate
+      initiative, not a configuration change — out of scope for this
+      activation pass. Not enabling by fabricating a thin CLI wrapper that
+      would not be genuinely exercised.
+    validation_command: "python -m pytest tests/hermes_cli/test_agent_roles/ -q"
+    implementation_paths: ["hermes_cli/agent_roles/"]
+    node: shared
+
+  - key: workflow_orchestration
+    display_name: Workflow orchestration
+    category: governance
+    state: available
+    reason: Same wiring status as specialized_agent_roles (same package).
+    validation_command: "python -m pytest tests/hermes_cli/test_agent_roles/test_workflow.py -q"
+    implementation_paths: ["hermes_cli/agent_roles/workflow.py", "hermes_cli/agent_roles/workflow_coordinator.py"]
+    node: shared
+
+  - key: dispatch_admission
+    display_name: Scheduling and dispatch admission
+    category: governance
+    state: available
+    reason: Same wiring status as specialized_agent_roles (same package).
+    validation_command: "python -m pytest tests/hermes_cli/test_agent_roles/test_workflow_dispatch.py -q"
+    implementation_paths: ["hermes_cli/agent_roles/workflow_dispatch.py"]
+    node: shared
+
+  - key: runtime_supervision_recovery
+    display_name: Runtime supervision and recovery
+    category: governance
+    state: available
+    reason: Same wiring status as specialized_agent_roles (same package).
+    validation_command: "python -m pytest tests/hermes_cli/test_agent_roles/test_runtime_supervision.py -q"
+    implementation_paths: ["hermes_cli/agent_roles/runtime_supervision.py", "hermes_cli/agent_roles/runtime_recovery.py"]
+    node: shared
+
+  - key: fleet_inventory_governance
+    display_name: Fleet inventory (governed)
+    category: governance
+    state: available
+    reason: >
+      Same wiring status as specialized_agent_roles (same package). Note
+      the actual live fleet-communication mechanism for Titan/Mac is
+      hermes_link (see fleet/hermes_link_cli), not this module.
+    validation_command: "python -m pytest tests/hermes_cli/test_agent_roles/test_fleet_inventory.py -q"
+    implementation_paths: ["hermes_cli/agent_roles/fleet_inventory.py"]
+    node: shared
+
+  - key: prime_control_plane
+    display_name: Prime identity/admission/evidence/certification
+    category: governance
+    state: available
+    reason: >
+      hermes_cli/prime/ (identity, admission, health, evidence,
+      certification) is fully implemented and tested (11+ test files) but,
+      like agent_roles, has no CLI subcommand or runtime import in this
+      branch. A separate branch (fleet-unification-live-runtime, already
+      pushed to origin, not merged) implements real live-runtime wiring for
+      this exact package (durable node registry, heartbeat, governed
+      dispatch, HTTP control plane, Mission Control visibility) — that work
+      should be reviewed/merged rather than rebuilt here.
+    validation_command: "python -m pytest tests/hermes_cli/test_prime/ -q"
+    implementation_paths: ["hermes_cli/prime/"]
+    node: shared
+
+  - key: knowledge_graph
+    display_name: Whole-system knowledge graph
+    category: governance
+    state: active
+    reason: Reachable via `hermes knowledge`, wired into main.py.
+    validation_command: "hermes knowledge status"
+    implementation_paths: ["hermes_cli/knowledge/store.py", "hermes_cli/knowledge/service.py"]
+    node: titan
+    notes: "Assigned to Titan per target architecture (\"persistent memory and knowledge services\")."
+
+  # ── Communication capabilities ──────────────────────────────────────────
+
+  - key: telegram_gateway
+    display_name: Telegram gateway (phone control + approval surface)
+    category: communication
+    state: blocked_credentials
+    reason: >
+      Fully implemented bundled plugin (plugins/platforms/telegram/); no
+      TELEGRAM_BOT_TOKEN present in this environment (~/.hermes/.env or
+      shell env checked — not set). This is the designated first phone
+      control/approval surface per target architecture; activating it only
+      requires obtaining a bot token from @BotFather and setting it — no
+      code changes needed.
+    validation_command: "printenv TELEGRAM_BOT_TOKEN >/dev/null && echo set || echo not-set"
+    implementation_paths: ["plugins/platforms/telegram/adapter.py"]
+    requires_credentials: ["TELEGRAM_BOT_TOKEN"]
+    node: titan
+    notes: "Assigned to Titan (always-on messaging gateway)."
+
+  - key: telegram_approval_prompts
+    display_name: Phone approval prompts (via Telegram)
+    category: communication
+    state: blocked_credentials
+    reason: >
+      No Telegram-specific "phone approval" mechanism exists separately —
+      approval prompting is generic (tools/approval.py's gateway-async
+      prompting path) and reaches whichever gateway platform is configured,
+      including Telegram once TELEGRAM_BOT_TOKEN is set.
+    validation_command: "python -c \"import tools.approval\""
+    implementation_paths: ["tools/approval.py"]
+    requires_credentials: ["TELEGRAM_BOT_TOKEN"]
+    node: titan
+
+  - key: notifications_job_status
+    display_name: Job completion / failure notifications
+    category: communication
+    state: blocked_credentials
+    reason: >
+      send_message_tool (cross-channel messaging) is implemented and
+      reachable, but needs at least one configured platform (Telegram
+      recommended) to actually deliver a notification.
+    validation_command: "python -c \"import tools.send_message_tool\""
+    implementation_paths: ["tools/send_message_tool.py"]
+    requires_credentials: ["TELEGRAM_BOT_TOKEN"]
+    node: titan
+
+  - key: discord_gateway
+    display_name: Discord gateway
+    category: communication
+    state: blocked_credentials
+    reason: >
+      Implemented bundled plugin; intentionally left disabled until
+      DISCORD_BOT_TOKEN is explicitly configured, per activation scope
+      (prepare but keep credential-gated).
+    validation_command: "printenv DISCORD_BOT_TOKEN >/dev/null && echo set || echo not-set"
+    implementation_paths: ["plugins/platforms/discord/adapter.py"]
+    requires_credentials: ["DISCORD_BOT_TOKEN"]
+    node: titan
+
+  - key: slack_gateway
+    display_name: Slack gateway
+    category: communication
+    state: blocked_credentials
+    reason: Implemented; intentionally left disabled pending credentials.
+    validation_command: "printenv SLACK_BOT_TOKEN >/dev/null && echo set || echo not-set"
+    implementation_paths: ["plugins/platforms/slack/adapter.py"]
+    requires_credentials: ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN"]
+    node: titan
+
+  - key: whatsapp_gateway
+    display_name: WhatsApp gateway (unofficial + official Cloud API)
+    category: communication
+    state: blocked_credentials
+    reason: >
+      Two implementations exist (bundled plugin using a Node bridge, and a
+      built-in official Meta Cloud API adapter); both intentionally left
+      disabled pending credentials.
+    validation_command: "printenv WHATSAPP_ENABLED >/dev/null && echo set || echo not-set"
+    implementation_paths:
+      - plugins/platforms/whatsapp/adapter.py
+      - gateway/platforms/whatsapp_cloud.py
+    requires_credentials: ["<Meta Cloud API token, see hermes_cli/setup_whatsapp_cloud.py>"]
+    node: titan
+
+  - key: signal_gateway
+    display_name: Signal gateway
+    category: communication
+    state: blocked_credentials
+    reason: >
+      Built-in (not a plugin); needs a running signal-cli HTTP daemon.
+      Intentionally left disabled pending that infrastructure + config.
+    validation_command: "printenv SIGNAL_HTTP_URL >/dev/null && echo set || echo not-set"
+    implementation_paths: ["gateway/platforms/signal.py"]
+    requires_credentials: ["SIGNAL_HTTP_URL", "SIGNAL_ACCOUNT"]
+    node: titan
+
+  - key: email_gateway
+    display_name: Email gateway (IMAP/SMTP)
+    category: communication
+    state: blocked_credentials
+    reason: Implemented; intentionally left disabled pending credentials.
+    validation_command: "printenv EMAIL_ADDRESS >/dev/null && echo set || echo not-set"
+    implementation_paths: ["plugins/platforms/email/adapter.py"]
+    requires_credentials: ["EMAIL_ADDRESS", "EMAIL_PASSWORD", "EMAIL_SMTP_HOST"]
+    node: titan
+
+  - key: calendar_integration
+    display_name: Calendar integration
+    category: communication
+    state: blocked_credentials
+    reason: >
+      No first-class gateway/tool integration exists; only available via
+      the Google Workspace skill (OAuth-driven). Documented honestly as
+      skill-level, not a core capability.
+    validation_command: "test -d skills/productivity/google-workspace"
+    implementation_paths: ["skills/productivity/google-workspace/"]
+    requires_credentials: ["<Google OAuth client credentials>"]
+    node: shared
+
+  - key: spotify_integration
+    display_name: Spotify control
+    category: communication
+    state: blocked_credentials
+    reason: Implemented plugin; intentionally left disabled pending OAuth.
+    validation_command: "test -d plugins/spotify"
+    implementation_paths: ["plugins/spotify/"]
+    requires_credentials: ["<Spotify OAuth client credentials, see plugins/spotify/plugin.yaml>"]
+    node: mac
+
+  - key: image_generation
+    display_name: Image generation (FAL.ai)
+    category: communication
+    state: blocked_credentials
+    reason: Implemented; intentionally left disabled pending FAL API key.
+    validation_command: "python -c \"import tools.image_generation_tool\""
+    implementation_paths: ["tools/image_generation_tool.py"]
+    requires_credentials: ["FAL_KEY"]
+    node: shared
+
+  - key: voice_tts_local
+    display_name: Voice/TTS (free local providers)
+    category: communication
+    state: active
+    reason: >
+      Edge TTS (default, free) plus fully local NeuTTS/KittenTTS/Piper
+      options require no external credentials.
+    validation_command: "python -c \"import tools.tts_tool\""
+    implementation_paths: ["tools/tts_tool.py"]
+    node: shared
+
+  - key: voice_tts_cloud
+    display_name: Voice/TTS (paid cloud providers)
+    category: communication
+    state: blocked_credentials
+    reason: >
+      ElevenLabs/OpenAI/MiniMax/Mistral/Gemini/xAI TTS providers all
+      implemented; intentionally left disabled pending their respective
+      API keys.
+    validation_command: "python -c \"import tools.tts_tool\""
+    implementation_paths: ["tools/tts_tool.py"]
+    requires_credentials: ["ELEVENLABS_API_KEY", "OPENAI_API_KEY", "MINIMAX_API_KEY"]
+    node: shared
+
+  # ── Fleet (Titan/Mac) capabilities ──────────────────────────────────────
+
+  - key: hermes_link_cli
+    display_name: Hermes Link CLI (Mac/Titan communication protocol)
+    category: fleet
+    state: blocked_credentials
+    reason: >
+      `hermes link {status,queue,sync,chat}` is a real, wired CLI command
+      (help text literally documents "Governed Mac / Titan Hermes
+      communication") but every subcommand's client construction
+      (hermes_cli/hermes_link/commands.py:_client(), lines 16-33) requires
+      either HERMES_LINK_TOKEN or the signed-identity trio
+      (HERMES_LINK_CREDENTIAL_REGISTRY + HERMES_LINK_COORDINATOR_NODE_ID +
+      HERMES_LINK_TARGET_NODE_ID); none is set in this environment.
+      Empirically confirmed: `hermes link status` fails with "link:
+      HERMES_LINK_TOKEN is not configured" rather than succeeding — this
+      entry was reclassified from an initial "active" guess after that
+      spot-check, per this manifest's own "verify, don't guess" standard.
+    validation_command: "hermes link status"
+    implementation_paths:
+      - hermes_cli/hermes_link/commands.py
+      - hermes_cli/hermes_link/runtime.py
+      - hermes_cli/subcommands/link.py
+    requires_credentials: ["HERMES_LINK_TOKEN"]
+    node: shared
+
+  - key: hermes_link_titan_node
+    display_name: Titan node (hermes-link little_sister)
+    category: fleet
+    state: blocked_runtime
+    reason: >
+      Example config exists (deploy/hermes-link/titan.service.json.example)
+      with safe defaults (network_allowed/shell_allowed/filesystem_allowed
+      all false), but no real Titan Raspberry Pi is provisioned/reachable
+      from this development environment. See deploy/titan/ for this
+      deployment's filled-in template.
+    validation_command: "test -f deploy/titan/titan.service.json.example"
+    implementation_paths: ["deploy/hermes-link/titan.service.json.example"]
+    node: titan
+
+  - key: hermes_link_mac_node
+    display_name: Mac coordinator node (hermes-link)
+    category: fleet
+    state: blocked_runtime
+    reason: >
+      Example config exists (deploy/hermes-link/mac-coordinator.json.example,
+      ships enabled:false with placeholder tailnet_dns_identity values); no
+      real Mac coordinator is provisioned/reachable from this development
+      environment. See deploy/mac/ for this deployment's filled-in template.
+    validation_command: "test -f deploy/mac/mac-coordinator.json.example"
+    implementation_paths: ["deploy/hermes-link/mac-coordinator.json.example"]
+    node: mac
+
+  - key: tailscale_connectivity_check
+    display_name: Tailscale connectivity + node-identity verification
+    category: fleet
+    state: active
+    reason: >
+      New for this activation: a fail-closed connectivity/identity check
+      (scripts/fleet_connectivity_check.py) that refuses to report a node
+      reachable unless both Tailscale status and node identity can be
+      positively verified.
+    validation_command: "python scripts/fleet_connectivity_check.py --help"
+    implementation_paths: ["scripts/fleet_connectivity_check.py"]
+    node: shared
+
+  - key: computer_use_mac_routing
+    display_name: Automatic Titan-to-Mac computer-use routing
+    category: fleet
+    state: not_selected
+    reason: >
+      Nothing in tools/computer_use/ auto-detects "running on Titan, route
+      to Mac" — this would require new dispatch logic bridging
+      tools/computer_use/ and hermes_link, which is a genuine feature build
+      (not a configuration activation) and carries real risk (desktop
+      mutation authority crossing a network boundary) that needs its own
+      dedicated approval-policy design. Excluded from this pass per "Do not
+      enable unrestricted browser or desktop mutation" guidance; documented
+      here as a concrete follow-up rather than silently omitted.
+    node: shared
