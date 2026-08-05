@@ -227,6 +227,11 @@ def certify_fleet(
     certifier_identity_id: str,
     now: int,
     revalidation_seconds: int,
+    live_runtime_fleet_registry_and_heartbeat_selftest_passed: Optional[bool] = None,
+    live_runtime_dispatch_routing_and_model_configuration_selftest_passed: Optional[bool] = None,
+    live_runtime_desktop_use_and_operator_approval_selftest_passed: Optional[bool] = None,
+    live_runtime_sigil_isolation_selftest_passed: Optional[bool] = None,
+    live_runtime_evidence_integrity_selftest_passed: Optional[bool] = None,
     evidence_refs: Tuple[str, ...] = (),
     event_refs: Tuple[str, ...] = (),
     correlation_id: Optional[str] = None,
@@ -239,6 +244,16 @@ def certify_fleet(
     than silently proceeding as if Stage 1 were unaffected — a fleet
     certification can never claim to be CERTIFIED without positively
     confirming the immutable Stage 1 baseline still holds.
+
+    The five ``live_runtime_*`` parameters are the same shape:
+    ``Optional[bool]``, defaulting to ``None``. Each maps to one of the
+    real (non-mocked) selftests in
+    :mod:`hermes_cli.prime.live_runtime_certification` — a caller that has
+    not actually run
+    :func:`hermes_cli.prime.live_runtime_certification.run_all_live_runtime_selftests`
+    and passes ``None`` gets a FAILED certification for that check, never a
+    silent pass. This mirrors ``stage1_regression_passed`` exactly: absence
+    of live-runtime component evidence is failure, not "not applicable".
     """
     checks: list[FleetCertificationCheck] = [
         FleetCertificationCheck(
@@ -303,6 +318,66 @@ def certify_fleet(
                 else "stage1_regression_not_confirmed"
                 if stage1_regression_passed is None
                 else "stage1_regression_failed"
+            ),
+        ),
+        FleetCertificationCheck(
+            check_id="live_runtime_fleet_registry_and_heartbeat_selftest",
+            passed=bool(live_runtime_fleet_registry_and_heartbeat_selftest_passed),
+            severity=CheckSeverity.CRITICAL,
+            reason_code=(
+                None
+                if live_runtime_fleet_registry_and_heartbeat_selftest_passed is True
+                else "live_runtime_fleet_registry_and_heartbeat_selftest_not_confirmed"
+                if live_runtime_fleet_registry_and_heartbeat_selftest_passed is None
+                else "live_runtime_fleet_registry_and_heartbeat_selftest_failed"
+            ),
+        ),
+        FleetCertificationCheck(
+            check_id="live_runtime_dispatch_routing_and_model_configuration_selftest",
+            passed=bool(live_runtime_dispatch_routing_and_model_configuration_selftest_passed),
+            severity=CheckSeverity.CRITICAL,
+            reason_code=(
+                None
+                if live_runtime_dispatch_routing_and_model_configuration_selftest_passed is True
+                else "live_runtime_dispatch_routing_and_model_configuration_selftest_not_confirmed"
+                if live_runtime_dispatch_routing_and_model_configuration_selftest_passed is None
+                else "live_runtime_dispatch_routing_and_model_configuration_selftest_failed"
+            ),
+        ),
+        FleetCertificationCheck(
+            check_id="live_runtime_desktop_use_and_operator_approval_selftest",
+            passed=bool(live_runtime_desktop_use_and_operator_approval_selftest_passed),
+            severity=CheckSeverity.CRITICAL,
+            reason_code=(
+                None
+                if live_runtime_desktop_use_and_operator_approval_selftest_passed is True
+                else "live_runtime_desktop_use_and_operator_approval_selftest_not_confirmed"
+                if live_runtime_desktop_use_and_operator_approval_selftest_passed is None
+                else "live_runtime_desktop_use_and_operator_approval_selftest_failed"
+            ),
+        ),
+        FleetCertificationCheck(
+            check_id="live_runtime_sigil_isolation_selftest",
+            passed=bool(live_runtime_sigil_isolation_selftest_passed),
+            severity=CheckSeverity.CRITICAL,
+            reason_code=(
+                None
+                if live_runtime_sigil_isolation_selftest_passed is True
+                else "live_runtime_sigil_isolation_selftest_not_confirmed"
+                if live_runtime_sigil_isolation_selftest_passed is None
+                else "live_runtime_sigil_isolation_selftest_failed"
+            ),
+        ),
+        FleetCertificationCheck(
+            check_id="live_runtime_evidence_integrity_selftest",
+            passed=bool(live_runtime_evidence_integrity_selftest_passed),
+            severity=CheckSeverity.CRITICAL,
+            reason_code=(
+                None
+                if live_runtime_evidence_integrity_selftest_passed is True
+                else "live_runtime_evidence_integrity_selftest_not_confirmed"
+                if live_runtime_evidence_integrity_selftest_passed is None
+                else "live_runtime_evidence_integrity_selftest_failed"
             ),
         ),
     ]

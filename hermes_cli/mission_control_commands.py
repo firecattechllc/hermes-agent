@@ -256,6 +256,61 @@ def _cmd_overview(args: argparse.Namespace) -> int:
         return 1
 
 
+def _fleet_rows(snapshot: m.MissionControlSnapshot) -> List[Dict[str, Any]]:
+    return [
+        {
+            "natural_key": node.natural_key,
+            "role": node.role or "unknown",
+            "connection_state": node.connection_state,
+            "healthy": node.is_healthy(),
+            "revoked": node.revoked,
+            "admission_outcome": node.last_admission_outcome or "unknown",
+            "admission_reason_codes": node.last_admission_reason_codes,
+            "certification_status": node.last_certification_status or "unknown",
+            "model_inventory": node.model_inventory,
+            "last_seen_at": node.last_seen_at,
+            "updated_at": node.updated_at,
+        }
+        for node in snapshot.fleet_node_states
+    ]
+
+
+def _print_fleet(rows: List[Dict[str, Any]]) -> None:
+    if not rows:
+        print("(no fleet nodes registered)")
+        return
+    header = f"  {'NODE':<12}{'ROLE':<10}{'STATE':<13}{'HEALTHY':<9}{'ADMISSION':<11}{'CERT':<11}MODELS"
+    print(header)
+    for row in rows:
+        healthy = "yes" if row["healthy"] else "no"
+        models = ",".join(row["model_inventory"]) or "-"
+        print(
+            f"  {row['natural_key']:<12}{row['role']:<10}{row['connection_state']:<13}"
+            f"{healthy:<9}{row['admission_outcome']:<11}{row['certification_status']:<11}{models}"
+        )
+    blocked = [row for row in rows if not row["healthy"] and row["admission_reason_codes"]]
+    if blocked:
+        print("  blocked:")
+        for row in blocked:
+            print(f"    {row['natural_key']}: {', '.join(row['admission_reason_codes'])}")
+
+
+def _cmd_fleet(args: argparse.Namespace) -> int:
+    service = _get_service()
+    try:
+        snapshot = service.get_snapshot(args.project, generated_by="cli")
+    except ValueError as exc:
+        print(f"mission-control fleet: {exc}", file=sys.stderr)
+        return 1
+    rows = _fleet_rows(snapshot)
+    if args.json:
+        _print_json({"fleet_nodes": rows})
+        return 0
+    print(f"Fleet [{snapshot.project_id}]")
+    _print_fleet(rows)
+    return 0
+
+
 def build_mission_control_parser(
     parent_subparsers: argparse._SubParsersAction,
 ) -> argparse.ArgumentParser:
@@ -298,6 +353,11 @@ def build_mission_control_parser(
     p_overview.add_argument("--watch", action="store_true", help="Refresh continuously")
     p_overview.add_argument("--interval", type=float, default=2.0, help="Refresh interval in seconds")
     p_overview.set_defaults(_mission_control_handler=_cmd_overview)
+
+    p_fleet = sub.add_parser("fleet", help="Show live fleet node status (Prime/Titan/Mac/Hydra Live)")
+    p_fleet.add_argument("project", help="Project ID")
+    p_fleet.add_argument("--json", action="store_true", help="Output JSON")
+    p_fleet.set_defaults(_mission_control_handler=_cmd_fleet)
 
     return parser
 

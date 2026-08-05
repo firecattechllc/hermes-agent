@@ -417,12 +417,18 @@ class MissionControlStore:
         approval_states: Dict[str, m.ApprovalStateSnapshot] = {}
         evidence_states: Dict[str, m.EvidenceStateSnapshot] = {}
         promotion_states: Dict[str, m.PromotionStateSnapshot] = {}
+        fleet_node_states: Dict[str, m.FleetNodeStateSnapshot] = {}
+        # Built up as fleet-node-registration events are replayed, so a later
+        # event keyed only by identity_id (admission, certification) can
+        # still be attributed back to the right node's natural_key.
+        fleet_identity_to_natural_key: Dict[str, str] = {}
 
         for event in sorted_events:
             _apply_event_to_projection(
                 event, project_id,
                 agent_states, backlog_states, approval_states,
                 evidence_states, promotion_states,
+                fleet_node_states, fleet_identity_to_natural_key,
             )
 
         # Version = event count (deterministic provenance).
@@ -440,6 +446,9 @@ class MissionControlStore:
             approval_states=sorted(approval_states.values(), key=lambda a: a.approval_id),
             evidence_states=sorted(evidence_states.values(), key=lambda e: e.evidence_id),
             promotion_states=sorted(promotion_states.values(), key=lambda p: p.promotion_id),
+            fleet_node_states=sorted(
+                fleet_node_states.values(), key=lambda f: f.natural_key
+            ),
         )
 
 
@@ -453,6 +462,8 @@ def _apply_event_to_projection(
     approval_states: Dict[str, m.ApprovalStateSnapshot],
     evidence_states: Dict[str, m.EvidenceStateSnapshot],
     promotion_states: Dict[str, m.PromotionStateSnapshot],
+    fleet_node_states: Dict[str, m.FleetNodeStateSnapshot],
+    fleet_identity_to_natural_key: Dict[str, str],
 ) -> None:
     """Apply a single TelemetryEvent to the in-progress projection state.
 
@@ -768,6 +779,101 @@ def _apply_event_to_projection(
                 deployed_at=event.timestamp if etype == "promotion_deployed" else None,
                 target_ref=event.payload.get("target_ref"),
             )
+
+    # ── Fleet node registration ──────────────────────────────────────────
+    elif etype in ("prime_fleet_node_registered", "prime_fleet_node_registration_rejected"):
+        decision = event.payload.get("decision") or {}
+        natural_key = decision.get("natural_key")
+        if not natural_key:
+            return
+        record = event.payload.get("record")
+        if etype == "prime_fleet_node_registered":
+            identity_id = decision.get("identity_id")
+            if identity_id:
+                fleet_identity_to_natural_key[identity_id] = natural_key
+            existing = fleet_node_states.get(natural_key)
+            fleet_node_states[natural_key] = m.FleetNodeStateSnapshot(
+                natural_key=natural_key,
+                project_id=project_id,
+                identity_id=identity_id,
+                role=(record or {}).get("role") if record else (existing.role if existing else None),
+                connection_state=existing.connection_state if existing else "unknown",
+                model_inventory=(
+                    list((record or {}).get("model_inventory", []))
+                    if record
+                    else (existing.model_inventory if existing else [])
+                ),
+                last_seen_at=existing.last_seen_at if existing else None,
+                last_admission_outcome=existing.last_admission_outcome if existing else None,
+                last_admission_reason_codes=(
+                    existing.last_admission_reason_codes if existing else []
+                ),
+                last_certification_status=existing.last_certification_status if existing else None,
+                revoked=bool((record or {}).get("revoked", False)),
+                last_event_id=event.event_id,
+                last_event_type=etype,
+                updated_at=event.timestamp,
+            )
+        # A rejected registration attempt does not mutate the target node's
+        # state at all — it describes an attempt, not a transition.
+
+    # ── Fleet node heartbeat / connection state ──────────────────────────
+    elif etype == "prime_fleet_node_connection_changed":
+        natural_key = event.payload.get("natural_key")
+        result = event.payload.get("result") or {}
+        connection_state = result.get("connection_state")
+        if not natural_key or not connection_state:
+            return
+        existing = fleet_node_states.get(natural_key)
+        base: Dict[str, Any] = (
+            existing.model_dump() if existing else {"natural_key": natural_key, "project_id": project_id}
+        )
+        base.update(
+            connection_state=connection_state,
+            last_seen_at=event.timestamp,
+            last_event_id=event.event_id,
+            last_event_type=etype,
+            updated_at=event.timestamp,
+        )
+        fleet_node_states[natural_key] = m.FleetNodeStateSnapshot(**base)
+
+    # ── Fleet node admission decisions ────────────────────────────────────
+    elif etype == "prime_admission_decided":
+        decision = event.payload.get("decision") or {}
+        subject_identity_id = decision.get("subject_identity_id")
+        if not isinstance(subject_identity_id, str):
+            return
+        natural_key = fleet_identity_to_natural_key.get(subject_identity_id)
+        if not natural_key or natural_key not in fleet_node_states:
+            return  # not a known fleet node — do not fabricate an entry
+        existing = fleet_node_states[natural_key]
+        base = existing.model_dump()
+        base.update(
+            last_admission_outcome=decision.get("outcome"),
+            last_admission_reason_codes=list(decision.get("reason_codes", [])),
+            last_event_id=event.event_id,
+            last_event_type=etype,
+            updated_at=event.timestamp,
+        )
+        fleet_node_states[natural_key] = m.FleetNodeStateSnapshot(**base)
+
+    # ── Fleet certification ────────────────────────────────────────────────
+    elif etype == "prime_fleet_certified":
+        certification = event.payload.get("certification") or {}
+        status = certification.get("status")
+        for identity_id in certification.get("evaluated_identity_ids", []):
+            natural_key = fleet_identity_to_natural_key.get(identity_id)
+            if not natural_key or natural_key not in fleet_node_states:
+                continue
+            existing = fleet_node_states[natural_key]
+            base = existing.model_dump()
+            base.update(
+                last_certification_status=status,
+                last_event_id=event.event_id,
+                last_event_type=etype,
+                updated_at=event.timestamp,
+            )
+            fleet_node_states[natural_key] = m.FleetNodeStateSnapshot(**base)
 
     # ── Context ingestion events do not mutate projection state ──────────
     # but are preserved in the event list for traceability.
