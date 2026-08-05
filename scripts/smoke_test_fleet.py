@@ -251,7 +251,7 @@ def check_computer_use_doctor() -> CheckResult:
 def run_all_checks(
     *, titan_dns_identity: Optional[str], mac_dns_identity: Optional[str]
 ) -> List[CheckResult]:
-    checks: List[Callable[[], object]] = [
+    checks: List[Callable[[], CheckResult]] = [
         check_hermes_cli_available,
         check_capability_manifest,
         check_deploy_templates_present,
