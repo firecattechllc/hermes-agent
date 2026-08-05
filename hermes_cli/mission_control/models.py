@@ -187,6 +187,10 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "prime_sigil_contract_invoked",
     "prime_remote_maintenance_decided",
     "prime_fleet_certified",
+    # Ecosystem services registry — Paperclip, Buzz Relay, Buzznode, Hermes
+    # WebUI/Wiki adapters, Agent Reach, Self-Evolution, ecosystem catalog.
+    "prime_service_registered",
+    "prime_service_registration_rejected",
 })
 
 
@@ -425,6 +429,69 @@ class PromotionStateSnapshot(BaseModel):
         return _validate_schema(v)
 
 
+# ── Ecosystem service state snapshot ────────────────────────────────────────
+
+_ECOSYSTEM_SERVICE_INSTALLATION_STATUSES = frozenset({
+    "present_disabled",
+    "available_verified",
+    "not_found",
+    "referenced_unavailable",
+    "ambiguous",
+    "obsolete",
+    "unsafe",
+})
+
+
+class EcosystemServiceStateSnapshot(BaseModel):
+    """Point-in-time snapshot of one ecosystem service's registration state.
+
+    Never represents a disabled/ungated service as operational:
+    ``installation_status`` defaults to ``"not_found"`` (the fail-closed
+    default, not e.g. ``"present_disabled"``) and this snapshot only ever
+    reflects what a real ``prime_service_registered`` telemetry event —
+    itself produced from a real, in-process module introspection, see
+    ``hermes_cli.prime.service_registry.discover_service`` — actually said.
+    """
+    service_key: str = Field(..., min_length=1, max_length=64)
+    project_id: str = Field(..., min_length=1, max_length=128)
+    identity_id: Optional[str] = Field(None, max_length=128)
+    display_name: Optional[str] = Field(None, max_length=128)
+    category: Optional[str] = Field(None, max_length=64)
+    installation_status: str = Field(default="not_found")
+    certification_gate: Optional[str] = Field(None, max_length=128)
+    certification_gate_met: bool = False
+    dispatchable: bool = False
+    revoked: bool = False
+    last_event_id: Optional[str] = Field(None, max_length=128)
+    last_event_type: Optional[str] = Field(None, max_length=128)
+    updated_at: int = Field(default_factory=_utc_now)
+    schema_version: int = Field(default=CURRENT_SCHEMA_VERSION)
+
+    @field_validator("installation_status")
+    @classmethod
+    def _check_installation_status(cls, v: str) -> str:
+        if v not in _ECOSYSTEM_SERVICE_INSTALLATION_STATUSES:
+            raise ValueError(f"unknown ecosystem service installation_status: {v!r}")
+        return v
+
+    @field_validator("schema_version")
+    @classmethod
+    def _check_version(cls, v: int) -> int:
+        return _validate_schema(v)
+
+    def is_operational(self) -> bool:
+        """True only for a non-revoked, verified, gate-met, dispatchable
+        service. Every service registered today is ``present_disabled`` with
+        ``certification_gate_met=False``, so this is always False for the
+        current catalog — by policy, not by omission."""
+        return (
+            not self.revoked
+            and self.installation_status == "available_verified"
+            and self.certification_gate_met
+            and self.dispatchable
+        )
+
+
 # ── MissionControlSnapshot ────────────────────────────────────────────────────
 
 class MissionControlSnapshot(BaseModel):
@@ -445,6 +512,7 @@ class MissionControlSnapshot(BaseModel):
     approval_states: List[ApprovalStateSnapshot] = Field(default_factory=list)
     evidence_states: List[EvidenceStateSnapshot] = Field(default_factory=list)
     promotion_states: List[PromotionStateSnapshot] = Field(default_factory=list)
+    ecosystem_service_states: List[EcosystemServiceStateSnapshot] = Field(default_factory=list)
     schema_version: int = Field(default=CURRENT_SCHEMA_VERSION)
 
     @field_validator("schema_version")

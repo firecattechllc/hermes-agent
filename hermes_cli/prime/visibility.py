@@ -30,6 +30,7 @@ from hermes_cli.prime.certification import FleetCertification, FleetCertificatio
 from hermes_cli.prime.evidence import (
     EvidenceRecord,
     ExternalEvidenceLink,
+    ExternalEvidenceSystem,
     PrimeEvidenceStore,
     SensitivityTier,
 )
@@ -38,6 +39,11 @@ from hermes_cli.prime.identity import FleetIdentity
 from hermes_cli.prime.remote_maintenance_governance import (
     MaintenanceDecision,
     MaintenanceOutcome,
+)
+from hermes_cli.prime.service_registry import (
+    ServiceRecord,
+    ServiceRegistrationOutcome,
+    ServiceRegistrationRejectionCode,
 )
 from hermes_cli.prime.sigil_contract import (
     SigilContractOutcome,
@@ -197,7 +203,7 @@ class PrimeVisibilityService:
             correlation_id=request.correlation_id,
             external_links=(
                 ExternalEvidenceLink(
-                    system="sigil_worker_contract",
+                    system=ExternalEvidenceSystem.SIGIL_WORKER_CONTRACT,
                     reference=f"sigil_contract_request:{request.request_id}",
                 ),
             ),
@@ -311,6 +317,64 @@ class PrimeVisibilityService:
                 "evidence_id": evidence.evidence_id,
                 "source_idempotency_key": f"prime_certification:{certification.certification_id}",
             },
+        )
+        published = self._mission_control.append_event_once(event)
+        return (published or event), evidence
+
+    # ── Ecosystem service registration ──────────────────────────────────
+
+    def publish_service_registration(
+        self,
+        project_id: str,
+        *,
+        service_key: str,
+        outcome: ServiceRegistrationOutcome,
+        record: Optional[ServiceRecord] = None,
+        rejection_code: Optional[ServiceRegistrationRejectionCode] = None,
+        now: int,
+        correlation_id: Optional[str] = None,
+    ) -> Tuple[mission_models.TelemetryEvent, EvidenceRecord]:
+        accepted = outcome != ServiceRegistrationOutcome.REJECTED
+        event_type = (
+            "prime_service_registered" if accepted else "prime_service_registration_rejected"
+        )
+
+        evidence = EvidenceRecord.build(
+            kind=event_type,
+            producer_identity_id="prime",
+            subject_identity_id=record.identity_id if record is not None else None,
+            provenance="prime_service_registry",
+            timestamp=now,
+            correlation_id=correlation_id,
+            redacted_summary=(
+                f"ecosystem service registration for {service_key!r}: {outcome.value}"
+                + (f" ({rejection_code.value})" if rejection_code is not None else "")
+            ),
+            sensitivity=SensitivityTier.INTERNAL,
+        )
+        self._evidence_store.append(evidence)
+
+        payload = {
+            "source": "prime",
+            "service_key": service_key,
+            "outcome": outcome.value,
+            "rejection_code": rejection_code.value if rejection_code is not None else None,
+            "evidence_id": evidence.evidence_id,
+            "source_idempotency_key": f"prime_service_registration:{service_key}:{outcome.value}:{now}",
+        }
+        if record is not None:
+            record_payload = record.model_dump(mode="json")
+            record_payload["dispatchable"] = record.is_dispatchable()
+            payload["record"] = record_payload
+
+        event = mission_models.TelemetryEvent(
+            event_id=f"telemetry_service_{service_key}_{now}_{outcome.value}",
+            event_type=event_type,
+            project_id=project_id,
+            timestamp=now,
+            severity="info" if accepted else "warning",
+            correlation_id=correlation_id,
+            payload=payload,
         )
         published = self._mission_control.append_event_once(event)
         return (published or event), evidence

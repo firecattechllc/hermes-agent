@@ -29,6 +29,12 @@ def _all_pass_kwargs(now: int, **overrides) -> dict:
         sigil_contract_restrictions_selftest_passed=True,
         remote_maintenance_default_deny_selftest_passed=True,
         stage1_regression_passed=True,
+        ecosystem_services_no_unsafe_drift_selftest_passed=True,
+        ecosystem_services_availability_selftest_passed=True,
+        ecosystem_unverified_service_rejection_selftest_passed=True,
+        ecosystem_duplicate_and_revoked_service_rejection_selftest_passed=True,
+        ecosystem_self_evolution_self_approval_guard_selftest_passed=True,
+        ecosystem_evidence_integrity_selftest_passed=True,
         policy_version="prime-admission-policy-v1",
         certifier_identity_id="prime",
         now=now,
@@ -122,3 +128,116 @@ def test_certification_grants_no_operational_authority_marker() -> None:
     assert cert.grants_no_operational_authority() is None
     assert not hasattr(cert, "execution_authorized")
     assert not hasattr(cert, "operational_authority")
+
+
+_CRITICAL_ECOSYSTEM_FIELDS = [
+    "ecosystem_services_no_unsafe_drift_selftest_passed",
+    "ecosystem_unverified_service_rejection_selftest_passed",
+    "ecosystem_duplicate_and_revoked_service_rejection_selftest_passed",
+    "ecosystem_self_evolution_self_approval_guard_selftest_passed",
+    "ecosystem_evidence_integrity_selftest_passed",
+]
+
+
+@pytest.mark.parametrize("field", _CRITICAL_ECOSYSTEM_FIELDS)
+def test_missing_critical_ecosystem_selftest_confirmation_fails_not_certifies(field: str) -> None:
+    """None (never run) fails closed — mirrors stage1_regression_passed's
+    convention, but as CRITICAL since these guard core safety invariants."""
+    now = _now()
+    cert = certify_fleet(**_all_pass_kwargs(now, **{field: None}))
+    assert cert.status == FleetCertificationStatus.FAILED
+    assert f"{field.removesuffix('_passed')}_not_confirmed" in cert.reason_codes
+
+
+@pytest.mark.parametrize("field", _CRITICAL_ECOSYSTEM_FIELDS)
+def test_failed_critical_ecosystem_selftest_fails_certification(field: str) -> None:
+    now = _now()
+    cert = certify_fleet(**_all_pass_kwargs(now, **{field: False}))
+    assert cert.status == FleetCertificationStatus.FAILED
+    assert f"{field.removesuffix('_passed')}_failed" in cert.reason_codes
+
+
+def test_missing_ecosystem_availability_selftest_blocks_not_fails() -> None:
+    """The one BLOCKING (optional-service) ecosystem check must never
+    escalate to FAILED on its own — a missing optional service blocks
+    CERTIFIED status without being conflated with a core-safety failure."""
+    now = _now()
+    cert = certify_fleet(
+        **_all_pass_kwargs(now, ecosystem_services_availability_selftest_passed=None)
+    )
+    assert cert.status == FleetCertificationStatus.BLOCKED
+    assert "ecosystem_services_availability_selftest_not_confirmed" in cert.reason_codes
+
+
+def test_failed_ecosystem_availability_selftest_blocks_not_fails() -> None:
+    now = _now()
+    cert = certify_fleet(
+        **_all_pass_kwargs(now, ecosystem_services_availability_selftest_passed=False)
+    )
+    assert cert.status == FleetCertificationStatus.BLOCKED
+    assert "ecosystem_services_availability_selftest_failed" in cert.reason_codes
+
+
+def test_ecosystem_availability_failure_does_not_mask_a_critical_failure() -> None:
+    """A failed optional-service availability check must never make a
+    concurrent core-safety failure look merely BLOCKED instead of FAILED —
+    CRITICAL always dominates BLOCKING."""
+    now = _now()
+    cert = certify_fleet(
+        **_all_pass_kwargs(
+            now,
+            ecosystem_services_availability_selftest_passed=False,
+            ecosystem_services_no_unsafe_drift_selftest_passed=False,
+        )
+    )
+    assert cert.status == FleetCertificationStatus.FAILED
+
+
+def test_certify_fleet_omitting_ecosystem_params_defaults_to_failed() -> None:
+    """Omitting the new parameters entirely (not just passing None) must
+    also fail closed — they default to None, not True."""
+    now = _now()
+    kwargs = _all_pass_kwargs(now)
+    for field in (
+        *_CRITICAL_ECOSYSTEM_FIELDS,
+        "ecosystem_services_availability_selftest_passed",
+    ):
+        del kwargs[field]
+    cert = certify_fleet(**kwargs)
+    assert cert.status == FleetCertificationStatus.FAILED
+
+
+def test_certify_fleet_with_real_ecosystem_selftests_is_certified() -> None:
+    """End-to-end: the actual (non-mocked)
+    hermes_cli.prime.ecosystem_service_certification selftests, run for
+    real, are sufficient to certify."""
+    from hermes_cli.prime.ecosystem_service_certification import (
+        run_all_ecosystem_service_selftests,
+    )
+
+    now = _now()
+    results = run_all_ecosystem_service_selftests()
+    cert = certify_fleet(
+        **_all_pass_kwargs(
+            now,
+            ecosystem_services_no_unsafe_drift_selftest_passed=results[
+                "ecosystem_services_no_unsafe_drift"
+            ],
+            ecosystem_services_availability_selftest_passed=results[
+                "ecosystem_services_availability"
+            ],
+            ecosystem_unverified_service_rejection_selftest_passed=results[
+                "unverified_service_rejection"
+            ],
+            ecosystem_duplicate_and_revoked_service_rejection_selftest_passed=results[
+                "duplicate_and_revoked_service_rejection"
+            ],
+            ecosystem_self_evolution_self_approval_guard_selftest_passed=results[
+                "self_evolution_self_approval_guard"
+            ],
+            ecosystem_evidence_integrity_selftest_passed=results[
+                "ecosystem_evidence_integrity"
+            ],
+        )
+    )
+    assert cert.status == FleetCertificationStatus.CERTIFIED

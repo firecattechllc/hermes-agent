@@ -117,6 +117,41 @@ def test_mission_control_overview_json(monkeypatch, tmp_path: Path, capsys) -> N
     assert "recent_events" in payload
 
 
+def test_mission_control_services_json(monkeypatch, tmp_path: Path, capsys) -> None:
+    from hermes_cli.prime.evidence import PrimeEvidenceStore
+    from hermes_cli.prime.service_registry import EcosystemServiceRegistry, EcosystemServiceRegistryStore
+    from hermes_cli.prime.visibility import PrimeVisibilityService
+
+    service = MissionControlService(store=MissionControlStore(root=tmp_path / "mission_control"))
+    visibility = PrimeVisibilityService(service, PrimeEvidenceStore(state_root=tmp_path / "prime-evidence"))
+    registry = EcosystemServiceRegistry(store=EcosystemServiceRegistryStore(state_root=tmp_path / "prime"))
+    now = 1_700_000_000
+    outcome, record, rejection = registry.register_known_service("paperclip", now=now)
+    visibility.publish_service_registration(
+        "proj_a", service_key="paperclip", outcome=outcome, record=record, rejection_code=rejection, now=now,
+    )
+
+    monkeypatch.setattr("hermes_cli.mission_control_commands._get_service", lambda: service)
+    args = _parser().parse_args(["mission-control", "services", "proj_a", "--json"])
+
+    assert args.func(args) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["services"][0]["service_key"] == "paperclip"
+    assert payload["services"][0]["installation_status"] == "present_disabled"
+    assert payload["services"][0]["operational"] is False
+
+
+def test_mission_control_services_text_with_none_registered(monkeypatch, tmp_path: Path, capsys) -> None:
+    service = MissionControlService(store=MissionControlStore(root=tmp_path / "mission_control"))
+    monkeypatch.setattr("hermes_cli.mission_control_commands._get_service", lambda: service)
+    args = _parser().parse_args(["mission-control", "services", "empty_project"])
+
+    assert args.func(args) == 0
+    out = capsys.readouterr().out
+    assert "no ecosystem services registered" in out
+
+
 def test_main_builtin_subcommands_include_mission_control() -> None:
     from hermes_cli.main import _BUILTIN_SUBCOMMANDS
 

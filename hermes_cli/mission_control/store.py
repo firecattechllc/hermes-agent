@@ -417,12 +417,13 @@ class MissionControlStore:
         approval_states: Dict[str, m.ApprovalStateSnapshot] = {}
         evidence_states: Dict[str, m.EvidenceStateSnapshot] = {}
         promotion_states: Dict[str, m.PromotionStateSnapshot] = {}
+        ecosystem_service_states: Dict[str, m.EcosystemServiceStateSnapshot] = {}
 
         for event in sorted_events:
             _apply_event_to_projection(
                 event, project_id,
                 agent_states, backlog_states, approval_states,
-                evidence_states, promotion_states,
+                evidence_states, promotion_states, ecosystem_service_states,
             )
 
         # Version = event count (deterministic provenance).
@@ -440,6 +441,9 @@ class MissionControlStore:
             approval_states=sorted(approval_states.values(), key=lambda a: a.approval_id),
             evidence_states=sorted(evidence_states.values(), key=lambda e: e.evidence_id),
             promotion_states=sorted(promotion_states.values(), key=lambda p: p.promotion_id),
+            ecosystem_service_states=sorted(
+                ecosystem_service_states.values(), key=lambda s: s.service_key
+            ),
         )
 
 
@@ -453,6 +457,7 @@ def _apply_event_to_projection(
     approval_states: Dict[str, m.ApprovalStateSnapshot],
     evidence_states: Dict[str, m.EvidenceStateSnapshot],
     promotion_states: Dict[str, m.PromotionStateSnapshot],
+    ecosystem_service_states: Dict[str, m.EcosystemServiceStateSnapshot],
 ) -> None:
     """Apply a single TelemetryEvent to the in-progress projection state.
 
@@ -768,6 +773,34 @@ def _apply_event_to_projection(
                 deployed_at=event.timestamp if etype == "promotion_deployed" else None,
                 target_ref=event.payload.get("target_ref"),
             )
+
+    # ── Ecosystem service registration ────────────────────────────────────
+    elif etype in ("prime_service_registered", "prime_service_registration_rejected"):
+        service_key = event.payload.get("service_key")
+        if not service_key:
+            return
+        if etype == "prime_service_registration_rejected":
+            # A rejected registration attempt does not mutate the target
+            # service's own state — it describes an attempt, not a
+            # transition, exactly mirroring fleet-node registration
+            # rejection semantics.
+            return
+        record = event.payload.get("record") or {}
+        ecosystem_service_states[service_key] = m.EcosystemServiceStateSnapshot(
+            service_key=service_key,
+            project_id=project_id,
+            identity_id=record.get("identity_id"),
+            display_name=record.get("display_name"),
+            category=record.get("category"),
+            installation_status=record.get("installation_status", "not_found"),
+            certification_gate=record.get("certification_gate"),
+            certification_gate_met=bool(record.get("certification_gate_met", False)),
+            dispatchable=bool(record.get("dispatchable", False)),
+            revoked=bool(record.get("revoked", False)),
+            last_event_id=event.event_id,
+            last_event_type=etype,
+            updated_at=event.timestamp,
+        )
 
     # ── Context ingestion events do not mutate projection state ──────────
     # but are preserved in the event list for traceability.

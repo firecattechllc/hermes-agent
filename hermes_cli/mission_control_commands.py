@@ -256,6 +256,56 @@ def _cmd_overview(args: argparse.Namespace) -> int:
         return 1
 
 
+def _service_rows(snapshot: m.MissionControlSnapshot) -> List[Dict[str, Any]]:
+    return [
+        {
+            "service_key": s.service_key,
+            "display_name": s.display_name or s.service_key,
+            "category": s.category or "unknown",
+            "installation_status": s.installation_status,
+            "certification_gate": s.certification_gate,
+            "certification_gate_met": s.certification_gate_met,
+            "dispatchable": s.dispatchable,
+            "operational": s.is_operational(),
+            "revoked": s.revoked,
+            "updated_at": s.updated_at,
+        }
+        for s in snapshot.ecosystem_service_states
+    ]
+
+
+def _print_services(rows: List[Dict[str, Any]]) -> None:
+    if not rows:
+        print("(no ecosystem services registered)")
+        return
+    header = f"  {'SERVICE':<24}{'STATUS':<18}{'GATE MET':<10}{'DISPATCHABLE':<14}OPERATIONAL"
+    print(header)
+    for row in rows:
+        gate_met = "yes" if row["certification_gate_met"] else "no"
+        dispatchable = "yes" if row["dispatchable"] else "no"
+        operational = "yes" if row["operational"] else "no"
+        print(
+            f"  {row['service_key']:<24}{row['installation_status']:<18}"
+            f"{gate_met:<10}{dispatchable:<14}{operational}"
+        )
+
+
+def _cmd_services(args: argparse.Namespace) -> int:
+    service = _get_service()
+    try:
+        snapshot = service.get_snapshot(args.project, generated_by="cli")
+    except ValueError as exc:
+        print(f"mission-control services: {exc}", file=sys.stderr)
+        return 1
+    rows = _service_rows(snapshot)
+    if args.json:
+        _print_json({"services": rows})
+        return 0
+    print(f"Ecosystem Services [{snapshot.project_id}]")
+    _print_services(rows)
+    return 0
+
+
 def build_mission_control_parser(
     parent_subparsers: argparse._SubParsersAction,
 ) -> argparse.ArgumentParser:
@@ -298,6 +348,13 @@ def build_mission_control_parser(
     p_overview.add_argument("--watch", action="store_true", help="Refresh continuously")
     p_overview.add_argument("--interval", type=float, default=2.0, help="Refresh interval in seconds")
     p_overview.set_defaults(_mission_control_handler=_cmd_overview)
+
+    p_services = sub.add_parser(
+        "services", help="Show registered ecosystem services (Paperclip, Buzz, Wiki, etc.)"
+    )
+    p_services.add_argument("project", help="Project ID")
+    p_services.add_argument("--json", action="store_true", help="Output JSON")
+    p_services.set_defaults(_mission_control_handler=_cmd_services)
 
     return parser
 

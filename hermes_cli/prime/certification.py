@@ -227,6 +227,12 @@ def certify_fleet(
     certifier_identity_id: str,
     now: int,
     revalidation_seconds: int,
+    ecosystem_services_no_unsafe_drift_selftest_passed: Optional[bool] = None,
+    ecosystem_services_availability_selftest_passed: Optional[bool] = None,
+    ecosystem_unverified_service_rejection_selftest_passed: Optional[bool] = None,
+    ecosystem_duplicate_and_revoked_service_rejection_selftest_passed: Optional[bool] = None,
+    ecosystem_self_evolution_self_approval_guard_selftest_passed: Optional[bool] = None,
+    ecosystem_evidence_integrity_selftest_passed: Optional[bool] = None,
     evidence_refs: Tuple[str, ...] = (),
     event_refs: Tuple[str, ...] = (),
     correlation_id: Optional[str] = None,
@@ -239,6 +245,18 @@ def certify_fleet(
     than silently proceeding as if Stage 1 were unaffected — a fleet
     certification can never claim to be CERTIFIED without positively
     confirming the immutable Stage 1 baseline still holds.
+
+    The six ``ecosystem_*`` parameters follow the exact same
+    ``Optional[bool]``-defaults-to-``None``-means-not-confirmed convention,
+    each backed by a real (non-mocked) selftest in
+    :mod:`hermes_cli.prime.ecosystem_service_certification` — see
+    :func:`hermes_cli.prime.ecosystem_service_certification.run_all_ecosystem_service_selftests`.
+    A caller that never ran them gets a non-CERTIFIED result for each
+    (FAILED for the five CRITICAL ones, BLOCKED for the one BLOCKING
+    availability check), never a silent pass. Five of the six are CRITICAL
+    core-safety checks; ``ecosystem_services_availability_selftest_passed``
+    is deliberately BLOCKING rather than CRITICAL, since these 8 services
+    are optional components — see that check's own comment below.
     """
     checks: list[FleetCertificationCheck] = [
         FleetCertificationCheck(
@@ -303,6 +321,83 @@ def certify_fleet(
                 else "stage1_regression_not_confirmed"
                 if stage1_regression_passed is None
                 else "stage1_regression_failed"
+            ),
+        ),
+        FleetCertificationCheck(
+            check_id="ecosystem_services_no_unsafe_drift_selftest",
+            passed=bool(ecosystem_services_no_unsafe_drift_selftest_passed),
+            severity=CheckSeverity.CRITICAL,
+            reason_code=(
+                None
+                if ecosystem_services_no_unsafe_drift_selftest_passed is True
+                else "ecosystem_services_no_unsafe_drift_selftest_not_confirmed"
+                if ecosystem_services_no_unsafe_drift_selftest_passed is None
+                else "ecosystem_services_no_unsafe_drift_selftest_failed"
+            ),
+        ),
+        FleetCertificationCheck(
+            # Deliberately BLOCKING, not CRITICAL: these 8 services are
+            # optional components. One going missing/renamed is a real,
+            # worth-surfacing regression that must still prevent a false
+            # CERTIFIED status, but it is never conflated with an actual
+            # core-safety failure (CRITICAL -> FAILED).
+            check_id="ecosystem_services_availability_selftest",
+            passed=bool(ecosystem_services_availability_selftest_passed),
+            severity=CheckSeverity.BLOCKING,
+            reason_code=(
+                None
+                if ecosystem_services_availability_selftest_passed is True
+                else "ecosystem_services_availability_selftest_not_confirmed"
+                if ecosystem_services_availability_selftest_passed is None
+                else "ecosystem_services_availability_selftest_failed"
+            ),
+        ),
+        FleetCertificationCheck(
+            check_id="ecosystem_unverified_service_rejection_selftest",
+            passed=bool(ecosystem_unverified_service_rejection_selftest_passed),
+            severity=CheckSeverity.CRITICAL,
+            reason_code=(
+                None
+                if ecosystem_unverified_service_rejection_selftest_passed is True
+                else "ecosystem_unverified_service_rejection_selftest_not_confirmed"
+                if ecosystem_unverified_service_rejection_selftest_passed is None
+                else "ecosystem_unverified_service_rejection_selftest_failed"
+            ),
+        ),
+        FleetCertificationCheck(
+            check_id="ecosystem_duplicate_and_revoked_service_rejection_selftest",
+            passed=bool(ecosystem_duplicate_and_revoked_service_rejection_selftest_passed),
+            severity=CheckSeverity.CRITICAL,
+            reason_code=(
+                None
+                if ecosystem_duplicate_and_revoked_service_rejection_selftest_passed is True
+                else "ecosystem_duplicate_and_revoked_service_rejection_selftest_not_confirmed"
+                if ecosystem_duplicate_and_revoked_service_rejection_selftest_passed is None
+                else "ecosystem_duplicate_and_revoked_service_rejection_selftest_failed"
+            ),
+        ),
+        FleetCertificationCheck(
+            check_id="ecosystem_self_evolution_self_approval_guard_selftest",
+            passed=bool(ecosystem_self_evolution_self_approval_guard_selftest_passed),
+            severity=CheckSeverity.CRITICAL,
+            reason_code=(
+                None
+                if ecosystem_self_evolution_self_approval_guard_selftest_passed is True
+                else "ecosystem_self_evolution_self_approval_guard_selftest_not_confirmed"
+                if ecosystem_self_evolution_self_approval_guard_selftest_passed is None
+                else "ecosystem_self_evolution_self_approval_guard_selftest_failed"
+            ),
+        ),
+        FleetCertificationCheck(
+            check_id="ecosystem_evidence_integrity_selftest",
+            passed=bool(ecosystem_evidence_integrity_selftest_passed),
+            severity=CheckSeverity.CRITICAL,
+            reason_code=(
+                None
+                if ecosystem_evidence_integrity_selftest_passed is True
+                else "ecosystem_evidence_integrity_selftest_not_confirmed"
+                if ecosystem_evidence_integrity_selftest_passed is None
+                else "ecosystem_evidence_integrity_selftest_failed"
             ),
         ),
     ]
