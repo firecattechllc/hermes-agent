@@ -180,6 +180,13 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "release_readiness_blocked",
     "evidence_chain_certified",
     "rollback_readiness_recorded",
+    # Fleet Unification Stage 2 — Prime control plane
+    "prime_identity_registered",
+    "prime_health_reported",
+    "prime_admission_decided",
+    "prime_sigil_contract_invoked",
+    "prime_remote_maintenance_decided",
+    "prime_fleet_certified",
 })
 
 
