@@ -589,6 +589,9 @@ function LaunchControl({
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button
+          disabled={actionLocked || snapshot.launchState === 'armed' || snapshot.killSwitch === 'engaged'}
+          onClick={() => onAction({ type: 'arm-launch' })}
+          size="sm"
           title={
             actionLocked
               ? 'Operator actions are locked for this runtime.'
@@ -598,13 +601,13 @@ function LaunchControl({
                   ? 'Simulated launch is already armed.'
                   : undefined
           }
-          disabled={actionLocked || snapshot.launchState === 'armed' || snapshot.killSwitch === 'engaged'}
-          onClick={() => onAction({ type: 'arm-launch' })}
-          size="sm"
         >
           Arm simulated launch
         </Button>
         <Button
+          disabled={actionLocked || snapshot.launchState === 'suspended'}
+          onClick={() => onAction({ type: 'suspend-launch' })}
+          size="sm"
           title={
             actionLocked
               ? 'Operator actions are locked for this runtime.'
@@ -612,14 +615,14 @@ function LaunchControl({
                 ? 'Simulated launch is already suspended.'
                 : undefined
           }
-          disabled={actionLocked || snapshot.launchState === 'suspended'}
-          onClick={() => onAction({ type: 'suspend-launch' })}
-          size="sm"
           variant="outline"
         >
           Suspend
         </Button>
         <Button
+          disabled={actionLocked || snapshot.killSwitch === 'engaged'}
+          onClick={() => onAction({ type: 'engage-kill-switch' })}
+          size="sm"
           title={
             actionLocked
               ? 'Operator actions are locked for this runtime.'
@@ -627,9 +630,6 @@ function LaunchControl({
                 ? 'The kill switch is already engaged.'
                 : undefined
           }
-          disabled={actionLocked || snapshot.killSwitch === 'engaged'}
-          onClick={() => onAction({ type: 'engage-kill-switch' })}
-          size="sm"
           variant="destructive"
         >
           Engage kill switch
@@ -2703,22 +2703,6 @@ export function SigilOperatorView({
                     snapshot.automationState === 'running' &&
                     'border-emerald-400 bg-emerald-500 text-white opacity-100 shadow-[0_0_0_1px_rgba(52,211,153,.25)]'
                 )}
-                title={
-                  cycleActionInFlight !== null
-                    ? `Paper automation ${cycleActionInFlight} is already in progress.`
-                    : action === 'start' && snapshot.automationState === 'running'
-                      ? 'Paper automation is already running.'
-                      : action === 'start' &&
-                          snapshot.paperAuthorization?.status !== 'active'
-                        ? 'Active monthly paper authorization is required before automation can start.'
-                        : action === 'pause' &&
-                            snapshot.automationState !== 'running'
-                          ? 'Paper automation can only be paused while it is running.'
-                          : action === 'stop' &&
-                              snapshot.automationState === 'stopped'
-                            ? 'Paper automation is already stopped.'
-                            : undefined
-                }
                 disabled={
                   cycleActionInFlight !== null ||
                   (action === 'start'
@@ -2748,6 +2732,22 @@ export function SigilOperatorView({
                   }
                 }}
                 size="xs"
+                title={
+                  cycleActionInFlight !== null
+                    ? `Paper automation ${cycleActionInFlight} is already in progress.`
+                    : action === 'start' && snapshot.automationState === 'running'
+                      ? 'Paper automation is already running.'
+                      : action === 'start' &&
+                          snapshot.paperAuthorization?.status !== 'active'
+                        ? 'Active monthly paper authorization is required before automation can start.'
+                        : action === 'pause' &&
+                            snapshot.automationState !== 'running'
+                          ? 'Paper automation can only be paused while it is running.'
+                          : action === 'stop' &&
+                              snapshot.automationState === 'stopped'
+                            ? 'Paper automation is already stopped.'
+                            : undefined
+                }
                 variant={
                   action === 'stop'
                     ? 'destructive'

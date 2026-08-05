@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from enum import Enum
@@ -172,6 +173,22 @@ def run_stage1_regression(
         / "scripts"
         / "verify_public_execution_isolation.py",
     ]
+    # `verify_certification_evidence.py` imports `sigil`, which only resolves
+    # implicitly when `python_executable` is the apps/sigil venv interpreter
+    # (see `_default_stage1_python`). That venv is not guaranteed to exist
+    # (e.g. in the main repo-root CI job, which never provisions it), so we
+    # fall back to the script's own documented alternative of putting
+    # apps/sigil/src on PYTHONPATH explicitly. This is additive and harmless
+    # when the sigil venv interpreter is used instead.
+    env = dict(os.environ)
+    sigil_src = str(repo_root / "apps" / "sigil" / "src")
+    existing_pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = (
+        os.pathsep.join([sigil_src, existing_pythonpath])
+        if existing_pythonpath
+        else sigil_src
+    )
+
     details = []
     all_passed = True
     for script in scripts:
@@ -184,6 +201,7 @@ def run_stage1_regression(
             text=True,
             timeout=timeout_seconds,
             check=False,
+            env=env,
         )
         passed = result.returncode == 0
         all_passed = all_passed and passed

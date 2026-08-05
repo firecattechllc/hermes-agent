@@ -602,6 +602,19 @@ def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None
         resolved = filepath
     normalized = os.path.normpath(_expand_tilde(filepath))
 
+    # Prevent agents from modifying the Hermes config file directly.
+    # approvals.mode and other security settings live here; a malicious or
+    # prompt-injected agent could silently disable exec approval by writing to
+    # this file. Checked before the temp-directory carve-out below so that an
+    # active workspace temp path can never shadow this protection.
+    hermes_config = _get_hermes_config_resolved()
+    if hermes_config and (resolved == hermes_config or normalized == hermes_config):
+        return (
+            f"Refusing to write to Hermes config file: {filepath}\n"
+            "Agent cannot modify security-sensitive configuration. "
+            "Edit ~/.hermes/config.yaml directly or use 'hermes config' instead."
+        )
+
     # macOS resolves its per-user temporary directory beneath
     # /private/var/folders/.../T. Treat the active system temp directory and
     # its descendants as ordinary temporary workspace while preserving the
@@ -623,17 +636,6 @@ def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None
             return _err
     if resolved in _SENSITIVE_EXACT_PATHS or normalized in _SENSITIVE_EXACT_PATHS:
         return _err
-    # Prevent agents from modifying the Hermes config file directly.
-    # approvals.mode and other security settings live here; a malicious or
-    # prompt-injected agent could silently disable exec approval by writing to
-    # this file.
-    hermes_config = _get_hermes_config_resolved()
-    if hermes_config and (resolved == hermes_config or normalized == hermes_config):
-        return (
-            f"Refusing to write to Hermes config file: {filepath}\n"
-            "Agent cannot modify security-sensitive configuration. "
-            "Edit ~/.hermes/config.yaml directly or use 'hermes config' instead."
-        )
     return None
 
 

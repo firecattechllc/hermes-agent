@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react'
 
-import { SigilOperatorView } from './index'
 import { MockSigilOperatorAdapter } from './mock-adapter'
+
+import { SigilOperatorView } from './index'
 
 function disabledReason(control: HTMLButtonElement): string | null {
   const title = control.getAttribute('title')?.trim()
