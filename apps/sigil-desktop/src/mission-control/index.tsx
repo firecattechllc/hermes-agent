@@ -21,6 +21,7 @@ import { formatEasternDateTime } from '../lib/date-time'
 
 import { desktopSigilOperatorAdapter } from './desktop-adapter'
 import { GovernedNewsPanel } from './governed-news-panel'
+import { GovernedVisibilityPanel } from './governed-visibility-panel'
 import { sigilOperatorAdapter as mockSigilOperatorAdapter } from './mock-adapter'
 import type {
   AlpacaMarketDataStatus,
@@ -43,7 +44,7 @@ import type {
 
 const RELEASE_STAGE = 'V3.5'
 
-const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'news', 'settings'] as const
+const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'news', 'ecosystem', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
 
 const SECTION_LABELS: Record<Section, string> = {
@@ -55,6 +56,7 @@ const SECTION_LABELS: Record<Section, string> = {
   reconciliation: 'Reconciliation',
   audit: 'Audit',
   news: 'News',
+  ecosystem: 'Ecosystem',
   settings: 'Settings'
 }
 
@@ -2935,6 +2937,7 @@ export function SigilOperatorView({
           </div>
         ) : null}
         {section === 'news' ? <GovernedNewsPanel /> : null}
+        {section === 'ecosystem' ? <GovernedVisibilityPanel /> : null}
         {section === 'proposals' ? (
           <div className={cn('py-5', PAGE_INSET_X)}>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

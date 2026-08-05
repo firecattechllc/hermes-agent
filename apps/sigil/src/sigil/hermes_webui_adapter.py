@@ -10,6 +10,8 @@ from __future__ import annotations
 import ipaddress
 import json
 import re
+import urllib.error
+import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -421,6 +423,82 @@ def default_hermes_webui_targets() -> tuple[HermesWebUITarget, ...]:
             base_url="http://100.68.14.37",
             approved_routes=routes,
         ),
+    )
+
+
+_PROBE_MAX_RESPONSE_BYTES = 65_536
+
+
+def probe_webui_target(
+    target: HermesWebUITarget,
+    *,
+    timeout_seconds: float = 5.0,
+    now: str | None = None,
+) -> HermesWebUIProbe:
+    """Perform one real, bounded, read-only GET against ``target``'s ``/health`` route.
+
+    Only called for an already-``enabled`` target (real deployments opt in
+    explicitly); the private/tailnet-only host allowlist enforced by
+    :func:`_validate_private_base_url` at target construction time still
+    applies, so this can never reach a public address. No authentication,
+    no request body, no state mutation, no dispatch. A failure of any kind
+    degrades to a non-``responding`` probe rather than raising, so a
+    Mission Control panel can always render a status.
+    """
+
+    if not target.enabled:
+        raise HermesWebUIValidationError(
+            "cannot probe a disabled Hermes WebUI target"
+        )
+    if not 0 < timeout_seconds <= 30:
+        raise HermesWebUIValidationError("probe timeout is outside bounds")
+
+    observed_at = now or datetime.now(timezone.utc).isoformat().replace(
+        "+00:00", "Z"
+    )
+    base = urlsplit(target.base_url)
+    health_url = urlunsplit((base.scheme, base.netloc, "/health", "", ""))
+
+    responding = False
+    dashboard_version: str | None = None
+    worker_contract_schema: int | None = None
+    component_health = "unavailable"
+    sanitized_message = "no response"
+
+    try:
+        request = urllib.request.Request(
+            health_url,
+            method="GET",
+            headers={"Accept": "application/json"},
+        )
+        with urllib.request.urlopen(  # noqa: S310 - private/tailnet allowlist enforced above
+            request, timeout=timeout_seconds
+        ) as response:
+            body = response.read(_PROBE_MAX_RESPONSE_BYTES)
+            responding = 200 <= response.status < 300
+            try:
+                payload = json.loads(body.decode("utf-8", errors="replace"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                payload = {}
+            if isinstance(payload, dict):
+                dashboard_version = payload.get("version")
+                schema = payload.get("worker_contract_schema")
+                worker_contract_schema = schema if isinstance(schema, int) else None
+                component_health = str(payload.get("status", "healthy" if responding else "unavailable"))
+            sanitized_message = f"HTTP {response.status}"
+    except urllib.error.HTTPError as error:
+        sanitized_message = f"HTTP {error.code}"
+    except (urllib.error.URLError, TimeoutError, OSError):
+        sanitized_message = "connection failed"
+
+    return HermesWebUIProbe(
+        node_id=target.node_id,
+        observed_at=observed_at,
+        responding=responding,
+        dashboard_version=dashboard_version,
+        worker_contract_schema=worker_contract_schema,
+        component_health=component_health,
+        sanitized_message=sanitized_message,
     )
 
 

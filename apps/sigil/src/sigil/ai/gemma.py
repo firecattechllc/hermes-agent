@@ -1,4 +1,11 @@
-"""Backend-only governed adapter for a local Ollama-compatible Gemma endpoint."""
+"""Backend-only governed adapter for a local Ollama-compatible Gemma endpoint.
+
+Scope boundary (Hermes add-on Phase A consolidation, see
+``docs/architecture/OLLAMA_ROUTING_BOUNDARY.md``): local, in-process Sigil
+advisory inference only; never fleet dispatch. See
+``apps/sigil/src/sigil/ai/mac_ollama.py`` for the role-profile layer built on
+this transport.
+"""
 
 from __future__ import annotations
 

@@ -13,6 +13,7 @@ from sigil.hermes_webui_adapter import (
     build_deep_link,
     default_hermes_webui_targets,
     evaluate_webui_status,
+    probe_webui_target,
 )
 from sigil.worker_contract import WORKER_CONTRACT_SCHEMA_VERSION
 
@@ -213,3 +214,40 @@ def test_target_digest_detects_mutation() -> None:
 
     with pytest.raises(HermesWebUIValidationError, match="digest"):
         replace(value, display_name="Changed")
+
+
+def test_probe_rejects_disabled_target() -> None:
+    with pytest.raises(HermesWebUIValidationError, match="disabled"):
+        probe_webui_target(target(enabled=False))
+
+
+def test_probe_rejects_out_of_bounds_timeout() -> None:
+    with pytest.raises(HermesWebUIValidationError, match="timeout"):
+        probe_webui_target(target(enabled=True), timeout_seconds=0)
+
+    with pytest.raises(HermesWebUIValidationError, match="timeout"):
+        probe_webui_target(target(enabled=True), timeout_seconds=31)
+
+
+def test_probe_degrades_to_unavailable_on_connection_failure() -> None:
+    # 192.0.2.0/24 is TEST-NET-1 (RFC 5737): reserved, never routable, and
+    # guaranteed not to answer, so this exercises the real failure path
+    # without any live network dependency or flakiness.
+    unreachable = target(enabled=True, base_url="http://192.0.2.1")
+
+    result = probe_webui_target(unreachable, timeout_seconds=1)
+
+    assert result.responding is False
+    assert result.component_health == "unavailable"
+    assert result.sanitized_message == "connection failed"
+    assert result.node_id == unreachable.node_id
+
+
+def test_probe_result_feeds_evaluate_webui_status_consistently() -> None:
+    unreachable = target(enabled=True, base_url="http://192.0.2.1")
+    result = probe_webui_target(unreachable, timeout_seconds=1, now=NOW)
+
+    status = evaluate_webui_status(unreachable, result, now=NOW)
+
+    assert status.state == HermesWebUIHealth.UNAVAILABLE
+    assert status.enabled is True
