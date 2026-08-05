@@ -1,0 +1,175 @@
+{
+  "schemaVersion": "1.0.0",
+  "product": {
+    "name": "Sigil",
+    "stage": "Alpha-to-Beta handoff",
+    "platform": "Electron desktop",
+    "purpose": "Governed AI-assisted market research and paper trading",
+    "environment": "paper-only",
+    "brokerSubmissionEnabled": false
+  },
+  "authority": {
+    "sourceOrder": [
+      "certified-alpha-runtime-and-tests",
+      "safety-and-governance-invariants",
+      "ui-manifest",
+      "visual-guidance",
+      "generated-design-assumptions"
+    ],
+    "aiOutputGrantsExecutionAuthority": false,
+    "failClosed": true,
+    "materialActionsRequireAuditEvidence": true
+  },
+  "globalIndicators": [
+    "paper-only-environment",
+    "broker-submission-disabled",
+    "runtime-health",
+    "market-data-health",
+    "quote-freshness",
+    "automation-state"
+  ],
+  "screens": [
+    {
+      "id": "mission-control",
+      "name": "Mission Control",
+      "purpose": "Summarize system health, runtime state, attention items, and available governed actions",
+      "requiredStates": ["loading", "ready", "degraded", "blocked", "error", "recovered"],
+      "requiredComponents": [
+        "environment-badge",
+        "runtime-health-summary",
+        "provider-status-list",
+        "attention-queue",
+        "recent-audit-events",
+        "governed-action-controls"
+      ]
+    },
+    {
+      "id": "market-universe",
+      "name": "Market Universe",
+      "purpose": "Search symbols and inspect governed read-only quotes",
+      "requiredStates": ["empty", "searching", "results", "no-results", "auth-required", "stale", "after-hours", "error"],
+      "requiredBehaviors": [
+        "debounced-search",
+        "exact-ticker-ranking",
+        "read-only-quote-fetch",
+        "periodic-refresh",
+        "duplicate-handler-protection"
+      ],
+      "requiredFields": ["symbol", "companyName", "price", "change", "changePercent", "source", "quoteAge", "sessionState", "stale"]
+    },
+    {
+      "id": "research",
+      "name": "Research and Intelligence",
+      "purpose": "Present source evidence, deterministic calculations, and model interpretation without conflation",
+      "requiredStates": ["loading", "ready", "partial", "stale", "missing-evidence", "error"],
+      "requiredComponents": ["source-card", "research-summary", "confidence-display", "risk-list", "freshness-indicator"]
+    },
+    {
+      "id": "proposal-review",
+      "name": "Proposal Review",
+      "purpose": "Support deliberate operator approval or rejection of an AI-generated proposal",
+      "requiredStates": ["draft", "pending-review", "approved", "rejected", "expired", "blocked", "error"],
+      "requiredFields": [
+        "proposalId",
+        "symbol",
+        "amount",
+        "recommendation",
+        "confidence",
+        "thesis",
+        "bullCase",
+        "bearCase",
+        "keyRisks",
+        "paperTradeAction",
+        "approvalStatus",
+        "createdAt"
+      ],
+      "actions": [
+        {"id": "approve-proposal", "governed": true, "confirmationRequired": true},
+        {"id": "reject-proposal", "governed": true, "confirmationRequired": true}
+      ]
+    },
+    {
+      "id": "paper-runtime",
+      "name": "Paper Runtime",
+      "purpose": "Operate and observe governed paper cycles",
+      "requiredStates": ["stopped", "authorization-required", "authorized", "running", "persisting", "failed", "recovered"],
+      "requiredFields": ["automationState", "cycleCount", "proposalOnly", "authorizationState", "lastEvent", "lastPersistedAt"],
+      "actions": [
+        {"id": "authorize-paper-action", "governed": true, "confirmationRequired": true},
+        {"id": "start-paper-cycle", "governed": true, "confirmationRequired": false},
+        {"id": "stop-paper-runtime", "governed": true, "confirmationRequired": true},
+        {"id": "revoke-paper-authorization", "governed": true, "confirmationRequired": true}
+      ]
+    },
+    {
+      "id": "portfolio",
+      "name": "Portfolio",
+      "purpose": "Display exact paper positions, cash, valuation, allocation, and P&L",
+      "requiredStates": ["loading", "empty", "ready", "stale", "error"],
+      "requiredFields": ["symbol", "quantity", "price", "marketValue", "costBasis", "unrealizedPnl", "allocation", "cash"]
+    },
+    {
+      "id": "audit",
+      "name": "Audit and Evidence",
+      "purpose": "Expose immutable or persisted evidence for governed actions and runtime transitions",
+      "requiredStates": ["loading", "empty", "ready", "filtered", "error"],
+      "requiredFields": ["eventId", "eventType", "timestamp", "actor", "subject", "result", "evidenceId", "paperOnly", "brokerSubmission"]
+    },
+    {
+      "id": "settings-providers",
+      "name": "Settings and Providers",
+      "purpose": "Configure and diagnose providers, credentials, local runtime, model routing, and packaged backend health",
+      "requiredStates": ["ready", "auth-required", "authenticated", "failed", "degraded", "unavailable"],
+      "constraints": ["never-display-full-secrets", "dependent-actions-fail-closed", "packaged-backend-status-visible"]
+    }
+  ],
+  "sharedComponents": [
+    "environment-badge",
+    "runtime-health-summary",
+    "provider-status-row",
+    "quote-card",
+    "symbol-search-result",
+    "governed-action-button",
+    "disabled-reason",
+    "confirmation-dialog",
+    "proposal-summary",
+    "evidence-card",
+    "risk-list",
+    "authorization-panel",
+    "position-table",
+    "cash-metric",
+    "pnl-metric",
+    "audit-event-row",
+    "stale-data-warning",
+    "reconnect-state",
+    "truthful-empty-state",
+    "safe-retry-error-panel"
+  ],
+  "forbiddenDesignChanges": [
+    "enable-live-broker-submission",
+    "imply-live-trading-is-available",
+    "treat-ai-proposal-as-execution-authority",
+    "hide-paper-only-status",
+    "hide-quote-source-or-age",
+    "remove-required-confirmations",
+    "make-disabled-actions-appear-functional",
+    "replace-backend-truth-with-renderer-mock-state",
+    "call-broker-endpoints-directly-from-ui",
+    "bypass-electron-preload-bridge",
+    "introduce-new-execution-path",
+    "silently-change-financial-units-or-precision"
+  ],
+  "visualDirection": {
+    "theme": "restrained-dark-first",
+    "qualities": ["premium", "calm", "precise", "fast", "trustworthy", "desktop-native"],
+    "avoid": ["casino-aesthetic", "excessive-glow", "decorative-charts", "ambiguous-icon-only-actions", "low-contrast-metadata", "fake-live-trading-language"]
+  },
+  "acceptance": {
+    "requiresEveryButtonParity": true,
+    "requiresEndToEndOperatorWorkflow": true,
+    "requiresRestartRecovery": true,
+    "requiresPackagedDesktopCertification": true,
+    "requiresReleaseGuardian": true,
+    "requiresBrokerSubmissionDisabled": true
+  }
+}

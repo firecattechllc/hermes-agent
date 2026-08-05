@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sigil Mission Control - Degraded State</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-container": "#254000",
+                      "primary-fixed-dim": "#4edea3",
+                      "tertiary": "#91db2a",
+                      "surface-container": "#1e2021",
+                      "secondary-fixed-dim": "#4fdbc8",
+                      "secondary-fixed": "#71f8e4",
+                      "on-tertiary-fixed": "#102000",
+                      "on-error-container": "#ffdad6",
+                      "surface-variant": "#333536",
+                      "surface-container-low": "#1a1c1d",
+                      "primary": "#4edea3",
+                      "on-tertiary": "#1f3700",
+                      "surface-container-highest": "#333536",
+                      "primary-fixed": "#6ffbbe",
+                      "inverse-surface": "#e2e2e3",
+                      "error-container": "#93000a",
+                      "surface-container-lowest": "#0c0e0f",
+                      "secondary-container": "#04b4a2",
+                      "on-secondary-container": "#003f38",
+                      "tertiary-container": "#72b400",
+                      "secondary": "#4fdbc8",
+                      "surface-bright": "#38393a",
+                      "surface-tint": "#4edea3",
+                      "primary-container": "#10b981",
+                      "on-primary-fixed-variant": "#005236",
+                      "on-surface-variant": "#bbcabf",
+                      "tertiary-fixed-dim": "#91db2a",
+                      "outline-variant": "#3c4a42",
+                      "surface": "#121415",
+                      "on-secondary-fixed-variant": "#005048",
+                      "on-error": "#690005",
+                      "on-tertiary-fixed-variant": "#304f00",
+                      "on-background": "#e2e2e3",
+                      "surface-dim": "#121415",
+                      "surface-container-high": "#282a2b",
+                      "tertiary-fixed": "#acf847",
+                      "outline": "#86948a",
+                      "on-secondary": "#003731",
+                      "on-primary": "#003824",
+                      "on-secondary-fixed": "#00201c",
+                      "on-surface": "#e2e2e3",
+                      "on-primary-fixed": "#002113",
+                      "inverse-primary": "#006c49",
+                      "background": "#121415",
+                      "on-primary-container": "#00422b",
+                      "error": "#ffb4ab",
+                      "inverse-on-surface": "#2f3132",
+                      // Added for warning state
+                      "warning": "#eab308", 
+                      "warning-container": "#423202",
+                      "on-warning-container": "#fef08a"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "md": "16px",
+                      "xl": "32px",
+                      "margin-desktop": "24px",
+                      "sm": "8px",
+                      "lg": "24px",
+                      "gutter": "16px",
+                      "unit": "4px",
+                      "margin-mobile": "16px",
+                      "xs": "4px"
+              },
+              "fontFamily": {
+                      "headline-sm": ["Inter"],
+                      "data-lg": ["JetBrains Mono"],
+                      "body-md": ["Inter"],
+                      "headline-md": ["Inter"],
+                      "label-caps": ["Inter"],
+                      "data-sm": ["JetBrains Mono"],
+                      "data-md": ["JetBrains Mono"],
+                      "headline-lg": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "body-lg": ["Inter"]
+              },
+              "fontSize": {
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "data-lg": ["16px", {"lineHeight": "24px", "fontWeight": "500"}],
+                      "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.06em", "fontWeight": "700"}],
+                      "data-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                      "data-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                      "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                      "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        /* Custom scrollbar for data tables */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: theme('colors.surface'); 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: theme('colors.surface-variant'); 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: theme('colors.outline-variant'); 
+        }
+        
+        .panel-border {
+            border: 1px solid theme('colors.outline-variant');
+        }
+        
+        .pulse-warning {
+            animation: pulse-warn 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse-warn {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col overflow-x-hidden font-body-md text-body-md">
+<!-- Global Mission Status Bar -->
+<header class="w-full flex flex-col border-b border-outline-variant bg-surface z-50">
+<!-- Top Row: Brand & Global Status -->
+<div class="flex justify-between items-center px-md py-sm border-b border-outline-variant">
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-warning" style="font-variation-settings: 'FILL' 1;">warning</span>
+<h1 class="font-headline-md text-headline-md text-on-surface">SIGIL OPERATOR</h1>
+</div>
+<div class="flex items-center gap-xs px-sm py-xs bg-surface-container-high rounded border border-outline-variant">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-data-sm text-data-sm text-on-surface-variant">v2.9</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant tracking-widest">MISSION CONTROL</span>
+</div>
+<div class="flex items-center gap-md font-data-sm text-data-sm">
+<div class="flex items-center gap-sm">
+<span class="text-on-surface-variant">PAPER</span>
+<span class="text-on-surface">SIMULATED</span>
+<span class="text-primary-container">CONNECTED</span>
+</div>
+<div class="h-4 w-px bg-outline-variant mx-sm"></div>
+<div class="flex items-center gap-sm">
+<span class="text-on-surface-variant">HEALTH ·</span>
+<span class="text-warning flex items-center gap-xs"><span class="w-2 h-2 rounded-full bg-warning pulse-warning"></span> Runtime degraded</span>
+</div>
+<div class="h-4 w-px bg-outline-variant mx-sm"></div>
+<div class="flex items-center gap-sm text-on-surface-variant bg-surface-container px-sm py-xs border border-outline-variant rounded">
+<span>v2.9 · v2.11.0 · BUILD BFF2B2149-20260801.021025</span>
+</div>
+<button class="flex items-center gap-xs text-on-surface-variant hover:text-on-surface transition-colors ml-sm">
+<span class="material-symbols-outlined text-[16px]">refresh</span>
+<span>Refresh runtime</span>
+</button>
+</div>
+</div>
+<!-- Banner 1: Month Auth -->
+<div class="flex justify-between items-center px-md py-xs bg-surface-container-lowest border-b border-outline-variant font-data-sm text-data-sm">
+<div class="flex items-center gap-md">
+<span class="text-primary-container">Paper month 2026-08 · active</span>
+<span class="text-on-surface-variant">This calendar month started automatically authorized for local simulated buys and sells; expires 2026-09-01T00:00:00Z</span>
+<span class="text-outline">PAPER-AUTH-2026-08-AUTO</span>
+</div>
+<button class="text-on-surface hover:text-white transition-colors">Revoke</button>
+</div>
+<!-- Banner 2: Automation Status -->
+<div class="flex justify-between items-center px-md py-xs bg-surface-container-lowest border-b border-outline-variant font-data-sm text-data-sm">
+<div class="flex items-center gap-md">
+<span class="text-primary-container">Paper automation running</span>
+<span class="text-on-surface-variant">1960 cycles · refreshed 2026-08-01T04:01:57.194011Z</span>
+</div>
+<div class="flex items-center gap-sm">
+<div class="flex items-center gap-xs px-sm py-xs bg-primary-container text-on-primary-container rounded-sm">
+<span class="w-2 h-2 rounded-full bg-on-primary-container pulse-warning"></span>
+<span>Running (Degraded)</span>
+</div>
+<button class="px-sm py-xs border border-outline-variant text-on-surface hover:bg-surface-container transition-colors rounded-sm">Pause</button>
+<button class="px-sm py-xs bg-error-container text-on-error-container rounded-sm hover:opacity-90 transition-opacity">Stop</button>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<nav class="flex px-md pt-sm gap-lg bg-surface-container-lowest">
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface pb-sm transition-colors border-b-2 border-transparent" href="#">OVERVIEW</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface pb-sm transition-colors border-b-2 border-transparent" href="#">PORTFOLIO</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface pb-sm transition-colors border-b-2 border-transparent" href="#">PROPOSALS</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface pb-sm transition-colors border-b-2 border-transparent" href="#">LAUNCH</a>
+<a class="font-label-caps text-label-caps text-warning border-b-2 border-warning pb-sm" href="#">EXECUTIONS</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface pb-sm transition-colors border-b-2 border-transparent" href="#">RECONCILIATION</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface pb-sm transition-colors border-b-2 border-transparent" href="#">AUDIT</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface pb-sm transition-colors border-b-2 border-transparent" href="#">NEWS</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface pb-sm transition-colors border-b-2 border-transparent" href="#">SETTINGS</a>
+</nav>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 p-md flex flex-col gap-md">
+<!-- Active Alert Banner -->
+<div class="border border-warning bg-warning-container/20 p-md rounded flex items-start justify-between">
+<div class="flex gap-md">
+<span class="material-symbols-outlined text-warning mt-xs">report_problem</span>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-warning mb-xs">Provider Connection Intermittent</h3>
+<p class="font-body-md text-body-md text-on-warning-container mb-sm">Market Data source is lagging. Quotes may be stale and automation is running with increased latency. The system is attempting to reconnect to alternate providers.</p>
+<div class="font-data-sm text-data-sm text-on-surface-variant">
+                        Latency: 450ms (Expected &lt; 50ms) | Last successful tick: 2.4s ago
+                    </div>
+</div>
+</div>
+<div class="flex gap-sm shrink-0">
+<button class="px-md py-sm bg-surface-container border border-outline-variant text-on-surface rounded hover:bg-surface-container-high transition-colors font-data-md text-data-md">
+                    Pause Automation
+                </button>
+<button class="px-md py-sm bg-warning text-warning-container rounded font-data-md text-data-md hover:opacity-90 transition-opacity font-medium">
+                    Retry Connection
+                </button>
+</div>
+</div>
+<!-- Top Overview Panels -->
+<div class="grid grid-cols-4 border border-outline-variant bg-surface rounded">
+<!-- System Health -->
+<div class="p-md border-r border-outline-variant flex flex-col justify-between">
+<div>
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-sm">SYSTEM HEALTH</div>
+<div class="font-data-lg text-data-lg text-warning flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-warning pulse-warning"></span> Degraded
+                    </div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-xs">Provider latency detected</div>
+</div>
+<div class="mt-lg">
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-xs">STRATEGIES</div>
+<div class="font-data-lg text-data-lg text-on-surface">1</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Active</div>
+</div>
+</div>
+<!-- Account -->
+<div class="p-md border-r border-outline-variant flex flex-col justify-between">
+<div>
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-sm">MASKED ACCOUNT</div>
+<div class="font-data-lg text-data-lg text-on-surface">PAPER LOCAL</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-xs">Credentials never displayed</div>
+</div>
+<div class="mt-lg">
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-xs">APPROVALS</div>
+<div class="font-data-lg text-data-lg text-on-surface">0</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Pending</div>
+</div>
+</div>
+<!-- Cash -->
+<div class="p-md border-r border-outline-variant flex flex-col justify-between">
+<div>
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-sm">CASH</div>
+<div class="font-data-lg text-data-lg text-on-surface">$10,000.00</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-xs">Paper buying power</div>
+</div>
+<div class="mt-lg">
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-xs">KILL SWITCH</div>
+<div class="font-data-lg text-data-lg text-on-surface">ARMED</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Ready to engage</div>
+</div>
+</div>
+<!-- Portfolio -->
+<div class="p-md flex flex-col">
+<div>
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-sm">PORTFOLIO</div>
+<div class="font-data-lg text-data-lg text-on-surface">$0.00</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-xs">Simulated market value</div>
+</div>
+</div>
+</div>
+<!-- Section Header -->
+<div class="flex justify-between items-end mt-sm pb-sm border-b border-outline-variant">
+<div>
+<h2 class="font-label-caps text-label-caps text-on-surface tracking-widest mb-xs">GOVERNANCE PIPELINE</h2>
+<div class="font-body-sm text-body-sm text-on-surface-variant">09 immutable control stages</div>
+</div>
+<div class="font-data-sm text-data-sm text-warning flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px]">sync_problem</span>
+                RUNNING DEGRADED connected
+            </div>
+</div>
+<!-- Pipeline Grid -->
+<div class="grid grid-cols-3 gap-px bg-outline-variant border border-outline-variant">
+<!-- Stage 01 -->
+<div class="bg-surface p-md flex flex-col h-32 hover:bg-surface-container-high transition-colors relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-full h-1 bg-primary-container/30"></div>
+<div class="flex justify-between items-start mb-auto">
+<span class="font-data-sm text-data-sm text-on-surface-variant">01</span>
+<span class="font-data-sm text-data-sm text-primary-container">complete</span>
+</div>
+<div>
+<div class="font-label-caps text-label-caps text-on-surface mb-xs">BACKEND BRIDGE</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">connected</div>
+</div>
+</div>
+<!-- Stage 02 -->
+<div class="bg-surface p-md flex flex-col h-32 hover:bg-surface-container-high transition-colors relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-full h-1 bg-primary-container/30"></div>
+<div class="flex justify-between items-start mb-auto">
+<span class="font-data-sm text-data-sm text-on-surface-variant">02</span>
+<span class="font-data-sm text-data-sm text-primary-container">complete</span>
+</div>
+<div>
+<div class="font-label-caps text-label-caps text-on-surface mb-xs">RUNTIME STATE</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Revision 3705</div>
+</div>
+</div>
+<!-- Stage 03 -->
+<div class="bg-surface p-md flex flex-col h-32 hover:bg-surface-container-high transition-colors relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-full h-1 bg-primary-container/30"></div>
+<div class="flex justify-between items-start mb-auto">
+<span class="font-data-sm text-data-sm text-on-surface-variant">03</span>
+<span class="font-data-sm text-data-sm text-primary-container">complete</span>
+</div>
+<div>
+<div class="font-label-caps text-label-caps text-on-surface mb-xs">HERMES ANALYSIS</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Paper proposals</div>
+</div>
+</div>
+<!-- Stage 04 (Warning State) -->
+<div class="bg-surface p-md flex flex-col h-32 hover:bg-surface-container-high transition-colors relative overflow-hidden group border border-warning/50 z-10 shadow-[0_0_15px_rgba(234,179,8,0.1)]">
+<div class="absolute top-0 left-0 w-full h-1 bg-warning"></div>
+<div class="flex justify-between items-start mb-auto">
+<span class="font-data-sm text-data-sm text-on-surface-variant">04</span>
+<span class="font-data-sm text-data-sm text-warning flex items-center gap-xs">
+<span class="material-symbols-outlined text-[14px] pulse-warning">pending</span>
+                        stalled
+                    </span>
+</div>
+<div>
+<div class="font-label-caps text-label-caps text-on-surface mb-xs">PROPOSAL GENERATION</div>
+<div class="font-body-sm text-body-sm text-warning">Awaiting valid market data...</div>
+</div>
+</div>
+<!-- Stage 05 -->
+<div class="bg-surface p-md flex flex-col h-32 opacity-50">
+<div class="flex justify-between items-start mb-auto">
+<span class="font-data-sm text-data-sm text-on-surface-variant">05</span>
+<span class="font-data-sm text-data-sm text-on-surface-variant">pending</span>
+</div>
+<div>
+<div class="font-label-caps text-label-caps text-on-surface mb-xs">PAPER AUTO-APPROVAL</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">awaiting prior stage</div>
+</div>
+</div>
+<!-- Stage 06 -->
+<div class="bg-surface p-md flex flex-col h-32 opacity-50">
+<div class="flex justify-between items-start mb-auto">
+<span class="font-data-sm text-data-sm text-on-surface-variant">06</span>
+<span class="font-data-sm text-data-sm text-on-surface-variant">pending</span>
+</div>
+<div>
+<div class="font-label-caps text-label-caps text-on-surface mb-xs">SIMULATED EXECUTION</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">awaiting prior stage</div>
+</div>
+</div>
+<!-- Stage 07 -->
+<div class="bg-surface-container-lowest p-md flex flex-col h-32 col-span-3 border-t border-outline-variant">
+<div class="flex justify-between items-start mb-auto">
+<span class="font-data-sm text-data-sm text-on-surface-variant">07</span>
+<span class="font-data-sm text-data-sm text-error">blocked</span>
+</div>
+<div>
+<div class="font-label-caps text-label-caps text-on-surface mb-xs">BROKER TRANSPORT</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Unavailable in paper mode</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer Status -->
+<footer class="w-full flex justify-between items-center px-md py-xs bg-surface-container-lowest border-t border-outline-variant font-data-sm text-data-sm text-on-surface-variant mt-auto">
+<div>Alpaca paper submission starts governed and enabled · live execution permanently disabled · account identity masked</div>
+<div>Adapter: governed local paper runtime · provider reads isolated in backend · v2.9 · v2.11.0 · BUILD bff2b2149-20260801.021025</div>
+</footer>
+</body></html>

@@ -22,6 +22,12 @@ from gateway.config import PlatformConfig
 
 def _ensure_telegram_mock():
     telegram_mod = MagicMock()
+
+    # Preserve the real PTB exception module so this test's Telegram stub
+    # cannot poison later network-classification tests.
+    import telegram.error as real_telegram_error
+    telegram_mod.error = real_telegram_error
+
     telegram_mod.ext.ContextTypes.DEFAULT_TYPE = type(None)
 
     # Register telegram.constants as a separate module mock so that
@@ -34,10 +40,12 @@ def _ensure_telegram_mock():
     constants_mod.ChatType.CHANNEL = "channel"
     constants_mod.ChatType.PRIVATE = "private"
 
-    sys.modules["telegram"] = telegram_mod
-    sys.modules["telegram.ext"] = telegram_mod.ext
-    sys.modules["telegram.constants"] = constants_mod
-    sys.modules["telegram.request"] = telegram_mod.request
+    if "telegram" not in sys.modules or not hasattr(sys.modules["telegram"], "__file__"):
+        sys.modules["telegram"] = telegram_mod
+        sys.modules["telegram.ext"] = telegram_mod.ext
+        sys.modules["telegram.constants"] = constants_mod
+        sys.modules["telegram.request"] = telegram_mod.request
+        sys.modules["telegram.error"] = real_telegram_error
 
     # Force reimport so the adapter picks up the mock ChatType.
     sys.modules.pop("plugins.platforms.telegram.adapter", None)

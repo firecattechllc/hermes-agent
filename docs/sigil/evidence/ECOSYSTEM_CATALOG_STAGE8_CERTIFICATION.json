@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "certification_scope": "post_phase9_stage8_ecosystem_discovery_catalog",
+  "branch": "beta-post9-08-ecosystem-catalog",
+  "base_commit": "3178a72c1",
+  "certified_at": "2026-08-02T00:10:00Z",
+  "status": "passed",
+  "implementation": {
+    "catalog": "apps/sigil/src/sigil/ecosystem_catalog.py",
+    "tests": "apps/sigil/tests/test_ecosystem_catalog.py",
+    "architecture_document": "docs/beta/post-phase9/ECOSYSTEM_DISCOVERY_CATALOG.md",
+    "disabled_by_default": true,
+    "autonomous_discovery_enabled": false,
+    "web_crawling_enabled": false,
+    "registry_mutation_enabled": false,
+    "external_integration_installed_or_activated": false
+  },
+  "modeled_concepts": [
+    "discovered_integration_identity",
+    "canonical_project_metadata",
+    "category_classification",
+    "capability_classification",
+    "repository_identity",
+    "immutable_release_identity",
+    "maintainer_evidence",
+    "license_evidence",
+    "maturity_evidence",
+    "activity_evidence",
+    "security_evidence",
+    "freshness",
+    "machine_suitability",
+    "profile_suitability",
+    "capability_compatibility",
+    "registry_compatibility",
+    "integration_overlap",
+    "conflict_detection",
+    "known_risks",
+    "threat_model_references",
+    "recommendation_state",
+    "admission_readiness",
+    "deterministic_catalog_digests"
+  ],
+  "validation": {
+    "focused_stage1_through_stage8_tests": {
+      "result": "passed",
+      "passed": 254
+    },
+    "full_sigil_python_tests": {
+      "result": "passed",
+      "passed": 1599,
+      "warnings": 2,
+      "warning_class": "multiprocessing_fork_deprecation"
+    },
+    "ruff": {
+      "result": "passed"
+    },
+    "git_diff_check": {
+      "result": "passed"
+    }
+  },
+  "authority": {
+    "paper_only": true,
+    "broker_submission": false,
+    "execution_authorized": false,
+    "approval_authority": false,
+    "capital_authority": false,
+    "portfolio_mutation": false,
+    "policy_mutation": false,
+    "credential_access": false,
+    "arbitrary_shell": false,
+    "arbitrary_filesystem": false,
+    "governance_bypass": false,
+    "activation_authorized": false,
+    "installation_authorized": false
+  },
+  "deferred": [
+    "autonomous_web_discovery",
+    "repository_crawling",
+    "package_registry_crawling",
+    "release_feed_polling",
+    "live_license_detection",
+    "live_activity_analysis",
+    "live_security_scanning",
+    "installation",
+    "activation",
+    "registry_mutation",
+    "mission_control_projection",
+    "agent_reach_integration",
+    "self_evolution",
+    "fleet_routing"
+  ],
+  "stage8_ecosystem_discovery_catalog_implemented": true,
+  "stage8a_agent_reach_integration_implemented": false
+}

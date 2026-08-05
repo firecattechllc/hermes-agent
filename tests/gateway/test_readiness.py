@@ -9,6 +9,20 @@ from gateway.readiness import collect_runtime_readiness
 
 
 def test_collect_runtime_readiness_reports_healthy_local_runtime(tmp_path, monkeypatch):
+    from collections import namedtuple
+    from gateway import readiness as readiness_mod
+
+    DiskUsage = namedtuple("DiskUsage", "total used free")
+    monkeypatch.setattr(
+        readiness_mod.shutil,
+        "disk_usage",
+        lambda _path: DiskUsage(
+            total=100 * 1024**3,
+            used=40 * 1024**3,
+            free=60 * 1024**3,
+        ),
+    )
+
     home = tmp_path / ".hermes"
     home.mkdir()
     (home / "config.yaml").write_text(

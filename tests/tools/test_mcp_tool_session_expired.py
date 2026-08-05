@@ -1,3 +1,4 @@
+import time
 """Tests for MCP tool-handler transport-session auto-reconnect.
 
 When a Streamable HTTP MCP server garbage-collects its server-side
@@ -507,7 +508,9 @@ def test_session_expired_retry_waits_for_new_session(monkeypatch, tmp_path):
     server._reconnect_event = _ReconnectAdapter()
     mcp_tool._servers["hindsight"] = server
     mcp_tool._server_error_counts["hindsight"] = 7
-    mcp_tool._server_breaker_opened_at["hindsight"] = 123.0
+    mcp_tool._server_breaker_opened_at["hindsight"] = (
+        time.monotonic() - mcp_tool._CIRCUIT_BREAKER_COOLDOWN_SEC - 1.0
+    )
 
     try:
         handler = _make_tool_handler("hindsight", "get_bank", 10.0)

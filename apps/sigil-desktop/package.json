@@ -1,0 +1,123 @@
+{
+  "name": "@firecattechnology/sigil-desktop",
+  "productName": "Sigil",
+  "private": true,
+  "version": "3.5.0",
+  "description": "Standalone governance-first Sigil desktop product.",
+  "type": "module",
+  "main": "dist/electron-main.mjs",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:mock": "cross-env SIGIL_ADAPTER=mock npm run dev",
+    "dev:renderer": "vite --host 127.0.0.1 --port 5175",
+    "dev:electron": "wait-on http://127.0.0.1:5175 && node scripts/bundle-electron.mjs && cross-env SIGIL_DEV_SERVER=http://127.0.0.1:5175 electron .",
+    "test": "vitest run",
+    "prepare:packaged-backend": "node scripts/prepare-packaged-backend.mjs",
+    "test:packaged-backend": "node scripts/test-packaged-backend.mjs",
+    "typecheck": "tsc -p . --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "lint": "eslint src electron scripts",
+    "build": "npm run test:packaged-backend && vite build && node scripts/bundle-electron.mjs",
+    "dist:mac:zip": "npm run build && electron-builder --mac zip",
+    "dist:mac:dmg": "npm run build && electron-builder --mac dmg",
+    "update:check-config": "node scripts/release-config.mjs check",
+    "update:test": "vitest run electron/updater.test.ts electron/preload.test.ts",
+    "release:unsigned-test": "node scripts/release-config.mjs unsigned-test",
+    "release:mac": "npm run update:check-config && npm run build && electron-builder --mac --arm64 --publish never",
+    "release:mac:notarized": "node scripts/release-config.mjs notarized",
+    "release:verify": "node scripts/release-certify.mjs verify",
+    "release:certify": "node scripts/release-certify.mjs certify",
+    "smoke:packaged": "node scripts/packaged-launch-smoke.mjs",
+    "check": "npm run typecheck && npm run test && npm run lint",
+    "fix": "eslint src electron scripts --fix"
+  },
+  "dependencies": {
+    "@tabler/icons-react": "^3.41.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "electron-updater": "^6.8.9",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^22.20.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
+    "electron": "40.10.2",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.1",
+    "eslint": "^9.39.4",
+    "jsdom": "^29.1.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5",
+    "wait-on": "^9.0.5"
+  },
+  "build": {
+    "electronVersion": "40.10.2",
+    "appId": "com.firecattechnology.sigil",
+    "productName": "Sigil",
+    "executableName": "Sigil",
+    "artifactName": "Sigil-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "assets/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "packaged-backend/staged/sigil",
+        "to": "sigil-backend/sigil",
+        "filter": [
+          "**/*.py",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      }
+    ],
+    "asar": true,
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.finance",
+      "icon": "assets/icon.svg",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "extendInfo": {
+        "CFBundleDisplayName": "Sigil",
+        "CFBundleExecutable": "Sigil",
+        "CFBundleName": "Sigil"
+      },
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Install Sigil"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "firecattechllc",
+      "repo": "hermes-agent",
+      "releaseType": "prerelease"
+    }
+  }
+}

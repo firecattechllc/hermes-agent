@@ -44,6 +44,8 @@ Required evidence:
 The following must pass from the exact release candidate commit:
 
 - [ ] Step 29 system-integration suite
+- [ ] Step 32 Mac ↔ Titan link focused suite and private-auth boundary review
+- [ ] Step 33 whole-system knowledge graph focused suite and discovery safety review
 - [ ] Complete agent-role suite
 - [ ] Mission Control suite
 - [ ] Autonomous backlog suite
@@ -65,6 +67,8 @@ The following must pass from the exact release candidate commit:
 Record exact totals:
 
 - Step 29:
+- Step 32: `docs/architecture/HERMES_STEP32_MAC_TITAN_LINK.md`
+- Step 33: `docs/releases/STEP33_WHOLE_SYSTEM_KNOWLEDGE_GRAPH.md`
 - Agent roles:
 - Mission Control:
 - Autonomous backlog:

@@ -1,0 +1,1071 @@
+{
+  "boundaries": [
+    {
+      "authoritative_side": "Governed research policy and evidence validation.",
+      "boundary_id": "agent-reach-public-vs-private",
+      "consumer": "research and evidence pipelines",
+      "denied_class": "Private access, authenticated mutation, credential use, command execution, or financial action.",
+      "fail_closed_result": "Reject the request and discard untrusted evidence.",
+      "permitted_class": "Modeled public, unauthenticated, read-only research evidence.",
+      "producer": "Agent Reach adapter",
+      "required_evidence": [
+        "docs/sigil/evidence/AGENT_REACH_STAGE8A_CERTIFICATION.json"
+      ],
+      "stage_12b_requirement": "Prove public-read capability cannot cross into private or mutating access."
+    },
+    {
+      "authoritative_side": "Hermes governed command and approval pipeline.",
+      "boundary_id": "buzz-events-vs-command-authority",
+      "consumer": "collaboration workspace and Hermes event consumers",
+      "denied_class": "Unsigned commands, direct execution, policy mutation, credentials, or financial instructions.",
+      "fail_closed_result": "Reject the event and preserve the current authoritative state.",
+      "permitted_class": "Sanitized signed events, messages, approvals, and workflow references.",
+      "producer": "Buzz Relay adapter",
+      "required_evidence": [
+        "docs/sigil/evidence/BUZZ_RELAY_STAGE5_CERTIFICATION.json"
+      ],
+      "stage_12b_requirement": "Prove event transport cannot grant command or execution authority."
+    },
+    {
+      "authoritative_side": "Governed fleet routing and worker admission.",
+      "boundary_id": "buzznode-registration-vs-placement",
+      "consumer": "fleet routing",
+      "denied_class": "Self-placement, self-dispatch, shell execution, credential access, or automatic failover authority.",
+      "fail_closed_result": "Exclude or quarantine the node from placement.",
+      "permitted_class": "Node identity, capabilities, trust, certification, health, and capacity evidence.",
+      "producer": "Buzznode adapter",
+      "required_evidence": [
+        "docs/sigil/evidence/BUZZNODE_STAGE6_CERTIFICATION.json"
+      ],
+      "stage_12b_requirement": "Prove registration alone cannot make a node eligible for placement."
+    },
+    {
+      "authoritative_side": "Sigil backend and Hermes governed runtime.",
+      "boundary_id": "desktop-projection-vs-backend-authority",
+      "consumer": "Sigil Mission Control desktop interface",
+      "denied_class": "Backend mutation, connection, dispatch, installation, activation, credential resolution, or broker submission.",
+      "fail_closed_result": "Restore the disconnected paper-only default projection.",
+      "permitted_class": "Read-only and paper-only lifecycle, status, gate, evidence, and integration projections.",
+      "producer": "Sigil desktop ecosystem bridge",
+      "required_evidence": [
+        "apps/sigil/tests/test_sigil_bridge.py"
+      ],
+      "stage_12b_requirement": "Prove desktop projections cannot become authoritative runtime commands."
+    },
+    {
+      "authoritative_side": "Governed dispatcher and Sigil financial controls.",
+      "boundary_id": "fleet-placement-vs-financial-execution",
+      "consumer": "worker runtime and Sigil",
+      "denied_class": "Worker dispatch, broker submission, portfolio mutation, capital authority, or live trading authorization.",
+      "fail_closed_result": "Return no eligible route and deny dispatch or financial execution.",
+      "permitted_class": "Deterministic primary, fallback, exclusion, and placement recommendations.",
+      "producer": "governed fleet routing",
+      "required_evidence": [
+        "docs/sigil/evidence/ROUTING_FLEET_STAGE10_CERTIFICATION.json"
+      ],
+      "stage_12b_requirement": "Prove placement decisions cannot grant financial execution authority."
+    },
+    {
+      "authoritative_side": "Installed source, governed registry, and observed runtime evidence.",
+      "boundary_id": "knowledge-vs-runtime-truth",
+      "consumer": "research, discovery, and operator projections",
+      "denied_class": "Override of installed source, observed runtime state, policy, registry admission, or execution authority.",
+      "fail_closed_result": "Reject or quarantine conflicting or unverifiable knowledge.",
+      "permitted_class": "Sanitized knowledge, discovery evidence, compatibility assessments, and recommendations.",
+      "producer": "Hermes Wiki and ecosystem catalog",
+      "required_evidence": [
+        "docs/sigil/evidence/HERMES_WIKI_STAGE7_CERTIFICATION.json",
+        "docs/sigil/evidence/ECOSYSTEM_CATALOG_STAGE8_CERTIFICATION.json"
+      ],
+      "stage_12b_requirement": "Prove knowledge and catalog content remain non-authoritative."
+    },
+    {
+      "authoritative_side": "Explicit live certification and human promotion policy.",
+      "boundary_id": "paper-vs-live-execution",
+      "consumer": "live execution boundary",
+      "denied_class": "Live order placement, real capital movement, or implicit promotion.",
+      "fail_closed_result": "Remain paper-only and reject any live execution request.",
+      "permitted_class": "Deterministic paper orders, simulated fills, positions, cash, and evidence.",
+      "producer": "Sigil paper execution runtime",
+      "required_evidence": [
+        "docs/beta/post-phase9/SIGIL_BOUNDARY.md",
+        "apps/sigil/tests/test_sigil_bridge.py"
+      ],
+      "stage_12b_requirement": "Prove paper execution cannot cross into live execution without separate certification."
+    },
+    {
+      "authoritative_side": "Hermes governance and worker admission.",
+      "boundary_id": "paperclip-assignment-vs-execution",
+      "consumer": "Hermes worker and project orchestration",
+      "denied_class": "Independent task execution, policy mutation, capital authority, or promotion.",
+      "fail_closed_result": "Reject or quarantine the assignment without executing it.",
+      "permitted_class": "Assignments, issues, comments, organizational metadata, and approval references.",
+      "producer": "Paperclip adapter",
+      "required_evidence": [
+        "docs/sigil/evidence/PAPERCLIP_STAGE4_CERTIFICATION.json"
+      ],
+      "stage_12b_requirement": "Prove organizational assignment never becomes execution authority."
+    },
+    {
+      "authoritative_side": "Existing governed admission and runtime policy.",
+      "boundary_id": "registry-vs-execution",
+      "consumer": "worker admission and runtime layers",
+      "denied_class": "Installation, activation, dispatch, execution, approval, capital, or policy authority.",
+      "fail_closed_result": "Reject the requested operation and preserve disabled state.",
+      "permitted_class": "Descriptive metadata, lifecycle state, capabilities, and immutable identity references.",
+      "producer": "governed integration registry",
+      "required_evidence": [
+        "docs/sigil/evidence/INTEGRATION_REGISTRY_STAGE1_CERTIFICATION.json"
+      ],
+      "stage_12b_requirement": "Prove registry membership cannot independently grant execution authority."
+    },
+    {
+      "authoritative_side": "Sigil governed execution and promotion controls.",
+      "boundary_id": "research-proposal-vs-broker-submission",
+      "consumer": "order execution boundary",
+      "denied_class": "Live broker submission, capital movement, or portfolio mutation.",
+      "fail_closed_result": "Preserve proposal or paper state and reject live submission.",
+      "permitted_class": "Research evidence, recommendations, proposals, approvals, and paper intent.",
+      "producer": "Sigil research and proposal layers",
+      "required_evidence": [
+        "docs/beta/post-phase9/SIGIL_BOUNDARY.md",
+        "apps/sigil/tests/test_sigil_bridge.py"
+      ],
+      "stage_12b_requirement": "Prove research and proposal state cannot reach broker submission."
+    },
+    {
+      "authoritative_side": "Independent human-governed promotion policy.",
+      "boundary_id": "self-evolution-vs-promotion",
+      "consumer": "governance and release promotion",
+      "denied_class": "Self-promotion, governance mutation, financial-boundary mutation, or bypass of independent review.",
+      "fail_closed_result": "Reject or quarantine the proposal and preserve current policy.",
+      "permitted_class": "Improvement opportunities, proposals, experiment plans, results, reviews, and promotion assessments.",
+      "producer": "governed self-evolution framework",
+      "required_evidence": [
+        "docs/sigil/evidence/SELF_EVOLUTION_STAGE9_CERTIFICATION.json"
+      ],
+      "stage_12b_requirement": "Prove candidate generation cannot promote or alter governance."
+    },
+    {
+      "authoritative_side": "Hermes backend and governed runtime.",
+      "boundary_id": "webui-visibility-vs-mutation",
+      "consumer": "operator interface",
+      "denied_class": "Direct backend mutation, credential access, execution, installation, activation, or financial authority.",
+      "fail_closed_result": "Suppress the projection and preserve disconnected read-only state.",
+      "permitted_class": "Sanitized read-only status, sessions, tasks, approvals, and evidence projections.",
+      "producer": "Hermes WebUI adapter",
+      "required_evidence": [
+        "docs/sigil/evidence/HERMES_WEBUI_STAGE3_CERTIFICATION.json"
+      ],
+      "stage_12b_requirement": "Prove UI visibility cannot mutate authoritative backend state."
+    },
+    {
+      "authoritative_side": "Governed dispatcher and runtime admission policy.",
+      "boundary_id": "worker-acceptance-vs-dispatch",
+      "consumer": "fleet routing and worker runtime",
+      "denied_class": "Automatic dispatch, direct provider invocation, duplicate execution, or authority escalation.",
+      "fail_closed_result": "Reject or cancel the job without dispatching it.",
+      "permitted_class": "Validated job intent, limits, evidence requirements, and independent admission decisions.",
+      "producer": "common worker job contract",
+      "required_evidence": [
+        "docs/sigil/evidence/WORKER_JOB_CONTRACT_STAGE2_CERTIFICATION.json"
+      ],
+      "stage_12b_requirement": "Prove accepted contracts remain non-dispatching until separately authorized."
+    }
+  ],
+  "broker_submission": false,
+  "certification_blocks": [
+    {
+      "block_id": "12A",
+      "defects_may_be_fixed": true,
+      "evidence_requirements": [
+        "Checked-in Stage 12A JSON evidence artifact.",
+        "Focused deterministic test results.",
+        "Cumulative Stage 1 through Stage 11 validation results."
+      ],
+      "failure_conditions": [
+        "The manifest is incomplete, contradictory, nondeterministic, or tampered.",
+        "A required repository reference is missing.",
+        "Any authority or financial boundary is expanded."
+      ],
+      "feature_expansion_prohibited": true,
+      "objective": "Define and validate the authoritative deterministic certification manifest.",
+      "pass_conditions": [
+        "The manifest validates deterministically.",
+        "Every required component, boundary, invariant, and block is present.",
+        "All declared repository references exist.",
+        "Paper-only, broker-disabled, and feature-freeze invariants hold."
+      ],
+      "required_inputs": [
+        "Stage 1 through Stage 11 implementation files.",
+        "Existing Stage 1 through Stage 10 certification evidence.",
+        "Stage 11 implementation and tests."
+      ],
+      "required_outputs": [
+        "Canonical machine-readable certification manifest.",
+        "Stage 12A validation evidence.",
+        "Stage 12 certification documentation."
+      ]
+    },
+    {
+      "block_id": "12B",
+      "defects_may_be_fixed": true,
+      "evidence_requirements": [
+        "Machine-readable boundary matrix evidence.",
+        "Focused boundary certification tests.",
+        "Cumulative regression results."
+      ],
+      "failure_conditions": [
+        "A denied operation succeeds.",
+        "Authority ownership is ambiguous.",
+        "Evidence is missing, contradictory, or unverifiable."
+      ],
+      "feature_expansion_prohibited": true,
+      "objective": "Certify every governed producer-consumer boundary with an explicit matrix.",
+      "pass_conditions": [
+        "Every permitted flow is bounded and deterministic.",
+        "Every denied flow fails closed.",
+        "No boundary grants independent execution or financial authority."
+      ],
+      "required_inputs": [
+        "The certified Stage 12A manifest.",
+        "Stage 1 through Stage 11 source, tests, and evidence."
+      ],
+      "required_outputs": [
+        "Boundary matrix.",
+        "Positive and negative boundary test evidence.",
+        "Fail-closed authority proof."
+      ]
+    },
+    {
+      "block_id": "12C",
+      "defects_may_be_fixed": true,
+      "evidence_requirements": [
+        "Machine-readable replay and recovery evidence.",
+        "Crash, interruption, corruption, and duplicate-request tests.",
+        "Cumulative regression results."
+      ],
+      "failure_conditions": [
+        "Replay produces divergent authoritative state.",
+        "Recovery escalates authority.",
+        "Duplicate execution or evidence is created."
+      ],
+      "feature_expansion_prohibited": true,
+      "objective": "Certify deterministic replay, interruption recovery, idempotency, and duplicate prevention.",
+      "pass_conditions": [
+        "Equivalent inputs reproduce equivalent canonical outcomes.",
+        "Interrupted state recovers to the last valid authority state.",
+        "Replay and recovery create no duplicate execution or escalation."
+      ],
+      "required_inputs": [
+        "The certified Stage 12A manifest.",
+        "The certified Stage 12B boundary matrix.",
+        "Persisted deterministic fixtures and recovery scenarios."
+      ],
+      "required_outputs": [
+        "Replay evidence.",
+        "Recovery evidence.",
+        "Idempotency and duplicate-prevention evidence."
+      ]
+    },
+    {
+      "block_id": "12D",
+      "defects_may_be_fixed": true,
+      "evidence_requirements": [
+        "Final machine-readable certification report.",
+        "Complete validation-command and result inventory.",
+        "Golden Master readiness recommendation."
+      ],
+      "failure_conditions": [
+        "Any prior Stage 12 block is incomplete.",
+        "Any required validation fails.",
+        "Evidence is incomplete or unreproducible.",
+        "A release-blocking defect remains."
+      ],
+      "feature_expansion_prohibited": true,
+      "objective": "Close the governed ecosystem and determine Golden Master readiness.",
+      "pass_conditions": [
+        "Stages 12A, 12B, and 12C are certified.",
+        "All supported tests, lint, builds, packaging, and audits pass.",
+        "The repository and generated artifacts are reproducible and clean.",
+        "No unresolved release-blocking defect remains."
+      ],
+      "required_inputs": [
+        "Certified Stage 12A manifest.",
+        "Certified Stage 12B boundary matrix.",
+        "Certified Stage 12C replay and recovery evidence.",
+        "Complete build, package, audit, and repository evidence."
+      ],
+      "required_outputs": [
+        "Final ecosystem closure report.",
+        "Golden Master readiness decision.",
+        "Complete immutable evidence index."
+      ]
+    }
+  ],
+  "certification_scope": "post_phase9_stage12_ecosystem_certification",
+  "certification_stage": "12A",
+  "certification_status": {
+    "golden_master_readiness": "not_established",
+    "stage_12a": "certified",
+    "stage_12b": "not_certified",
+    "stage_12c": "not_certified",
+    "stage_12d": "not_certified"
+  },
+  "components": [
+    {
+      "activation_state": "read_only",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "agent-reach",
+      "component_type": "adapter",
+      "configuration_references": [],
+      "credential_classification": "resolution_prohibited",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [
+        "integration-registry",
+        "ecosystem-catalog"
+      ],
+      "evidence_references": [
+        "docs/sigil/evidence/AGENT_REACH_STAGE8A_CERTIFICATION.json"
+      ],
+      "execution_authority": "read_only",
+      "fail_closed_behavior": "Reject private, authenticated, mutating, malformed, or unverifiable internet access requests.",
+      "financial_boundary": "research_only",
+      "implementation_references": [
+        "apps/sigil/src/sigil/agent_reach_adapter.py"
+      ],
+      "network_classification": "public_read_modeled",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Disable the capability and discard untrusted research evidence.",
+      "stage": "8A",
+      "test_references": [
+        "apps/sigil/tests/test_agent_reach_adapter.py"
+      ]
+    },
+    {
+      "activation_state": "prohibited",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "buzz-relay",
+      "component_type": "adapter",
+      "configuration_references": [],
+      "credential_classification": "resolution_prohibited",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [
+        "integration-registry",
+        "worker-contract"
+      ],
+      "evidence_references": [
+        "docs/sigil/evidence/BUZZ_RELAY_STAGE5_CERTIFICATION.json"
+      ],
+      "execution_authority": "descriptive_only",
+      "fail_closed_behavior": "Reject malformed, unsigned, duplicate, or unauthorized events and deny command authority.",
+      "financial_boundary": "no_financial_authority",
+      "implementation_references": [
+        "apps/sigil/src/sigil/buzz_relay_adapter.py"
+      ],
+      "network_classification": "connection_modeled_disabled",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Disconnect or quarantine the relay without mutating runtime state.",
+      "stage": "5",
+      "test_references": [
+        "apps/sigil/tests/test_buzz_relay_adapter.py"
+      ]
+    },
+    {
+      "activation_state": "prohibited",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "buzznode",
+      "component_type": "adapter",
+      "configuration_references": [],
+      "credential_classification": "resolution_prohibited",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [
+        "integration-registry",
+        "worker-contract"
+      ],
+      "evidence_references": [
+        "docs/sigil/evidence/BUZZNODE_STAGE6_CERTIFICATION.json"
+      ],
+      "execution_authority": "proposal_only",
+      "fail_closed_behavior": "Reject stale, incompatible, uncertified, or unauthorized node evidence and deny placement or execution.",
+      "financial_boundary": "no_financial_authority",
+      "implementation_references": [
+        "apps/sigil/src/sigil/buzznode_adapter.py"
+      ],
+      "network_classification": "connection_modeled_disabled",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Quarantine the node and remove it from eligible placement.",
+      "stage": "6",
+      "test_references": [
+        "apps/sigil/tests/test_buzznode_adapter.py"
+      ]
+    },
+    {
+      "activation_state": "prohibited",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "ecosystem-catalog",
+      "component_type": "catalog",
+      "configuration_references": [],
+      "credential_classification": "none",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [
+        "integration-registry"
+      ],
+      "evidence_references": [
+        "docs/sigil/evidence/ECOSYSTEM_CATALOG_STAGE8_CERTIFICATION.json"
+      ],
+      "execution_authority": "descriptive_only",
+      "fail_closed_behavior": "Reject incomplete, conflicting, risky, or unverifiable catalog evidence and deny registry admission or activation.",
+      "financial_boundary": "no_financial_authority",
+      "implementation_references": [
+        "apps/sigil/src/sigil/ecosystem_catalog.py"
+      ],
+      "network_classification": "injected_evidence_only",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Hold, reject, or quarantine the candidate without installation.",
+      "stage": "8",
+      "test_references": [
+        "apps/sigil/tests/test_ecosystem_catalog.py"
+      ]
+    },
+    {
+      "activation_state": "proposal_only",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "fleet-routing",
+      "component_type": "router",
+      "configuration_references": [],
+      "credential_classification": "resolution_prohibited",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [
+        "worker-contract",
+        "buzznode"
+      ],
+      "evidence_references": [
+        "docs/sigil/evidence/ROUTING_FLEET_STAGE10_CERTIFICATION.json"
+      ],
+      "execution_authority": "proposal_only",
+      "fail_closed_behavior": "Exclude disabled, stale, unhealthy, incompatible, uncertified, over-budget, or capacity-blocked nodes and deny dispatch.",
+      "financial_boundary": "no_financial_authority",
+      "implementation_references": [
+        "apps/sigil/src/sigil/fleet_routing.py",
+        "apps/sigil/src/sigil/ai/fleet.py"
+      ],
+      "network_classification": "injected_evidence_only",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Exclude or quarantine the node and preserve non-dispatching state.",
+      "stage": "10",
+      "test_references": [
+        "apps/sigil/tests/test_fleet_routing.py",
+        "apps/sigil/tests/test_governed_ai_fleet_routing.py"
+      ]
+    },
+    {
+      "activation_state": "read_only",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "hermes-webui",
+      "component_type": "adapter",
+      "configuration_references": [],
+      "credential_classification": "resolution_prohibited",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [
+        "integration-registry",
+        "worker-contract"
+      ],
+      "evidence_references": [
+        "docs/sigil/evidence/HERMES_WEBUI_STAGE3_CERTIFICATION.json"
+      ],
+      "execution_authority": "read_only",
+      "fail_closed_behavior": "Reject malformed or unauthorized operator projections and preserve non-mutating disconnected state.",
+      "financial_boundary": "no_financial_authority",
+      "implementation_references": [
+        "apps/sigil/src/sigil/hermes_webui_adapter.py"
+      ],
+      "network_classification": "connection_modeled_disabled",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Disable the adapter projection and preserve backend authority.",
+      "stage": "3",
+      "test_references": [
+        "apps/sigil/tests/test_hermes_webui_adapter.py"
+      ]
+    },
+    {
+      "activation_state": "read_only",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "hermes-wiki",
+      "component_type": "adapter",
+      "configuration_references": [],
+      "credential_classification": "none",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [
+        "integration-registry"
+      ],
+      "evidence_references": [
+        "docs/sigil/evidence/HERMES_WIKI_STAGE7_CERTIFICATION.json"
+      ],
+      "execution_authority": "read_only",
+      "fail_closed_behavior": "Reject malformed, stale, conflicting, or unverifiable knowledge and prevent it from becoming authoritative runtime truth.",
+      "financial_boundary": "no_financial_authority",
+      "implementation_references": [
+        "apps/sigil/src/sigil/hermes_wiki_adapter.py"
+      ],
+      "network_classification": "injected_evidence_only",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Quarantine the affected knowledge record or projection.",
+      "stage": "7",
+      "test_references": [
+        "apps/sigil/tests/test_hermes_wiki_adapter.py"
+      ]
+    },
+    {
+      "activation_state": "prohibited",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "integration-registry",
+      "component_type": "registry",
+      "configuration_references": [],
+      "credential_classification": "none",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [],
+      "evidence_references": [
+        "docs/sigil/evidence/INTEGRATION_REGISTRY_STAGE1_CERTIFICATION.json"
+      ],
+      "execution_authority": "descriptive_only",
+      "fail_closed_behavior": "Reject malformed, conflicting, corrupt, or unauthorized registry state and preserve disabled integration status.",
+      "financial_boundary": "no_financial_authority",
+      "implementation_references": [
+        "apps/sigil/src/sigil/integration_registry.py"
+      ],
+      "network_classification": "none",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Disable or quarantine the affected registry entry.",
+      "stage": "1",
+      "test_references": [
+        "apps/sigil/tests/test_governed_integration_registry.py"
+      ]
+    },
+    {
+      "activation_state": "prohibited",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "paperclip",
+      "component_type": "adapter",
+      "configuration_references": [],
+      "credential_classification": "none",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [
+        "integration-registry",
+        "worker-contract"
+      ],
+      "evidence_references": [
+        "docs/sigil/evidence/PAPERCLIP_STAGE4_CERTIFICATION.json"
+      ],
+      "execution_authority": "proposal_only",
+      "fail_closed_behavior": "Reject invalid organizational assignments, approvals, or evidence and deny execution authority.",
+      "financial_boundary": "no_financial_authority",
+      "implementation_references": [
+        "apps/sigil/src/sigil/paperclip_adapter.py"
+      ],
+      "network_classification": "none",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Cancel or quarantine the assignment while preserving Hermes authority.",
+      "stage": "4",
+      "test_references": [
+        "apps/sigil/tests/test_paperclip_adapter.py"
+      ]
+    },
+    {
+      "activation_state": "proposal_only",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "self-evolution",
+      "component_type": "policy_engine",
+      "configuration_references": [],
+      "credential_classification": "none",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [
+        "integration-registry",
+        "worker-contract",
+        "ecosystem-catalog"
+      ],
+      "evidence_references": [
+        "docs/sigil/evidence/SELF_EVOLUTION_STAGE9_CERTIFICATION.json"
+      ],
+      "execution_authority": "proposal_only",
+      "fail_closed_behavior": "Reject incomplete evidence, missing independent review, failed regression proof, or unauthorized promotion.",
+      "financial_boundary": "no_financial_authority",
+      "implementation_references": [
+        "apps/sigil/src/sigil/self_evolution.py"
+      ],
+      "network_classification": "none",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Reject or quarantine the proposal and preserve current policy.",
+      "stage": "9",
+      "test_references": [
+        "apps/sigil/tests/test_self_evolution.py"
+      ]
+    },
+    {
+      "activation_state": "paper_only",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "sigil-desktop-bridge",
+      "component_type": "projection_bridge",
+      "configuration_references": [],
+      "credential_classification": "none",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [
+        "agent-reach",
+        "buzz-relay",
+        "buzznode",
+        "ecosystem-catalog",
+        "fleet-routing",
+        "hermes-webui",
+        "hermes-wiki",
+        "integration-registry",
+        "paperclip",
+        "self-evolution",
+        "worker-contract"
+      ],
+      "evidence_references": [],
+      "execution_authority": "paper_only",
+      "fail_closed_behavior": "Reject malformed, contradictory, unauthorized, or corrupt bridge state and restore the disconnected paper-only projection.",
+      "financial_boundary": "paper_only",
+      "implementation_references": [
+        "apps/sigil/src/sigil/desktop_bridge/bridge.py",
+        "apps/sigil/src/sigil/desktop_bridge/runtime.py"
+      ],
+      "network_classification": "none",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Discard invalid projection state and rebuild the safe default snapshot.",
+      "stage": "11",
+      "test_references": [
+        "apps/sigil/tests/test_sigil_bridge.py"
+      ]
+    },
+    {
+      "activation_state": "prohibited",
+      "authority": {
+        "activation_authorized": false,
+        "approval_authority": false,
+        "arbitrary_filesystem": false,
+        "arbitrary_shell": false,
+        "broker_submission": false,
+        "capital_authority": false,
+        "credential_access": false,
+        "execution_authorized": false,
+        "governance_bypass": false,
+        "installation_authorized": false,
+        "paper_only": true,
+        "policy_mutation": false,
+        "portfolio_mutation": false
+      },
+      "component_id": "worker-contract",
+      "component_type": "contract",
+      "configuration_references": [],
+      "credential_classification": "none",
+      "default_lifecycle_state": "disabled",
+      "dependencies": [
+        "integration-registry"
+      ],
+      "evidence_references": [
+        "docs/sigil/evidence/WORKER_JOB_CONTRACT_STAGE2_CERTIFICATION.json"
+      ],
+      "execution_authority": "proposal_only",
+      "fail_closed_behavior": "Reject invalid contracts, evidence, admission decisions, state transitions, duplicate authority, or corrupt storage.",
+      "financial_boundary": "no_financial_authority",
+      "implementation_references": [
+        "apps/sigil/src/sigil/worker_contract.py"
+      ],
+      "network_classification": "none",
+      "required_certification_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "rollback_or_quarantine_behavior": "Cancel or quarantine the affected job without granting dispatch.",
+      "stage": "2",
+      "test_references": [
+        "apps/sigil/tests/test_governed_worker_contract.py"
+      ]
+    }
+  ],
+  "creation_policy": "The manifest contains no runtime-generated timestamp; canonical identity excludes host, process, locale, timezone, and insertion order.",
+  "feature_expansion_prohibited": true,
+  "invariants": [
+    {
+      "failure_result": "Fail certification and prohibit promotion.",
+      "invariant_id": "broker-submission-disabled",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Broker submission remains disabled throughout Stage 12."
+    },
+    {
+      "failure_result": "Reject the artifact and fail deterministic certification.",
+      "invariant_id": "deterministic-identities",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Canonical identities remain deterministic across ordering, hosts, processes, locales, and timezones."
+    },
+    {
+      "failure_result": "Restore disabled state and fail certification.",
+      "invariant_id": "disabled-integrations-inactive",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Disabled integrations remain inactive unless separately governed and certified."
+    },
+    {
+      "failure_result": "Reject or reconcile the duplicate without escalation.",
+      "invariant_id": "duplicate-requests-idempotent",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Duplicate requests cannot create duplicate authority, dispatch, execution, evidence, or financial effects."
+    },
+    {
+      "failure_result": "Prohibit Golden Master promotion.",
+      "invariant_id": "golden-master-gated",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Golden Master readiness cannot be claimed before Stages 12B, 12C, and 12D all pass."
+    },
+    {
+      "failure_result": "Reject the operation and fail the affected gate.",
+      "invariant_id": "invalid-evidence-fails-closed",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Malformed, stale, missing, contradictory, corrupt, or unverifiable evidence fails closed."
+    },
+    {
+      "failure_result": "Reject or quarantine the conflicting knowledge.",
+      "invariant_id": "knowledge-non-authoritative",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Wiki and catalog content cannot override installed source, governed registry state, or observed runtime evidence."
+    },
+    {
+      "failure_result": "Reject the integration state and fail certification.",
+      "invariant_id": "no-independent-execution-authority",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "No external integration receives independent execution, approval, capital, portfolio, or policy authority."
+    },
+    {
+      "failure_result": "Fail certification and prohibit promotion.",
+      "invariant_id": "paper-only",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Sigil remains paper-only throughout Stage 12."
+    },
+    {
+      "failure_result": "Restore the last valid state and fail recovery certification.",
+      "invariant_id": "recovery-cannot-escalate",
+      "required_blocks": [
+        "12C",
+        "12D"
+      ],
+      "statement": "Cancellation, interruption, replay, and recovery cannot escalate authority or create duplicate execution."
+    },
+    {
+      "failure_result": "Reject and sanitize the artifact; fail certification.",
+      "invariant_id": "secrets-prohibited",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Secrets, credential material, private endpoints, and private host paths never appear in certification evidence or projections."
+    },
+    {
+      "failure_result": "Reject or quarantine the proposal.",
+      "invariant_id": "self-evolution-boundary",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Self-evolution cannot modify governance, financial boundaries, promotion policy, or execution authority."
+    },
+    {
+      "failure_result": "Discard the projection and preserve backend authority.",
+      "invariant_id": "ui-projections-non-authoritative",
+      "required_blocks": [
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Desktop and operator-interface projections remain non-authoritative."
+    },
+    {
+      "failure_result": "Reject the input and preserve authoritative state.",
+      "invariant_id": "untrusted-input-non-authoritative",
+      "required_blocks": [
+        "12A",
+        "12B",
+        "12C",
+        "12D"
+      ],
+      "statement": "Untrusted input cannot mutate authoritative runtime, governance, financial, or policy state."
+    }
+  ],
+  "manifest_identity": "sha256:4804f0b10d1fd32921fde2f7c2370fb4c0e215c1ac589404f0bf2e07f48cbf9a",
+  "paper_only": true,
+  "program_name": "Sigil Beta governed ecosystem certification",
+  "schema_version": 1,
+  "scope_confirmation": {
+    "adapters_added": false,
+    "broker_submission": false,
+    "external_integrations_activated": false,
+    "routing_logic_added": false,
+    "runtime_authority_expanded": false,
+    "runtime_capabilities_added": false,
+    "sigil_paper_only": true
+  },
+  "source_baseline": "Stage 1 through Stage 11 implementation ending at commit 8e3694b87; source identity must be independently verified by the operator and is not derived at import time.",
+  "status": "STAGE_12A_CERTIFIED",
+  "validation_summary": {
+    "boundary_count": 13,
+    "broker_submission_disabled_confirmed": true,
+    "certification_block_count": 4,
+    "component_count": 12,
+    "feature_freeze_confirmed": true,
+    "focused_stage12a_tests": {
+      "passed": 20,
+      "result": "passed"
+    },
+    "invariant_count": 14,
+    "manifest_identity": "sha256:4804f0b10d1fd32921fde2f7c2370fb4c0e215c1ac589404f0bf2e07f48cbf9a",
+    "paper_only_confirmed": true,
+    "valid": true
+  }
+}

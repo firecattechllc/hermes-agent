@@ -152,6 +152,18 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "inventory_recorded",
     "model_routing_recorded",
     "model_execution_recorded",
+    # Step 31 Big Sister / Little Sister learning hierarchy
+    "learning_hierarchy_recorded",
+    # Step 32 governed Mac / Titan communication link
+    "link_message_queued",
+    "link_message_received",
+    "link_message_delivered",
+    "link_message_acknowledged",
+    "link_message_rejected",
+    "link_message_failed",
+    # Step 33 whole-system knowledge and continuous discovery
+    "knowledge_snapshot_recorded",
+    "knowledge_drift_recorded",
     # Governed intelligence and efficiency visibility
     "intelligence_optimization_requested",
     "intelligence_optimization_recorded",
@@ -168,6 +180,13 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "release_readiness_blocked",
     "evidence_chain_certified",
     "rollback_readiness_recorded",
+    # Fleet Unification Stage 2 — Prime control plane
+    "prime_identity_registered",
+    "prime_health_reported",
+    "prime_admission_decided",
+    "prime_sigil_contract_invoked",
+    "prime_remote_maintenance_decided",
+    "prime_fleet_certified",
 })
 
 

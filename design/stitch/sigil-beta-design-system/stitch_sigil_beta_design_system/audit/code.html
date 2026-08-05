@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sigil Audit Screen</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#304f00",
+                        "outline": "#86948a",
+                        "on-secondary": "#003731",
+                        "background": "#121415",
+                        "surface-container-low": "#1a1c1d",
+                        "error": "#ffb4ab",
+                        "surface-container": "#1e2021",
+                        "secondary-container": "#04b4a2",
+                        "on-surface-variant": "#bbcabf",
+                        "surface-bright": "#38393a",
+                        "tertiary": "#91db2a",
+                        "primary": "#4edea3",
+                        "on-primary-fixed": "#002113",
+                        "on-tertiary": "#1f3700",
+                        "error-container": "#93000a",
+                        "on-secondary-fixed": "#00201c",
+                        "outline-variant": "#3c4a42",
+                        "tertiary-fixed": "#acf847",
+                        "surface-container-highest": "#333536",
+                        "on-error-container": "#ffdad6",
+                        "on-primary-container": "#00422b",
+                        "primary-container": "#10b981",
+                        "on-secondary-container": "#003f38",
+                        "on-primary": "#003824",
+                        "surface-variant": "#333536",
+                        "tertiary-container": "#72b400",
+                        "surface-dim": "#121415",
+                        "primary-fixed": "#6ffbbe",
+                        "on-background": "#e2e2e3",
+                        "on-tertiary-fixed": "#102000",
+                        "inverse-surface": "#e2e2e3",
+                        "surface-tint": "#4edea3",
+                        "inverse-primary": "#006c49",
+                        "inverse-on-surface": "#2f3132",
+                        "on-primary-fixed-variant": "#005236",
+                        "on-secondary-fixed-variant": "#005048",
+                        "on-error": "#690005",
+                        "secondary-fixed": "#71f8e4",
+                        "surface": "#121415",
+                        "on-tertiary-container": "#254000",
+                        "secondary": "#4fdbc8",
+                        "surface-container-lowest": "#0c0e0f",
+                        "primary-fixed-dim": "#4edea3",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "surface-container-high": "#282a2b",
+                        "on-surface": "#e2e2e3",
+                        "tertiary-fixed-dim": "#91db2a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "xs": "4px",
+                        "lg": "24px",
+                        "xl": "32px",
+                        "md": "16px",
+                        "margin-desktop": "24px",
+                        "margin-mobile": "16px",
+                        "sm": "8px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-sm": ["Inter"],
+                        "data-md": ["JetBrains Mono"],
+                        "data-lg": ["JetBrains Mono"],
+                        "body-sm": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "data-sm": ["JetBrains Mono"],
+                        "label-caps": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "data-md": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "data-lg": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "data-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.06em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #333536;
+            border-radius: 4px;
+        }
+        .timeline-line::before {
+            content: '';
+            position: absolute;
+            left: 23px;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background-color: #3c4a42;
+            z-index: 0;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex font-body-md">
+<!-- SideNavBar (Hidden on Mobile, Flex on Desktop) -->
+<nav class="hidden md:flex flex-col bg-surface-container w-64 h-full fixed left-0 top-0 border-r border-outline-variant py-md px-sm z-40">
+<div class="mb-xl px-sm">
+<h1 class="text-headline-sm font-headline-sm font-bold text-primary">Sigil v3.5</h1>
+<p class="text-label-caps font-label-caps text-on-surface-variant mt-xs">Environment: Paper</p>
+</div>
+<button class="w-full bg-[#14B8A6] hover:bg-[#0f9687] text-on-primary-fixed h-10 rounded mb-lg flex items-center justify-center gap-sm transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+<span class="text-body-md font-body-md font-medium">New Mission</span>
+</button>
+<div class="flex-1 flex flex-col gap-xs overflow-y-auto custom-scrollbar pr-xs">
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">dashboard</span>
+<span class="text-body-md font-body-md">Overview</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+<span class="text-body-md font-body-md">Portfolio</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">description</span>
+<span class="text-body-md font-body-md">Proposals</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">rocket_launch</span>
+<span class="text-body-md font-body-md">Launch</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">terminal</span>
+<span class="text-body-md font-body-md">Executions</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">account_tree</span>
+<span class="text-body-md font-body-md">Reconciliation</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg bg-secondary-container text-on-secondary-container translate-x-1 transition-transform duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">policy</span>
+<span class="text-body-md font-body-md font-medium">Audit</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">newspaper</span>
+<span class="text-body-md font-body-md">News</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="text-body-md font-body-md">Settings</span>
+</a>
+</div>
+<div class="mt-auto pt-md border-t border-outline-variant flex flex-col gap-xs">
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">sensors</span>
+<span class="text-body-md font-body-md">System Health</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">contact_support</span>
+<span class="text-body-md font-body-md">Support</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-64 flex flex-col min-h-screen relative">
+<!-- TopNavBar (Visible on Mobile, Hidden on Desktop in this specific context where side nav is dominant, but keeping as per specs for hybrid) -->
+<header class="md:hidden flex justify-between items-center w-full px-lg h-12 z-50 bg-background border-b border-outline-variant sticky top-0">
+<div class="text-headline-md font-headline-md font-bold text-primary tracking-tight truncate mr-4">Sigil Mission Control</div>
+<div class="flex items-center gap-sm shrink-0 text-primary">
+<button class="p-1 hover:bg-surface-container-highest rounded transition-colors opacity-80"><span class="material-symbols-outlined">security</span></button>
+<button class="p-1 hover:bg-surface-container-highest rounded transition-colors opacity-80"><span class="material-symbols-outlined">notifications</span></button>
+<button class="p-1 hover:bg-surface-container-highest rounded transition-colors opacity-80"><span class="material-symbols-outlined">help</span></button>
+</div>
+</header>
+<!-- Page Header -->
+<div class="px-margin-desktop py-lg border-b border-outline-variant bg-surface sticky top-0 md:top-0 z-30 flex flex-col md:flex-row justify-between items-start md:items-center gap-md">
+<div>
+<h2 class="text-headline-lg font-headline-lg text-on-background">Audit Trail</h2>
+<p class="text-body-md font-body-md text-on-surface-variant mt-xs">Immutable cryptographic evidence log for Mission ID: <span class="font-data-md text-data-md text-primary">M-8492-AX</span></p>
+</div>
+<div class="flex gap-sm w-full md:w-auto">
+<div class="relative flex-1 md:w-64">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+<input class="w-full bg-background border border-outline-variant rounded h-10 pl-xl pr-sm text-body-md font-body-md text-on-background focus:border-[#14B8A6] focus:ring-0 transition-colors placeholder:text-on-surface-variant" placeholder="Search event hash..." type="text"/>
+</div>
+<button class="h-10 px-md border border-outline-variant rounded bg-surface hover:bg-surface-container-highest text-on-background text-body-md font-body-md transition-colors flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+                    Filter
+                </button>
+<button class="h-10 px-md border border-outline-variant rounded bg-surface hover:bg-surface-container-highest text-on-background text-body-md font-body-md transition-colors flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                    Export
+                </button>
+</div>
+</div>
+<!-- Content Canvas -->
+<div class="flex-1 p-margin-desktop md:p-margin-desktop overflow-x-hidden relative">
+<div class="max-w-6xl mx-auto flex flex-col lg:flex-row gap-xl relative z-10">
+<!-- Main Timeline Column -->
+<div class="flex-1 relative timeline-line pb-xl">
+<!-- Event 1 -->
+<div class="relative pl-xl mb-lg group">
+<div class="absolute left-[19px] top-1 w-2 h-2 rounded-full bg-primary z-10 ring-4 ring-surface"></div>
+<div class="absolute left-0 top-1 text-label-caps font-label-caps text-on-surface-variant w-12 text-right pr-sm bg-background/80 backdrop-blur z-20">11:42</div>
+<div class="bg-surface border border-outline-variant rounded-lg p-md hover:bg-surface-container-highest transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-sm">
+<div class="flex items-center gap-sm">
+<span class="px-2 py-0.5 rounded-sm bg-primary/10 text-primary text-label-caps font-label-caps border border-primary/20">EXECUTION</span>
+<h3 class="text-body-lg font-body-lg font-medium">Smart Contract Deployed</h3>
+</div>
+<span class="text-data-sm font-data-sm text-on-surface-variant">2026-07-31</span>
+</div>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-md">Contract <span class="font-data-sm text-primary">0x7a...4b9c</span> successfully deployed to mainnet. Initializing state parameters.</p>
+<div class="bg-background rounded p-sm border border-outline-variant border-dashed">
+<div class="grid grid-cols-2 gap-sm">
+<div>
+<div class="text-label-caps font-label-caps text-on-surface-variant mb-xs">TRANSACTION HASH</div>
+<div class="text-data-md font-data-md text-on-background truncate">0x8f2d...91e4</div>
+</div>
+<div>
+<div class="text-label-caps font-label-caps text-on-surface-variant mb-xs">GAS USED</div>
+<div class="text-data-md font-data-md text-on-background">4,521,098 Gwei</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Event 2 (Screenshot Reference) -->
+<div class="relative pl-xl mb-lg group">
+<div class="absolute left-[19px] top-1 w-2 h-2 rounded-full bg-secondary z-10 ring-4 ring-surface"></div>
+<div class="absolute left-0 top-1 text-label-caps font-label-caps text-on-surface-variant w-12 text-right pr-sm bg-background/80 backdrop-blur z-20">11:21</div>
+<div class="bg-surface border border-outline-variant rounded-lg p-md hover:bg-surface-container-highest transition-colors">
+<div class="flex justify-between items-start mb-sm">
+<div class="flex items-center gap-sm">
+<span class="px-2 py-0.5 rounded-sm bg-secondary/10 text-secondary text-label-caps font-label-caps border border-secondary/20">SNAPSHOT</span>
+<h3 class="text-body-lg font-body-lg font-medium">System State Captured</h3>
+</div>
+<span class="text-data-sm font-data-sm text-on-surface-variant">2026-07-31</span>
+</div>
+<p class="text-body-sm font-body-sm text-on-surface-variant mb-md">Pre-deployment environment visual verification. All metrics nominal.</p>
+<div class="rounded-lg overflow-hidden border border-outline-variant relative">
+<img alt="System State Screenshot" class="w-full h-auto object-cover max-h-64 opacity-80 hover:opacity-100 transition-opacity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKUYSosXnE9gtGGl4yBTbvSGWPmfqFmml7FkoByp3xxSlEzB0_x9ZbrF_edKbbachhfizYJpMVootGHayRnfGQotmqbt-VAYl7B5u3lkSB9Nern_0BbwDgUzKixsrPUR_shAo5SIWNFB0GO_X1KCWA7QK7jpYR4_52lrZTUzJtZodElo3-voDC0pz24c7jcoEhsZJhPtd3PEkikqyYHxTYc2xmquW4IfavuOo8_3Q4RtugzprESzuntOwUizH1vQuAk3M"/>
+<div class="absolute bottom-sm right-sm bg-surface/90 backdrop-blur px-2 py-1 rounded text-data-sm font-data-sm text-on-surface-variant border border-outline-variant flex items-center gap-xs">
+<span class="material-symbols-outlined text-[14px]">photo_camera</span>
+                                    Screenshot 2026-07-31 at 11.21.45 PM.png
+                                </div>
+</div>
+</div>
+</div>
+</div>
+<!-- Side Info Panel -->
+<div class="w-full lg:w-80 flex flex-col gap-md shrink-0 z-10">
+<div class="bg-surface border border-outline-variant rounded-lg p-md">
+<h4 class="text-headline-sm font-headline-sm mb-md flex items-center gap-xs">
+<span class="material-symbols-outlined text-primary">verified</span>
+                            Mission Integrity
+                        </h4>
+<div class="space-y-sm">
+<div class="flex justify-between items-center py-xs border-b border-outline-variant">
+<span class="text-body-sm font-body-sm text-on-surface-variant">Status</span>
+<span class="px-2 py-0.5 rounded-sm bg-primary/10 text-primary text-label-caps font-label-caps border border-primary/20">SECURE</span>
+</div>
+<div class="flex justify-between items-center py-xs border-b border-outline-variant">
+<span class="text-body-sm font-body-sm text-on-surface-variant">Events Logged</span>
+<span class="text-data-md font-data-md">1,204</span>
+</div>
+<div class="flex justify-between items-center py-xs">
+<span class="text-body-sm font-body-sm text-on-surface-variant">Last Hash</span>
+<span class="text-data-sm font-data-sm text-on-background">0x9a...2f1</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

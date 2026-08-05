@@ -1021,3 +1021,52 @@ from .runtime_recovery_reporting import (
     RuntimeRecoveryReport,
     RuntimeRecoveryReportingService,
 )
+
+# Step 31 — Big Sister / Little Sister Learning Hierarchy
+from .learning_hierarchy import (
+    LEARNING_HIERARCHY_SCHEMA_VERSION,
+    GovernedLearningHierarchy,
+    LearningCapability,
+    LearningDecision,
+    LearningDecisionState,
+    LearningNodeRole,
+    LearningNodeState,
+    LearningRequest,
+    LearningRoute,
+    LessonPackage,
+    LessonRequest,
+)
+from .learning_hierarchy_store import (
+    LEARNING_HIERARCHY_JOURNAL,
+    InMemoryLearningHierarchyStore,
+    LearningHierarchyStore,
+    LearningJournalRecord,
+)
+from .learning_hierarchy_visibility import (
+    LEARNING_HIERARCHY_EVENT,
+    LearningHierarchyVisibilityAdapter,
+    LearningHierarchyVisibilityRecord,
+    LearningHierarchyVisibilityService,
+)
+
+__all__.extend([
+    "LEARNING_HIERARCHY_SCHEMA_VERSION",
+    "LEARNING_HIERARCHY_JOURNAL",
+    "LEARNING_HIERARCHY_EVENT",
+    "GovernedLearningHierarchy",
+    "InMemoryLearningHierarchyStore",
+    "LearningCapability",
+    "LearningDecision",
+    "LearningDecisionState",
+    "LearningHierarchyStore",
+    "LearningHierarchyVisibilityAdapter",
+    "LearningHierarchyVisibilityRecord",
+    "LearningHierarchyVisibilityService",
+    "LearningJournalRecord",
+    "LearningNodeRole",
+    "LearningNodeState",
+    "LearningRequest",
+    "LearningRoute",
+    "LessonPackage",
+    "LessonRequest",
+])

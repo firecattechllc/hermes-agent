@@ -1,0 +1,160 @@
+"""Prime — the Fleet Unification Stage 2 control plane.
+
+"Prime" is the pre-existing, documented ecosystem identity/membership/policy
+authority named (but never implemented) in
+``docs/architecture/hydra-ecosystem/CANONICAL_ARCHITECTURE.md``. This package
+is that authority's Stage 2 implementation: canonical fleet identity, a
+shared health protocol, a unified evidence layer, a deterministic admission
+service, a governed Sigil service contract, remote-maintenance governance,
+and fleet certification.
+
+None of the concepts in this package grant execution, mutation,
+remote-maintenance, broker-submission, or production authority by
+themselves. See each submodule's docstring for the specific boundary it
+enforces, and ``docs/architecture/FLEET_UNIFICATION_STAGES_2_9.md`` for the
+full architecture.
+"""
+
+from __future__ import annotations
+
+from hermes_cli.prime.admission import (
+    ADMISSION_SCHEMA_VERSION,
+    SUPPORTED_ADMISSION_POLICY_VERSIONS,
+    AdmissionDecision,
+    AdmissionOutcome,
+    AdmissionRequest,
+    CertificationStatus,
+    PrimeAdmissionService,
+)
+from hermes_cli.prime.certification import (
+    FLEET_CERTIFICATION_SCHEMA_VERSION,
+    CheckSeverity,
+    FleetCertification,
+    FleetCertificationCheck,
+    FleetCertificationStatus,
+    certify_fleet,
+    run_stage1_regression,
+)
+from hermes_cli.prime.evidence import (
+    EVIDENCE_SCHEMA_VERSION,
+    EvidenceRecord,
+    EvidenceStorageError,
+    ExternalEvidenceLink,
+    ExternalEvidenceSystem,
+    PrimeEvidenceStore,
+    SensitivityTier,
+)
+from hermes_cli.prime.health import (
+    HEALTH_PROTOCOL_VERSION,
+    DegradationLevel,
+    DependencyHealth,
+    HealthCheck,
+    HealthFinding,
+    HealthReport,
+    LivenessState,
+    QuarantineState,
+    ReadinessState,
+    ValidityState,
+    evaluate_health,
+    health_from_hermes_link_status,
+    health_from_sigil_fleet_node_health,
+    is_usable_for_admission,
+)
+from hermes_cli.prime.identity import (
+    IDENTITY_SCHEMA_VERSION,
+    FleetIdentity,
+    IdentityConflictError,
+    IdentityKind,
+    IdentityRegistry,
+    IdentitySource,
+    IdentityValidationError,
+    identity_from_hermes_link_node,
+    identity_from_learning_node,
+    identity_from_remote_target,
+    identity_from_sigil_fleet_node,
+)
+from hermes_cli.prime.remote_maintenance_governance import (
+    MAINTENANCE_GOVERNANCE_SCHEMA_VERSION,
+    ApprovalRevocation,
+    GovernedMaintenanceRequest,
+    MaintenanceDecision,
+    MaintenanceOutcome,
+    MaintenanceWindow,
+    evaluate_maintenance_request,
+    missing_approval_scopes,
+)
+from hermes_cli.prime.sigil_contract import (
+    SIGIL_CONTRACT_SCHEMA_VERSION,
+    SUPPORTED_SIGIL_OPERATIONS,
+    SigilContractOutcome,
+    SigilContractRequest,
+    SigilContractResponse,
+    SigilRejectionCode,
+    evaluate_sigil_contract_request,
+)
+from hermes_cli.prime.visibility import PrimeVisibilityService
+
+__all__ = [
+    "ADMISSION_SCHEMA_VERSION",
+    "SUPPORTED_ADMISSION_POLICY_VERSIONS",
+    "AdmissionDecision",
+    "AdmissionOutcome",
+    "AdmissionRequest",
+    "CertificationStatus",
+    "PrimeAdmissionService",
+    "FLEET_CERTIFICATION_SCHEMA_VERSION",
+    "CheckSeverity",
+    "FleetCertification",
+    "FleetCertificationCheck",
+    "FleetCertificationStatus",
+    "certify_fleet",
+    "run_stage1_regression",
+    "EVIDENCE_SCHEMA_VERSION",
+    "EvidenceRecord",
+    "EvidenceStorageError",
+    "ExternalEvidenceLink",
+    "ExternalEvidenceSystem",
+    "PrimeEvidenceStore",
+    "SensitivityTier",
+    "HEALTH_PROTOCOL_VERSION",
+    "DegradationLevel",
+    "DependencyHealth",
+    "HealthCheck",
+    "HealthFinding",
+    "HealthReport",
+    "LivenessState",
+    "QuarantineState",
+    "ReadinessState",
+    "ValidityState",
+    "evaluate_health",
+    "health_from_hermes_link_status",
+    "health_from_sigil_fleet_node_health",
+    "is_usable_for_admission",
+    "IDENTITY_SCHEMA_VERSION",
+    "FleetIdentity",
+    "IdentityConflictError",
+    "IdentityKind",
+    "IdentityRegistry",
+    "IdentitySource",
+    "IdentityValidationError",
+    "identity_from_hermes_link_node",
+    "identity_from_learning_node",
+    "identity_from_remote_target",
+    "identity_from_sigil_fleet_node",
+    "MAINTENANCE_GOVERNANCE_SCHEMA_VERSION",
+    "ApprovalRevocation",
+    "GovernedMaintenanceRequest",
+    "MaintenanceDecision",
+    "MaintenanceOutcome",
+    "MaintenanceWindow",
+    "evaluate_maintenance_request",
+    "missing_approval_scopes",
+    "SIGIL_CONTRACT_SCHEMA_VERSION",
+    "SUPPORTED_SIGIL_OPERATIONS",
+    "SigilContractOutcome",
+    "SigilContractRequest",
+    "SigilContractResponse",
+    "SigilRejectionCode",
+    "evaluate_sigil_contract_request",
+    "PrimeVisibilityService",
+]
