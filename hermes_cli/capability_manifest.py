@@ -177,7 +177,9 @@ def load_capability_manifest(path: Optional[Path] = None) -> CapabilityManifest:
         ) from error
 
 
-def validate_capability_manifest(manifest: CapabilityManifest) -> Tuple[bool, Tuple[str, ...]]:
+def validate_capability_manifest(
+    manifest: CapabilityManifest,
+) -> Tuple[bool, Tuple[str, ...]]:
     """Semantic (non-structural) lint checks beyond the pydantic schema.
 
     Returns ``(ok, warnings)``. These are deliberately warnings, not
@@ -188,7 +190,9 @@ def validate_capability_manifest(manifest: CapabilityManifest) -> Tuple[bool, Tu
     warnings: list[str] = []
     for entry in manifest.entries:
         if entry.state == CapabilityState.ACTIVE and entry.validation_command is None:
-            warnings.append(f"{entry.key}: state=active but no validation_command recorded")
+            warnings.append(
+                f"{entry.key}: state=active but no validation_command recorded"
+            )
         if (
             entry.state == CapabilityState.BLOCKED_CREDENTIALS
             and not entry.requires_credentials
@@ -196,7 +200,10 @@ def validate_capability_manifest(manifest: CapabilityManifest) -> Tuple[bool, Tu
             warnings.append(
                 f"{entry.key}: state=blocked_credentials but requires_credentials is empty"
             )
-        if entry.state == CapabilityState.FAILED_VALIDATION and entry.validation_command is None:
+        if (
+            entry.state == CapabilityState.FAILED_VALIDATION
+            and entry.validation_command is None
+        ):
             warnings.append(
                 f"{entry.key}: state=failed_validation but no validation_command recorded "
                 "(how was failure determined?)"

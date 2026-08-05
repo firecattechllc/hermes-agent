@@ -28,7 +28,9 @@ from smoke_test_fleet import (  # noqa: E402
 
 
 def _completed(returncode=0, stdout="", stderr=""):
-    return subprocess.CompletedProcess(args=["hermes"], returncode=returncode, stdout=stdout, stderr=stderr)
+    return subprocess.CompletedProcess(
+        args=["hermes"], returncode=returncode, stdout=stdout, stderr=stderr
+    )
 
 
 # ── capability manifest check ────────────────────────────────────────
@@ -44,7 +46,9 @@ def test_capability_manifest_check_fails_closed_on_load_error(monkeypatch):
     def _boom(*args, **kwargs):
         raise RuntimeError("manifest missing")
 
-    monkeypatch.setattr("hermes_cli.capability_manifest.load_capability_manifest", _boom)
+    monkeypatch.setattr(
+        "hermes_cli.capability_manifest.load_capability_manifest", _boom
+    )
     result = module.check_capability_manifest()
     assert result.outcome == CheckOutcome.FAIL
     assert "manifest missing" in result.detail
@@ -133,7 +137,9 @@ def test_hermes_doctor_fails_closed_when_binary_missing(monkeypatch):
 
 def test_cron_status_pass_when_gateway_running(monkeypatch):
     monkeypatch.setattr(
-        module, "_run_hermes", lambda *a: _completed(returncode=0, stdout="Gateway is running")
+        module,
+        "_run_hermes",
+        lambda *a: _completed(returncode=0, stdout="Gateway is running"),
     )
     result = module.check_cron_status()
     assert result.outcome == CheckOutcome.PASS
@@ -141,15 +147,20 @@ def test_cron_status_pass_when_gateway_running(monkeypatch):
 
 def test_cron_status_warns_when_gateway_not_running(monkeypatch):
     monkeypatch.setattr(
-        module, "_run_hermes",
-        lambda *a: _completed(returncode=0, stdout="Gateway is not running — cron jobs will NOT fire"),
+        module,
+        "_run_hermes",
+        lambda *a: _completed(
+            returncode=0, stdout="Gateway is not running — cron jobs will NOT fire"
+        ),
     )
     result = module.check_cron_status()
     assert result.outcome == CheckOutcome.WARN
 
 
 def test_cron_status_fails_on_nonzero_exit(monkeypatch):
-    monkeypatch.setattr(module, "_run_hermes", lambda *a: _completed(returncode=1, stderr="boom"))
+    monkeypatch.setattr(
+        module, "_run_hermes", lambda *a: _completed(returncode=1, stderr="boom")
+    )
     result = module.check_cron_status()
     assert result.outcome == CheckOutcome.FAIL
 
@@ -162,8 +173,11 @@ def test_hermes_link_status_pass_when_reachable(monkeypatch):
 
 def test_hermes_link_status_skips_when_token_missing(monkeypatch):
     monkeypatch.setattr(
-        module, "_run_hermes",
-        lambda *a: _completed(returncode=1, stderr="link: HERMES_LINK_TOKEN is not configured"),
+        module,
+        "_run_hermes",
+        lambda *a: _completed(
+            returncode=1, stderr="link: HERMES_LINK_TOKEN is not configured"
+        ),
     )
     result = module.check_hermes_link_status()
     assert result.outcome == CheckOutcome.SKIP
@@ -171,7 +185,9 @@ def test_hermes_link_status_skips_when_token_missing(monkeypatch):
 
 def test_hermes_link_status_warns_on_other_failure(monkeypatch):
     monkeypatch.setattr(
-        module, "_run_hermes", lambda *a: _completed(returncode=1, stderr="connection refused")
+        module,
+        "_run_hermes",
+        lambda *a: _completed(returncode=1, stderr="connection refused"),
     )
     result = module.check_hermes_link_status()
     assert result.outcome == CheckOutcome.WARN
@@ -200,8 +216,13 @@ def test_tailscale_node_check_delegates_to_connectivity_module(monkeypatch):
     import scripts.fleet_connectivity_check as scoped_module
 
     fake_result = scoped_module.NodeConnectivityResult(
-        node="hydra-titan.example.ts.net", tailscale_running=True, peer_found=True,
-        peer_online=True, peer_hostname="hydra-titan", verified=True, reason="ok",
+        node="hydra-titan.example.ts.net",
+        tailscale_running=True,
+        peer_found=True,
+        peer_online=True,
+        peer_hostname="hydra-titan",
+        verified=True,
+        reason="ok",
     )
     monkeypatch.setattr(
         scoped_module, "check_node_connectivity", lambda *a, **k: fake_result
@@ -215,7 +236,8 @@ def test_tailscale_node_check_delegates_to_connectivity_module(monkeypatch):
 
 def test_main_returns_zero_when_nothing_fails(monkeypatch, capsys):
     monkeypatch.setattr(
-        module, "run_all_checks",
+        module,
+        "run_all_checks",
         lambda **k: [module.CheckResult("fake_check", CheckOutcome.PASS, "ok")],
     )
     exit_code = main([])
@@ -225,7 +247,8 @@ def test_main_returns_zero_when_nothing_fails(monkeypatch, capsys):
 
 def test_main_returns_one_when_any_check_fails(monkeypatch, capsys):
     monkeypatch.setattr(
-        module, "run_all_checks",
+        module,
+        "run_all_checks",
         lambda **k: [
             module.CheckResult("fake_check", CheckOutcome.PASS, "ok"),
             module.CheckResult("broken_check", CheckOutcome.FAIL, "boom"),
@@ -239,7 +262,8 @@ def test_main_json_output_is_valid_json(monkeypatch, capsys):
     import json
 
     monkeypatch.setattr(
-        module, "run_all_checks",
+        module,
+        "run_all_checks",
         lambda **k: [module.CheckResult("fake_check", CheckOutcome.PASS, "ok")],
     )
     main(["--json"])

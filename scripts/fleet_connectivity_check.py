@@ -96,15 +96,23 @@ def check_node_connectivity(
 
     if status is None:
         return NodeConnectivityResult(
-            node=node, tailscale_running=False, peer_found=False,
-            peer_online=None, peer_hostname=None, verified=False,
+            node=node,
+            tailscale_running=False,
+            peer_found=False,
+            peer_online=None,
+            peer_hostname=None,
+            verified=False,
             reason="tailscale_unavailable_or_not_running",
         )
 
     if status.get("BackendState") != "Running":
         return NodeConnectivityResult(
-            node=node, tailscale_running=False, peer_found=False,
-            peer_online=None, peer_hostname=None, verified=False,
+            node=node,
+            tailscale_running=False,
+            peer_found=False,
+            peer_online=None,
+            peer_hostname=None,
+            verified=False,
             reason="tailscale_backend_not_running",
         )
 
@@ -125,8 +133,12 @@ def check_node_connectivity(
 
     if match is None:
         return NodeConnectivityResult(
-            node=node, tailscale_running=True, peer_found=False,
-            peer_online=None, peer_hostname=None, verified=False,
+            node=node,
+            tailscale_running=True,
+            peer_found=False,
+            peer_online=None,
+            peer_hostname=None,
+            verified=False,
             reason="node_not_found_in_tailnet",
         )
 
@@ -135,21 +147,33 @@ def check_node_connectivity(
 
     if expected_hostname is not None and hostname != expected_hostname:
         return NodeConnectivityResult(
-            node=node, tailscale_running=True, peer_found=True,
-            peer_online=online, peer_hostname=hostname, verified=False,
+            node=node,
+            tailscale_running=True,
+            peer_found=True,
+            peer_online=online,
+            peer_hostname=hostname,
+            verified=False,
             reason="hostname_mismatch",
         )
 
     if not online:
         return NodeConnectivityResult(
-            node=node, tailscale_running=True, peer_found=True,
-            peer_online=False, peer_hostname=hostname, verified=False,
+            node=node,
+            tailscale_running=True,
+            peer_found=True,
+            peer_online=False,
+            peer_hostname=hostname,
+            verified=False,
             reason="node_offline",
         )
 
     return NodeConnectivityResult(
-        node=node, tailscale_running=True, peer_found=True,
-        peer_online=True, peer_hostname=hostname, verified=True,
+        node=node,
+        tailscale_running=True,
+        peer_found=True,
+        peer_online=True,
+        peer_hostname=hostname,
+        verified=True,
         reason="ok",
     )
 
@@ -161,14 +185,17 @@ def _load_dns_identity_from_config(config_path: Path, node_key: str) -> str:
     try:
         raw = json.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise FleetConnectivityCheckError(f"cannot read config {config_path}: {error}") from error
+        raise FleetConnectivityCheckError(
+            f"cannot read config {config_path}: {error}"
+        ) from error
 
     targets = raw.get("targets")
     if not isinstance(targets, list):
         raise FleetConnectivityCheckError(f"{config_path} has no 'targets' list")
 
     matches = [
-        t for t in targets
+        t
+        for t in targets
         if isinstance(t, dict) and node_key in str(t.get("node_id", ""))
     ]
     if not matches:
@@ -193,13 +220,28 @@ def _load_dns_identity_from_config(config_path: Path, node_key: str) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--dns-identity", help="Tailscale MagicDNS name to check directly")
-    source.add_argument("--node", help="Node key to look up in --config (matched against target node_id)")
-    parser.add_argument("--config", type=Path, help="mac-coordinator.json-shaped config file (required with --node)")
-    parser.add_argument("--expected-hostname", default=None, help="Optional exact HostName to require")
-    parser.add_argument("--json", action="store_true", help="Output JSON instead of text")
+    source.add_argument(
+        "--dns-identity", help="Tailscale MagicDNS name to check directly"
+    )
+    source.add_argument(
+        "--node",
+        help="Node key to look up in --config (matched against target node_id)",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="mac-coordinator.json-shaped config file (required with --node)",
+    )
+    parser.add_argument(
+        "--expected-hostname", default=None, help="Optional exact HostName to require"
+    )
+    parser.add_argument(
+        "--json", action="store_true", help="Output JSON instead of text"
+    )
     args = parser.parse_args(argv)
 
     if args.node and not args.config:
@@ -212,12 +254,20 @@ def main(argv: Optional[list[str]] = None) -> int:
             dns_identity = _load_dns_identity_from_config(args.config, args.node)
     except FleetConnectivityCheckError as error:
         if args.json:
-            print(json.dumps({"verified": False, "reason": "config_error", "detail": str(error)}))
+            print(
+                json.dumps({
+                    "verified": False,
+                    "reason": "config_error",
+                    "detail": str(error),
+                })
+            )
         else:
             print(f"fleet-connectivity-check: {error}", file=sys.stderr)
         return 2
 
-    result = check_node_connectivity(dns_identity, expected_hostname=args.expected_hostname)
+    result = check_node_connectivity(
+        dns_identity, expected_hostname=args.expected_hostname
+    )
 
     if args.json:
         print(json.dumps(result.to_dict(), sort_keys=True))

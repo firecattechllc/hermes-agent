@@ -82,7 +82,11 @@ def check_capability_manifest() -> CheckResult:
         counts = manifest.counts_by_state()
         detail = f"{len(manifest.entries)} entries, counts={counts}"
         if not ok:
-            return CheckResult("capability_manifest", CheckOutcome.WARN, f"{detail}; lint warnings: {warnings}")
+            return CheckResult(
+                "capability_manifest",
+                CheckOutcome.WARN,
+                f"{detail}; lint warnings: {warnings}",
+            )
         return CheckResult("capability_manifest", CheckOutcome.PASS, detail)
     except Exception as error:  # noqa: BLE001
         return CheckResult("capability_manifest", CheckOutcome.FAIL, str(error))
@@ -91,16 +95,29 @@ def check_capability_manifest() -> CheckResult:
 def check_hermes_cli_available() -> CheckResult:
     try:
         proc = subprocess.run(  # noqa: S603, S607
-            ["hermes", "--version"], capture_output=True, text=True,
-            timeout=SUBPROCESS_TIMEOUT_SECONDS, check=False,
+            ["hermes", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=SUBPROCESS_TIMEOUT_SECONDS,
+            check=False,
         )
     except FileNotFoundError:
-        return CheckResult("hermes_cli_available", CheckOutcome.FAIL, "`hermes` not found on PATH")
+        return CheckResult(
+            "hermes_cli_available", CheckOutcome.FAIL, "`hermes` not found on PATH"
+        )
     except subprocess.TimeoutExpired:
-        return CheckResult("hermes_cli_available", CheckOutcome.FAIL, "`hermes --version` timed out")
+        return CheckResult(
+            "hermes_cli_available", CheckOutcome.FAIL, "`hermes --version` timed out"
+        )
     if proc.returncode != 0:
-        return CheckResult("hermes_cli_available", CheckOutcome.FAIL, f"exit={proc.returncode}")
-    return CheckResult("hermes_cli_available", CheckOutcome.PASS, proc.stdout.strip().splitlines()[0] if proc.stdout.strip() else "ok")
+        return CheckResult(
+            "hermes_cli_available", CheckOutcome.FAIL, f"exit={proc.returncode}"
+        )
+    return CheckResult(
+        "hermes_cli_available",
+        CheckOutcome.PASS,
+        proc.stdout.strip().splitlines()[0] if proc.stdout.strip() else "ok",
+    )
 
 
 def check_hermes_doctor() -> CheckResult:
@@ -145,10 +162,15 @@ def check_hermes_link_status() -> CheckResult:
     combined = (proc.stdout + proc.stderr).strip()
     if "HERMES_LINK_TOKEN" in combined or "not configured" in combined:
         return CheckResult(
-            "hermes_link_status", CheckOutcome.SKIP,
+            "hermes_link_status",
+            CheckOutcome.SKIP,
             "HERMES_LINK_TOKEN not configured in this environment (expected until deployment)",
         )
-    return CheckResult("hermes_link_status", CheckOutcome.WARN, combined.splitlines()[0] if combined else f"exit={proc.returncode}")
+    return CheckResult(
+        "hermes_link_status",
+        CheckOutcome.WARN,
+        combined.splitlines()[0] if combined else f"exit={proc.returncode}",
+    )
 
 
 def check_credential_presence() -> List[CheckResult]:
@@ -168,7 +190,10 @@ def _present_in_hermes_env(var_name: str) -> bool:
     try:
         for line in env_path.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
-            if stripped.startswith(f"{var_name}=") and len(stripped) > len(var_name) + 1:
+            if (
+                stripped.startswith(f"{var_name}=")
+                and len(stripped) > len(var_name) + 1
+            ):
                 return True
     except OSError:
         return False
@@ -186,18 +211,30 @@ def check_deploy_templates_present() -> CheckResult:
     ]
     missing = [p for p in expected if not (REPO_ROOT / p).exists()]
     if missing:
-        return CheckResult("deploy_templates_present", CheckOutcome.FAIL, f"missing: {missing}")
-    return CheckResult("deploy_templates_present", CheckOutcome.PASS, f"{len(expected)} templates present")
+        return CheckResult(
+            "deploy_templates_present", CheckOutcome.FAIL, f"missing: {missing}"
+        )
+    return CheckResult(
+        "deploy_templates_present",
+        CheckOutcome.PASS,
+        f"{len(expected)} templates present",
+    )
 
 
 def check_tailscale_node(dns_identity: Optional[str], label: str) -> CheckResult:
     if dns_identity is None:
-        return CheckResult(f"tailscale_{label}", CheckOutcome.SKIP, "no --{}-dns-identity given".format(label))
+        return CheckResult(
+            f"tailscale_{label}",
+            CheckOutcome.SKIP,
+            "no --{}-dns-identity given".format(label),
+        )
     from scripts.fleet_connectivity_check import check_node_connectivity
 
     result = check_node_connectivity(dns_identity)
     outcome = CheckOutcome.PASS if result.verified else CheckOutcome.WARN
-    return CheckResult(f"tailscale_{label}", outcome, f"{result.reason} (online={result.peer_online})")
+    return CheckResult(
+        f"tailscale_{label}", outcome, f"{result.reason} (online={result.peer_online})"
+    )
 
 
 def check_computer_use_doctor() -> CheckResult:
@@ -211,7 +248,9 @@ def check_computer_use_doctor() -> CheckResult:
     return CheckResult("computer_use_doctor", outcome, f"exit={proc.returncode}")
 
 
-def run_all_checks(*, titan_dns_identity: Optional[str], mac_dns_identity: Optional[str]) -> List[CheckResult]:
+def run_all_checks(
+    *, titan_dns_identity: Optional[str], mac_dns_identity: Optional[str]
+) -> List[CheckResult]:
     checks: List[Callable[[], object]] = [
         check_hermes_cli_available,
         check_capability_manifest,
@@ -232,30 +271,49 @@ def run_all_checks(*, titan_dns_identity: Optional[str], mac_dns_identity: Optio
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--titan-dns-identity", default=None, help="Titan's Tailscale MagicDNS name, to also verify connectivity")
-    parser.add_argument("--mac-dns-identity", default=None, help="Mac's Tailscale MagicDNS name, to also verify connectivity")
-    parser.add_argument("--json", action="store_true", help="Output JSON instead of text")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--titan-dns-identity",
+        default=None,
+        help="Titan's Tailscale MagicDNS name, to also verify connectivity",
+    )
+    parser.add_argument(
+        "--mac-dns-identity",
+        default=None,
+        help="Mac's Tailscale MagicDNS name, to also verify connectivity",
+    )
+    parser.add_argument(
+        "--json", action="store_true", help="Output JSON instead of text"
+    )
     args = parser.parse_args(argv)
 
-    results = run_all_checks(titan_dns_identity=args.titan_dns_identity, mac_dns_identity=args.mac_dns_identity)
+    results = run_all_checks(
+        titan_dns_identity=args.titan_dns_identity,
+        mac_dns_identity=args.mac_dns_identity,
+    )
 
     if args.json:
         print(json.dumps([r.to_dict() for r in results], indent=2))
     else:
         print("FireCat Hermes fleet smoke test (non-destructive, read-only)\n")
         for r in results:
-            marker = {"pass": "✓", "warn": "⚠", "fail": "✗", "skip": "·"}[r.outcome.value]
+            marker = {"pass": "✓", "warn": "⚠", "fail": "✗", "skip": "·"}[
+                r.outcome.value
+            ]
             print(f"  {marker} {r.name:<32} {r.outcome.value:<6} {r.detail}")
 
     failed = [r for r in results if r.outcome == CheckOutcome.FAIL]
     if not args.json:
         print()
-        print(f"{len(results)} checks: "
-              f"{sum(r.outcome == CheckOutcome.PASS for r in results)} passed, "
-              f"{sum(r.outcome == CheckOutcome.WARN for r in results)} warned, "
-              f"{len(failed)} failed, "
-              f"{sum(r.outcome == CheckOutcome.SKIP for r in results)} skipped")
+        print(
+            f"{len(results)} checks: "
+            f"{sum(r.outcome == CheckOutcome.PASS for r in results)} passed, "
+            f"{sum(r.outcome == CheckOutcome.WARN for r in results)} warned, "
+            f"{len(failed)} failed, "
+            f"{sum(r.outcome == CheckOutcome.SKIP for r in results)} skipped"
+        )
     return 1 if failed else 0
 
 

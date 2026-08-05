@@ -26,7 +26,11 @@ from fleet_connectivity_check import (  # noqa: E402
 
 ONLINE_PEER_STATUS = {
     "BackendState": "Running",
-    "Self": {"DNSName": "self-node.example.ts.net.", "HostName": "self-node", "Online": True},
+    "Self": {
+        "DNSName": "self-node.example.ts.net.",
+        "HostName": "self-node",
+        "Online": True,
+    },
     "Peer": {
         "peer-key-1": {
             "DNSName": "hydra-titan.example.ts.net.",
@@ -46,7 +50,9 @@ ONLINE_PEER_STATUS = {
 
 
 def test_online_peer_is_verified():
-    result = check_node_connectivity("hydra-titan.example.ts.net", status=ONLINE_PEER_STATUS)
+    result = check_node_connectivity(
+        "hydra-titan.example.ts.net", status=ONLINE_PEER_STATUS
+    )
     assert result.verified is True
     assert result.reason == "ok"
     assert result.peer_online is True
@@ -54,7 +60,9 @@ def test_online_peer_is_verified():
 
 
 def test_offline_peer_is_not_verified():
-    result = check_node_connectivity("hydra-live.example.ts.net", status=ONLINE_PEER_STATUS)
+    result = check_node_connectivity(
+        "hydra-live.example.ts.net", status=ONLINE_PEER_STATUS
+    )
     assert result.verified is False
     assert result.reason == "node_offline"
     assert result.peer_found is True
@@ -62,14 +70,18 @@ def test_offline_peer_is_not_verified():
 
 
 def test_unknown_node_is_not_verified():
-    result = check_node_connectivity("nonexistent.example.ts.net", status=ONLINE_PEER_STATUS)
+    result = check_node_connectivity(
+        "nonexistent.example.ts.net", status=ONLINE_PEER_STATUS
+    )
     assert result.verified is False
     assert result.reason == "node_not_found_in_tailnet"
     assert result.peer_found is False
 
 
 def test_self_peer_matches():
-    result = check_node_connectivity("self-node.example.ts.net", status=ONLINE_PEER_STATUS)
+    result = check_node_connectivity(
+        "self-node.example.ts.net", status=ONLINE_PEER_STATUS
+    )
     assert result.verified is True
     assert result.reason == "ok"
 
@@ -81,7 +93,9 @@ def test_matches_by_hostname_case_insensitive():
 
 def test_expected_hostname_mismatch_fails_closed():
     result = check_node_connectivity(
-        "hydra-titan.example.ts.net", expected_hostname="wrong-hostname", status=ONLINE_PEER_STATUS
+        "hydra-titan.example.ts.net",
+        expected_hostname="wrong-hostname",
+        status=ONLINE_PEER_STATUS,
     )
     assert result.verified is False
     assert result.reason == "hostname_mismatch"
@@ -102,7 +116,10 @@ def test_backend_not_running_fails_closed():
 
 
 def test_dns_identity_normalization_strips_trailing_dot_and_case():
-    assert _normalize_dns_identity("Hydra-Titan.Example.TS.NET.") == "hydra-titan.example.ts.net"
+    assert (
+        _normalize_dns_identity("Hydra-Titan.Example.TS.NET.")
+        == "hydra-titan.example.ts.net"
+    )
 
 
 def test_tailscale_unavailable_fails_closed(monkeypatch):
@@ -119,22 +136,32 @@ def test_tailscale_unavailable_fails_closed(monkeypatch):
 
 def test_load_dns_identity_from_config_success(tmp_path):
     config_path = tmp_path / "coordinator.json"
-    config_path.write_text(json.dumps({
-        "targets": [
-            {"node_id": "node-titan", "tailnet_dns_identity": "hydra-titan.example.ts.net"},
-        ]
-    }))
+    config_path.write_text(
+        json.dumps({
+            "targets": [
+                {
+                    "node_id": "node-titan",
+                    "tailnet_dns_identity": "hydra-titan.example.ts.net",
+                },
+            ]
+        })
+    )
     identity = _load_dns_identity_from_config(config_path, "titan")
     assert identity == "hydra-titan.example.ts.net"
 
 
 def test_load_dns_identity_rejects_placeholder(tmp_path):
     config_path = tmp_path / "coordinator.json"
-    config_path.write_text(json.dumps({
-        "targets": [
-            {"node_id": "node-titan", "tailnet_dns_identity": "replace-with-verified-titan.ts.net"},
-        ]
-    }))
+    config_path.write_text(
+        json.dumps({
+            "targets": [
+                {
+                    "node_id": "node-titan",
+                    "tailnet_dns_identity": "replace-with-verified-titan.ts.net",
+                },
+            ]
+        })
+    )
     with pytest.raises(FleetConnectivityCheckError, match="placeholder"):
         _load_dns_identity_from_config(config_path, "titan")
 
@@ -148,12 +175,14 @@ def test_load_dns_identity_rejects_missing_target(tmp_path):
 
 def test_load_dns_identity_rejects_ambiguous_target(tmp_path):
     config_path = tmp_path / "coordinator.json"
-    config_path.write_text(json.dumps({
-        "targets": [
-            {"node_id": "node-titan-a", "tailnet_dns_identity": "a.example.ts.net"},
-            {"node_id": "node-titan-b", "tailnet_dns_identity": "b.example.ts.net"},
-        ]
-    }))
+    config_path.write_text(
+        json.dumps({
+            "targets": [
+                {"node_id": "node-titan-a", "tailnet_dns_identity": "a.example.ts.net"},
+                {"node_id": "node-titan-b", "tailnet_dns_identity": "b.example.ts.net"},
+            ]
+        })
+    )
     with pytest.raises(FleetConnectivityCheckError, match="ambiguous"):
         _load_dns_identity_from_config(config_path, "titan")
 

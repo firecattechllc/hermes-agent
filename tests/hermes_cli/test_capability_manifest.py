@@ -35,6 +35,7 @@ def _entry(**overrides) -> CapabilityEntry:
 
 # ── Real repository manifest ─────────────────────────────────────────────────
 
+
 def test_default_manifest_file_exists() -> None:
     assert DEFAULT_MANIFEST_PATH.exists()
 
@@ -68,13 +69,17 @@ def test_default_manifest_covers_every_state() -> None:
 def test_default_manifest_blocked_credentials_entries_declare_credentials() -> None:
     manifest = load_capability_manifest()
     for entry in manifest.by_state(CapabilityState.BLOCKED_CREDENTIALS):
-        assert entry.requires_credentials, f"{entry.key} is blocked_credentials but declares none"
+        assert entry.requires_credentials, (
+            f"{entry.key} is blocked_credentials but declares none"
+        )
 
 
 def test_default_manifest_active_entries_have_validation_commands() -> None:
     manifest = load_capability_manifest()
     for entry in manifest.by_state(CapabilityState.ACTIVE):
-        assert entry.validation_command, f"{entry.key} is active but has no validation_command"
+        assert entry.validation_command, (
+            f"{entry.key} is active but has no validation_command"
+        )
 
 
 def test_hermes_link_titan_and_mac_entries_present() -> None:
@@ -93,6 +98,7 @@ def test_by_node_filters_correctly() -> None:
 
 
 # ── Schema / loader behavior (synthetic fixtures) ───────────────────────────
+
 
 def test_capability_entry_rejects_uppercase_key() -> None:
     with pytest.raises(ValidationError):
@@ -148,21 +154,19 @@ def test_load_capability_manifest_rejects_schema_violation(tmp_path: Path) -> No
 def test_load_capability_manifest_accepts_well_formed_fixture(tmp_path: Path) -> None:
     fixture = tmp_path / "good.yaml"
     fixture.write_text(
-        yaml.safe_dump(
-            {
-                "generated_at": "2026-01-01",
-                "entries": [
-                    {
-                        "key": "example",
-                        "display_name": "Example",
-                        "category": "core_tool",
-                        "state": "active",
-                        "reason": "works",
-                        "validation_command": "true",
-                    }
-                ],
-            }
-        ),
+        yaml.safe_dump({
+            "generated_at": "2026-01-01",
+            "entries": [
+                {
+                    "key": "example",
+                    "display_name": "Example",
+                    "category": "core_tool",
+                    "state": "active",
+                    "reason": "works",
+                    "validation_command": "true",
+                }
+            ],
+        }),
         encoding="utf-8",
     )
     manifest = load_capability_manifest(fixture)
@@ -170,6 +174,7 @@ def test_load_capability_manifest_accepts_well_formed_fixture(tmp_path: Path) ->
 
 
 # ── Semantic validation warnings ────────────────────────────────────────────
+
 
 def test_validate_flags_active_without_validation_command() -> None:
     manifest = CapabilityManifest(
