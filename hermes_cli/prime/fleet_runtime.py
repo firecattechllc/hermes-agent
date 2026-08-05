@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Optional
 
 from hermes_cli.mission_control.service import MissionControlService
+from hermes_cli.mission_control.store import MissionControlStore
 from hermes_cli.prime.admission import (
     AdmissionDecision,
     AdmissionOutcome,
@@ -75,7 +76,17 @@ class FleetRuntime:
             self.registry, health_store=HealthReportStore(state_root=state_root)
         )
         self._admission = admission_service or PrimeAdmissionService()
-        mission_control = mission_control or MissionControlService()
+        # Scoped under the same explicit state_root as the registry/heartbeat/
+        # evidence stores above whenever one is supplied — a locked-down
+        # service account (e.g. systemd `User=hermes` with no real home
+        # directory) has no writable ``get_hermes_home()`` default, so
+        # falling through to that default here (unlike every sibling store)
+        # crashed Prime's control-plane service on first boot in production.
+        mission_control = mission_control or MissionControlService(
+            store=MissionControlStore(root=state_root / "mission-control")
+            if state_root is not None
+            else None
+        )
         evidence_store = evidence_store or PrimeEvidenceStore(state_root=state_root)
         self.visibility = PrimeVisibilityService(mission_control, evidence_store)
 

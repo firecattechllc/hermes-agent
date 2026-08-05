@@ -204,3 +204,36 @@ def test_is_dispatchable_false_for_revoked_node(runtime: FleetRuntime) -> None:
     )
     result = _heartbeat(runtime, "titan", now=now + 1)
     assert result.outcome == HeartbeatOutcome.REJECTED
+
+
+def test_mission_control_scoped_under_state_root_when_supplied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A locked-down service account has no writable home directory.
+
+    Regression test for a real production failure: Prime's control-plane
+    systemd unit runs as ``User=hermes``, a system account whose home is
+    ``/nonexistent``. Before this fix, ``FleetRuntime``'s default
+    ``MissionControlService`` ignored an explicitly-supplied ``state_root``
+    and fell back to ``get_hermes_home()`` (``Path.home()``-based), which
+    crashed on first boot trying to ``mkdir /nonexistent/.hermes/...``.
+    Simulate that unwritable-home environment here and confirm construction
+    (and a real mission-control write) still succeeds when ``state_root`` is
+    supplied.
+    """
+
+    def _unwritable_home() -> Path:
+        raise AssertionError(
+            "get_hermes_home() must not be consulted when state_root is supplied"
+        )
+
+    monkeypatch.setattr(
+        "hermes_cli.mission_control.store._mission_control_root", _unwritable_home
+    )
+
+    state_root = tmp_path / "prime"
+    runtime = FleetRuntime(state_root=state_root, project_id="mission-control-scope-test")
+    now = _now()
+    _register(runtime, "titan", FleetNodeRole.TITAN, now=now)
+
+    assert (state_root / "mission-control").exists()

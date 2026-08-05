@@ -37,9 +37,12 @@ from typing import Callable, Optional
 
 from pydantic import ValidationError
 
+from hermes_cli.prime.admission import CertificationStatus
+from hermes_cli.prime.dispatch_gate import CertificationSnapshot
 from hermes_cli.prime.fleet_registry import FleetNodeRegistrationRequest, FleetRegistrationOutcome
 from hermes_cli.prime.fleet_runtime import FleetRuntime
 from hermes_cli.prime.heartbeat import HeartbeatOutcome, HeartbeatSubmission
+from hermes_cli.prime.sigil_route_server import NodeModelAliasConfig, handle_sigil_route_request
 
 logger = logging.getLogger("hermes.prime.server")
 
@@ -82,6 +85,8 @@ class PrimeRequestHandler(BaseHTTPRequestHandler):
     fleet_runtime: FleetRuntime
     auth_token: str
     clock: Callable[[], int]
+    node_aliases: NodeModelAliasConfig
+    certification_provider: Callable[[], CertificationSnapshot]
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         logger.info("%s - %s", self.address_string(), format % args)
@@ -126,6 +131,16 @@ class PrimeRequestHandler(BaseHTTPRequestHandler):
             nodes = self.fleet_runtime.registry.all()
             self._send_json(200, {"nodes": [n.model_dump(mode="json") for n in nodes]})
             return
+        if self.path == "/v1/fleet/certification":
+            snapshot = self.certification_provider()
+            self._send_json(
+                200,
+                {
+                    "status": snapshot.status.value,
+                    "evidence_ref": snapshot.evidence_ref,
+                },
+            )
+            return
         self._send_json(404, {"error": "not_found"})
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler naming
@@ -160,7 +175,26 @@ class PrimeRequestHandler(BaseHTTPRequestHandler):
             self._send_json(status, result.model_dump(mode="json"))
             return
 
+        if self.path == "/v1/sigil/route":
+            result = handle_sigil_route_request(
+                fleet_runtime=self.fleet_runtime,
+                node_aliases=self.node_aliases,
+                certification_provider=self.certification_provider,
+                body=body,
+                now=now,
+            )
+            status = 200 if result.get("ok") else 409
+            self._send_json(status, result)
+            return
+
         self._send_json(404, {"error": "not_found"})
+
+
+def _unknown_certification() -> CertificationSnapshot:
+    """Fail-closed default: no certification was ever wired in, so every
+    admission/dispatch check downstream sees UNKNOWN, never a fabricated
+    CERTIFIED status."""
+    return CertificationSnapshot(status=CertificationStatus.UNKNOWN, evidence_ref=None)
 
 
 def build_prime_http_server(
@@ -170,11 +204,20 @@ def build_prime_http_server(
     fleet_runtime: FleetRuntime,
     auth_token: str,
     clock: Optional[Callable[[], int]] = None,
+    node_aliases: Optional[NodeModelAliasConfig] = None,
+    certification_provider: Optional[Callable[[], CertificationSnapshot]] = None,
 ) -> ThreadingHTTPServer:
     """Build (but do not start) a Prime control-plane HTTP server.
 
     Raises :class:`PrimeServerConfigError` for an unsafe host or missing/weak
     auth token — this validation happens before a socket is ever opened.
+
+    ``node_aliases`` and ``certification_provider`` back the
+    ``POST /v1/sigil/route`` and ``GET /v1/fleet/certification`` endpoints;
+    both default to fail-closed values (no configured aliases, UNKNOWN
+    certification) rather than silently admitting/dispatching anything when
+    the caller (see :mod:`hermes_cli.prime.entrypoints`) hasn't wired real
+    ones in yet.
     """
     _validate_bind_host(host)
     _validate_auth_token(auth_token)
@@ -188,6 +231,8 @@ def build_prime_http_server(
             "fleet_runtime": fleet_runtime,
             "auth_token": auth_token,
             "clock": staticmethod(bound_clock),
+            "node_aliases": node_aliases or NodeModelAliasConfig(aliases_by_node={}),
+            "certification_provider": staticmethod(certification_provider or _unknown_certification),
         },
     )
     return ThreadingHTTPServer((host, port), handler)

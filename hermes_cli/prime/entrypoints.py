@@ -34,13 +34,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Optional, Tuple
 
+from hermes_cli.prime.admission import CertificationStatus
+from hermes_cli.prime.certification_cli import run_certification
 from hermes_cli.prime.client import PrimeClientError, PrimeHTTPClient
+from hermes_cli.prime.dispatch_gate import CertificationSnapshot
 from hermes_cli.prime.fleet_registry import FleetNodeRegistrationRequest, FleetNodeRole
 from hermes_cli.prime.fleet_runtime import FleetRuntime
 from hermes_cli.prime.health import DependencyHealth, LivenessState, ReadinessState
 from hermes_cli.prime.heartbeat import HeartbeatSubmission
 from hermes_cli.prime.ollama_node import OllamaNodeConfig, OllamaNodeInspector
 from hermes_cli.prime.server import PrimeServerConfigError, build_prime_http_server
+from hermes_cli.prime.sigil_route_server import NodeModelAliasConfig
 
 logger = logging.getLogger("hermes.prime.entrypoints")
 
@@ -76,6 +80,9 @@ class PrimeServiceConfig:
     auth_token: str
     project_id: str
     integrity_check_interval_seconds: int
+    node_model_aliases_raw: str
+    certification_interval_seconds: int
+    certification_skip_stage1: bool
 
     @classmethod
     def from_env(cls, env: Optional[Mapping[str, str]] = None) -> "PrimeServiceConfig":
@@ -92,7 +99,53 @@ class PrimeServiceConfig:
             integrity_check_interval_seconds=_int_env(
                 env, "HERMES_PRIME_INTEGRITY_CHECK_INTERVAL_SECONDS", 300
             ),
+            node_model_aliases_raw=env.get("HERMES_PRIME_NODE_MODEL_ALIASES", ""),
+            certification_interval_seconds=_int_env(
+                env, "HERMES_PRIME_CERTIFICATION_INTERVAL_SECONDS", 1800
+            ),
+            certification_skip_stage1=env.get(
+                "HERMES_PRIME_CERTIFICATION_SKIP_STAGE1", ""
+            ).strip().lower() in {"1", "true", "yes"},
         )
+
+
+class _CertificationHolder:
+    """Thread-safe latest-certification cache shared between the background
+    refresh thread and every HTTP request thread that reads it."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._snapshot = CertificationSnapshot(status=CertificationStatus.UNKNOWN, evidence_ref=None)
+
+    def get(self) -> CertificationSnapshot:
+        with self._lock:
+            return self._snapshot
+
+    def set(self, snapshot: CertificationSnapshot) -> None:
+        with self._lock:
+            self._snapshot = snapshot
+
+
+def _refresh_certification(
+    holder: _CertificationHolder, config: PrimeServiceConfig, *, repo_root: Path
+) -> None:
+    try:
+        payload, status = run_certification(
+            repo_root=repo_root,
+            state_root=config.state_root,
+            certifier_identity_id="prime-service",
+            skip_stage1=config.certification_skip_stage1,
+        )
+        certification_status = (
+            CertificationStatus.CERTIFIED
+            if status.value == "certified"
+            else CertificationStatus.NOT_CERTIFIED
+        )
+        evidence_ref = f"prime_certification:{payload['certification_id']}"
+        holder.set(CertificationSnapshot(status=certification_status, evidence_ref=evidence_ref))
+        logger.info("Prime fleet certification refreshed: %s", status.value)
+    except Exception:  # noqa: BLE001 - a broken certification run must not crash the service
+        logger.exception("Prime fleet certification refresh FAILED; leaving prior snapshot in place")
 
 
 def run_prime_service(
@@ -100,12 +153,21 @@ def run_prime_service(
 ) -> None:
     """Run the Prime control-plane service until ``stop_event`` is set."""
     runtime = runtime or FleetRuntime(state_root=config.state_root, project_id=config.project_id)
+    node_aliases = NodeModelAliasConfig.from_env(
+        {"HERMES_PRIME_NODE_MODEL_ALIASES": config.node_model_aliases_raw}
+    )
+    certification_holder = _CertificationHolder()
+    # hermes_cli/prime/entrypoints.py -> hermes_cli/prime -> hermes_cli -> repo root.
+    repo_root = Path(__file__).resolve().parents[2]
+
     try:
         server = build_prime_http_server(
             host=config.bind_host,
             port=config.bind_port,
             fleet_runtime=runtime,
             auth_token=config.auth_token,
+            node_aliases=node_aliases,
+            certification_provider=certification_holder.get,
         )
     except PrimeServerConfigError:
         logger.exception("Prime control-plane failed to start: invalid server configuration")
@@ -117,6 +179,20 @@ def run_prime_service(
         "Prime control-plane listening on %s:%s (project=%s)",
         config.bind_host, server.server_address[1], config.project_id,
     )
+
+    def _certification_loop() -> None:
+        # Refresh once immediately (off the request-serving thread, so a
+        # slow Stage 1 regression run never delays accepting HTTP traffic)
+        # rather than waiting a full interval before the first real snapshot.
+        _refresh_certification(certification_holder, config, repo_root=repo_root)
+        while not stop_event.wait(config.certification_interval_seconds):
+            _refresh_certification(certification_holder, config, repo_root=repo_root)
+
+    certification_thread = threading.Thread(
+        target=_certification_loop, name="prime-certification", daemon=True
+    )
+    certification_thread.start()
+
     try:
         while not stop_event.is_set():
             stop_event.wait(config.integrity_check_interval_seconds)
@@ -127,16 +203,11 @@ def run_prime_service(
                 logger.info("Prime evidence chain integrity check passed")
             except Exception:  # noqa: BLE001 - a tampered/corrupt chain must not crash the loop
                 logger.exception("Prime evidence chain integrity check FAILED")
-            # Full fleet certification (hermes_cli.prime.certification.certify_fleet)
-            # requires additional operational inputs — a fresh Stage 1
-            # regression run, identity-registry-wide conflict checks, and a
-            # certifier identity — that are assembled by the certification
-            # CLI path, not fabricated here on a timer. Run certification as
-            # its own scheduled job against this same state_root.
     finally:
         logger.info("Prime control-plane shutting down")
         server.shutdown()
         thread.join(timeout=10)
+        certification_thread.join(timeout=5)
         logger.info("Prime control-plane stopped")
 
 

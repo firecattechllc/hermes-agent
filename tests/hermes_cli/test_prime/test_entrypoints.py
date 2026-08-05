@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import threading
 import time
+import urllib.request
 
 import pytest
 
@@ -55,6 +57,24 @@ def test_prime_service_config_parses_from_environment(tmp_path) -> None:
     config = PrimeServiceConfig.from_env(env)
     assert config.bind_port == 9000
     assert config.project_id == "my-fleet"
+    assert config.node_model_aliases_raw == ""
+    assert config.certification_interval_seconds == 1800
+    assert config.certification_skip_stage1 is False
+
+
+def test_prime_service_config_parses_node_aliases_and_certification_overrides(tmp_path) -> None:
+    env = {
+        "HERMES_PRIME_STATE_ROOT": str(tmp_path / "prime"),
+        "HERMES_PRIME_BIND_HOST": "100.64.0.1",
+        "HERMES_PRIME_AUTH_TOKEN": "a" * 20,
+        "HERMES_PRIME_NODE_MODEL_ALIASES": '{"titan": {"sentiment": "qwen3:0.6b"}}',
+        "HERMES_PRIME_CERTIFICATION_INTERVAL_SECONDS": "60",
+        "HERMES_PRIME_CERTIFICATION_SKIP_STAGE1": "true",
+    }
+    config = PrimeServiceConfig.from_env(env)
+    assert config.node_model_aliases_raw == '{"titan": {"sentiment": "qwen3:0.6b"}}'
+    assert config.certification_interval_seconds == 60
+    assert config.certification_skip_stage1 is True
 
 
 # ── WorkerServiceConfig ──────────────────────────────────────────────────────
@@ -90,6 +110,12 @@ def test_run_prime_service_starts_and_stops_cleanly(tmp_path) -> None:
         auth_token="a" * 20,
         project_id="test-fleet",
         integrity_check_interval_seconds=3600,
+        node_model_aliases_raw="",
+        certification_interval_seconds=3600,
+        # Stage 1 regression is a real subprocess against the apps/sigil
+        # venv; skip it here so this test (which only asserts clean
+        # start/stop) stays fast and independent of that venv's presence.
+        certification_skip_stage1=True,
     )
     stop_event = threading.Event()
     service_thread = threading.Thread(
@@ -100,6 +126,74 @@ def test_run_prime_service_starts_and_stops_cleanly(tmp_path) -> None:
     stop_event.set()
     service_thread.join(timeout=5)
     assert not service_thread.is_alive()
+
+
+def test_run_prime_service_wires_real_certification_and_node_aliases(tmp_path) -> None:
+    """The certification background thread must populate a *real* (non-UNKNOWN
+    placeholder) snapshot, and the HTTP server must expose it — proving
+    entrypoints.py actually wires certification_cli.run_certification() and
+    NodeModelAliasConfig into build_prime_http_server rather than leaving the
+    server's fail-closed defaults in place."""
+    config = PrimeServiceConfig(
+        state_root=tmp_path / "prime",
+        bind_host="127.0.0.1",
+        bind_port=0,
+        auth_token="a" * 20,
+        project_id="test-fleet-cert",
+        integrity_check_interval_seconds=3600,
+        node_model_aliases_raw='{"titan": {"sentiment": "qwen3:0.6b"}}',
+        certification_interval_seconds=3600,
+        certification_skip_stage1=True,
+    )
+    stop_event = threading.Event()
+    bound_port: dict[str, int] = {}
+
+    from hermes_cli.prime import entrypoints as entrypoints_module
+
+    original_build = entrypoints_module.build_prime_http_server
+
+    def _capturing_build(*args, **kwargs):
+        server = original_build(*args, **kwargs)
+        bound_port["port"] = server.server_address[1]
+        return server
+
+    entrypoints_module.build_prime_http_server = _capturing_build
+    try:
+        service_thread = threading.Thread(
+            target=run_prime_service, kwargs={"config": config, "stop_event": stop_event}
+        )
+        service_thread.start()
+        for _ in range(50):  # up to ~5s for the synchronous first certification refresh
+            time.sleep(0.1)
+            if "port" in bound_port:
+                break
+        assert "port" in bound_port
+
+        payload = None
+        for _ in range(50):
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{bound_port['port']}/v1/fleet/certification",
+                method="GET",
+                headers={"Authorization": f"Bearer {config.auth_token}"},
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:  # noqa: S310
+                payload = json.loads(response.read().decode("utf-8"))
+            if payload["status"] != "unknown":
+                break
+            time.sleep(0.1)
+
+        assert payload is not None
+        # Skipping Stage 1 with no registered fleet nodes can never reach
+        # CERTIFIED, but it must be a real, non-UNKNOWN result — proving a
+        # real certify_fleet() run actually happened, not that the endpoint
+        # is merely reachable.
+        assert payload["status"] == "not_certified"
+        assert payload["evidence_ref"] is not None
+        assert payload["evidence_ref"].startswith("prime_certification:")
+    finally:
+        stop_event.set()
+        service_thread.join(timeout=5)
+        entrypoints_module.build_prime_http_server = original_build
 
 
 # ── run_worker_service ───────────────────────────────────────────────────────
