@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hermes Mac worker service (launchd).
+
+  Copy to ~/Library/LaunchAgents/com.hermes.mac-worker.plist (per-user agent
+  — required for desktop-use governance, which needs Accessibility/Screen
+  Recording permissions granted to the logged-in user's session, not a
+  background daemon). Replace every <REPLACE_ME_*> placeholder before
+  loading. Never commit a populated copy of this file.
+
+  Load with:   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hermes.mac-worker.plist
+  Unload with: launchctl bootout gui/$(id -u)/com.hermes.mac-worker
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.hermes.mac-worker</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>REPLACE_ME_ABSOLUTE_PATH_TO_VENV/bin/python</string>
+        <string>-m</string>
+        <string>hermes_cli.prime.entrypoints</string>
+        <string>mac</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>REPLACE_ME_ABSOLUTE_PATH_TO_HERMES_CHECKOUT</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONDONTWRITEBYTECODE</key>
+        <string>1</string>
+        <key>HERMES_PRIME_BASE_URL</key>
+        <string>REPLACE_ME_PRIME_BASE_URL</string>
+        <key>HERMES_PRIME_AUTH_TOKEN</key>
+        <string>REPLACE_ME_SHARED_AUTH_TOKEN</string>
+        <key>HERMES_MAC_ENDPOINT</key>
+        <string>REPLACE_ME_MAC_TAILSCALE_ENDPOINT</string>
+        <key>HERMES_MAC_CAPABILITIES</key>
+        <string>worker_heartbeat,local_model_inference,embeddings,desktop_use</string>
+        <key>HERMES_MAC_SOFTWARE_VERSION</key>
+        <string>1.0.0</string>
+        <key>HERMES_MAC_PROTOCOL_VERSION</key>
+        <string>1</string>
+        <key>HERMES_MAC_HEARTBEAT_INTERVAL_SECONDS</key>
+        <string>30</string>
+        <key>HERMES_MAC_OLLAMA_ENDPOINT</key>
+        <string>http://127.0.0.1:11434</string>
+        <key>HERMES_MAC_OLLAMA_TIMEOUT_MS</key>
+        <string>5000</string>
+        <key>HERMES_PRIME_LOG_LEVEL</key>
+        <string>INFO</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>REPLACE_ME_LOG_DIR/mac-worker.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>REPLACE_ME_LOG_DIR/mac-worker.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

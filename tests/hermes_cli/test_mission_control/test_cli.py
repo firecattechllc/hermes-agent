@@ -117,6 +117,58 @@ def test_mission_control_overview_json(monkeypatch, tmp_path: Path, capsys) -> N
     assert "recent_events" in payload
 
 
+def test_mission_control_fleet_json(monkeypatch, tmp_path: Path, capsys) -> None:
+    from hermes_cli.prime.evidence import PrimeEvidenceStore
+    from hermes_cli.prime.fleet_registry import FleetNodeRegistrationRequest, FleetNodeRole
+    from hermes_cli.prime.fleet_runtime import FleetRuntime
+    from hermes_cli.prime.health import LivenessState, ReadinessState
+    from hermes_cli.prime.heartbeat import HeartbeatSubmission
+
+    service = MissionControlService(store=MissionControlStore(root=tmp_path / "mission_control"))
+    runtime = FleetRuntime(
+        state_root=tmp_path / "prime",
+        project_id="proj_a",
+        mission_control=service,
+        evidence_store=PrimeEvidenceStore(state_root=tmp_path / "prime-evidence"),
+    )
+    now = 1_700_000_000
+    runtime.register_node(
+        FleetNodeRegistrationRequest(
+            request_id="req-titan", natural_key="titan", role=FleetNodeRole.TITAN,
+            declared_capabilities=("worker_heartbeat",),
+            endpoint="http://titan.tailnet.internal:11434",
+            software_version="1.0.0", protocol_version=1, requested_at=now,
+        ),
+        now=now,
+    )
+    runtime.ingest_heartbeat(
+        HeartbeatSubmission(
+            natural_key="titan", liveness=LivenessState.ALIVE, readiness=ReadinessState.READY,
+            submitted_at=now,
+        ),
+        now=now,
+    )
+
+    monkeypatch.setattr("hermes_cli.mission_control_commands._get_service", lambda: service)
+    args = _parser().parse_args(["mission-control", "fleet", "proj_a", "--json"])
+
+    assert args.func(args) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["fleet_nodes"][0]["natural_key"] == "titan"
+    assert payload["fleet_nodes"][0]["connection_state"] == "connected"
+
+
+def test_mission_control_fleet_text_with_no_nodes(monkeypatch, tmp_path: Path, capsys) -> None:
+    service = MissionControlService(store=MissionControlStore(root=tmp_path / "mission_control"))
+    monkeypatch.setattr("hermes_cli.mission_control_commands._get_service", lambda: service)
+    args = _parser().parse_args(["mission-control", "fleet", "empty_project"])
+
+    assert args.func(args) == 0
+    out = capsys.readouterr().out
+    assert "no fleet nodes registered" in out
+
+
 def test_main_builtin_subcommands_include_mission_control() -> None:
     from hermes_cli.main import _BUILTIN_SUBCOMMANDS
 
