@@ -1,0 +1,13 @@
+{
+  "enabled": false,
+  "coordinator_node_id": "node-mac",
+  "credential_registry_path": "/Users/REPLACE_ME_USERNAME/Library/Application Support/Hermes/link/credentials.json",
+  "targets": [
+    {
+      "node_id": "node-titan",
+      "authenticated_identity_ref": "tailnet-node:replace-with-verified-reference",
+      "tailnet_dns_identity": "replace-with-verified-titan.ts.net",
+      "base_url": "http://127.0.0.1:19320"
+    }
+  ]
+}
