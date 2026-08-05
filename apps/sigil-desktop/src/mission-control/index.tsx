@@ -22,6 +22,7 @@ import { formatEasternDateTime } from '../lib/date-time'
 import { desktopSigilOperatorAdapter } from './desktop-adapter'
 import { GovernedNewsPanel } from './governed-news-panel'
 import { sigilOperatorAdapter as mockSigilOperatorAdapter } from './mock-adapter'
+import { PrimeFleetPanel } from './prime-fleet-panel'
 import type {
   AlpacaMarketDataStatus,
   AssetCatalogStatus,
@@ -41,7 +42,7 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const RELEASE_STAGE = 'V3.5'
+const RELEASE_STAGE = 'V3.7'
 
 const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'news', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
@@ -2840,6 +2841,7 @@ export function SigilOperatorView({
                 snapshot={providerSnapshot}
               />
               <AIFoundationPanel status={aiStatus} />
+              <PrimeFleetPanel />
               <IntegrationRegistryPanel status={aiStatus?.integration_registry} />
               <AutonomousPaperPanel
                 onAction={setPendingPaperExecutionAction}

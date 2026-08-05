@@ -13,6 +13,8 @@ const SIGIL_PAPER_CYCLE_CONTROL_CHANNEL = 'sigil:control-paper-cycle'
 const SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL = 'sigil:control-paper-authorization'
 const SIGIL_PAPER_RUNTIME_RESET_CHANNEL = 'sigil:reset-paper-runtime'
 const SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'
+const SIGIL_PRIME_FLEET_STATUS_CHANNEL = 'sigil:get-prime-fleet-status'
+const SIGIL_PRIME_SIGIL_ROUTE_CHANNEL = 'sigil:prime-sigil-route'
 const SIGIL_AI_STATUS_CHANNEL = 'sigil:get-ai-status'
 const SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL = 'sigil:get-market-universe-status'
 const SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL = 'sigil:search-market-universe'
@@ -65,6 +67,9 @@ contextBridge.exposeInMainWorld('sigilDesktop', {
     ipcRenderer.invoke(SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL, action),
   resetPaperRuntime: () => ipcRenderer.invoke(SIGIL_PAPER_RUNTIME_RESET_CHANNEL),
   getProviderSnapshot: () => ipcRenderer.invoke(SIGIL_PROVIDER_SNAPSHOT_CHANNEL),
+  getPrimeFleetStatus: () => ipcRenderer.invoke(SIGIL_PRIME_FLEET_STATUS_CHANNEL),
+  primeSigilRoute: (payload: Readonly<Record<string, unknown>>) =>
+    ipcRenderer.invoke(SIGIL_PRIME_SIGIL_ROUTE_CHANNEL, payload),
   getAIStatus: () => ipcRenderer.invoke(SIGIL_AI_STATUS_CHANNEL),
   getMarketUniverseStatus: () => ipcRenderer.invoke(SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL),
   searchMarketUniverse: (payload: Readonly<Record<string, unknown>>) =>

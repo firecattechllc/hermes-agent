@@ -53,6 +53,7 @@ from .governed_news_bridge import (
 )
 from .market_quotes import market_universe_quotes
 from .market_universe import market_universe_search, market_universe_status
+from .prime_fleet import prime_fleet_status, prime_sigil_route
 from .production_research import (
     emergency_paper_liquidation,
     production_research_collection,
@@ -81,6 +82,8 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "control_paper_authorization",
     "reset_paper_runtime",
     "provider_snapshot",
+    "prime_fleet_status",
+    "prime_sigil_route",
     "ai_status",
     "ai_registry_status",
     "ai_evidence_status",
@@ -400,6 +403,15 @@ def handle_request(request: object) -> dict[str, Any]:
 
     if command == "provider_snapshot":
         return {"ok": True, "result": provider_snapshot()}
+
+    if command == "prime_fleet_status":
+        return {"ok": True, "result": prime_fleet_status()}
+
+    if command == "prime_sigil_route":
+        payload = request.get("payload")
+        if not isinstance(payload, dict):
+            return error_response("invalid_payload", "Sigil route requires a payload object.")
+        return {"ok": True, "result": prime_sigil_route(payload)}
 
     if command == "ai_status":
         return {"ok": True, "result": ai_status()}

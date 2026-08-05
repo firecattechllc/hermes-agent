@@ -19,6 +19,8 @@ export const SIGIL_PAPER_CYCLE_CONTROL_CHANNEL = 'sigil:control-paper-cycle'
 export const SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL = 'sigil:control-paper-authorization'
 export const SIGIL_PAPER_RUNTIME_RESET_CHANNEL = 'sigil:reset-paper-runtime'
 export const SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'
+export const SIGIL_PRIME_FLEET_STATUS_CHANNEL = 'sigil:get-prime-fleet-status'
+export const SIGIL_PRIME_SIGIL_ROUTE_CHANNEL = 'sigil:prime-sigil-route'
 export const SIGIL_AI_STATUS_CHANNEL = 'sigil:get-ai-status'
 export const SIGIL_GOVERNED_NEWS_STATUS_CHANNEL = 'sigil:get-governed-news-status'
 export const SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL = 'sigil:get-governed-news-stream-status'
@@ -410,6 +412,8 @@ export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_PAPER_AUTHORIZATION_CONTROL_CHANNEL)
   ipcMain.removeHandler(SIGIL_PAPER_RUNTIME_RESET_CHANNEL)
   ipcMain.removeHandler(SIGIL_PROVIDER_SNAPSHOT_CHANNEL)
+  ipcMain.removeHandler(SIGIL_PRIME_FLEET_STATUS_CHANNEL)
+  ipcMain.removeHandler(SIGIL_PRIME_SIGIL_ROUTE_CHANNEL)
   ipcMain.removeHandler(SIGIL_AI_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_GOVERNED_NEWS_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL)
@@ -457,6 +461,10 @@ export function registerSigilIpc(): void {
     })
   )
   ipcMain.handle(SIGIL_PROVIDER_SNAPSHOT_CHANNEL, () => runBridgeRequest({ command: 'provider_snapshot' }))
+  ipcMain.handle(SIGIL_PRIME_FLEET_STATUS_CHANNEL, () => runBridgeRequest({ command: 'prime_fleet_status' }))
+  ipcMain.handle(SIGIL_PRIME_SIGIL_ROUTE_CHANNEL, (_event, payload: Readonly<Record<string, unknown>>) =>
+    runBridgeRequest({ command: 'prime_sigil_route', payload })
+  )
   ipcMain.handle(SIGIL_AI_STATUS_CHANNEL, () => runBridgeRequest({ command: 'ai_status' }))
   ipcMain.handle(SIGIL_GOVERNED_NEWS_STATUS_CHANNEL, () => runBridgeRequest({ command: 'governed_news_status' }))
   ipcMain.handle(SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL, () => governedNewsStreamSnapshot())

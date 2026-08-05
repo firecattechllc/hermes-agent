@@ -60,6 +60,8 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "control_paper_authorization",
         "reset_paper_runtime",
         "provider_snapshot",
+        "prime_fleet_status",
+        "prime_sigil_route",
         "ai_status",
         "ai_registry_status",
         "ai_evidence_status",
@@ -579,3 +581,34 @@ def test_provider_credential_loader_rejects_unsafe_permissions(tmp_path) -> None
         assert "permissions are unsafe" in str(error)
     else:
         raise AssertionError("unsafe credential permissions must fail closed")
+
+
+def test_handle_request_prime_fleet_status_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HERMES_PRIME_BASE_URL", raising=False)
+    monkeypatch.delenv("HERMES_PRIME_AUTH_TOKEN", raising=False)
+
+    response = handle_request({"command": "prime_fleet_status"})
+
+    assert response["ok"] is True
+    assert response["result"]["configured"] is False
+    assert response["result"]["nodes"] == []
+
+
+def test_handle_request_prime_sigil_route_requires_payload_object() -> None:
+    response = handle_request({"command": "prime_sigil_route"})
+
+    assert response["ok"] is False
+    assert response["error"] == "invalid_payload"
+
+
+def test_handle_request_prime_sigil_route_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HERMES_PRIME_BASE_URL", raising=False)
+    monkeypatch.delenv("HERMES_PRIME_AUTH_TOKEN", raising=False)
+
+    response = handle_request(
+        {"command": "prime_sigil_route", "payload": {"operation": "advisory_financial_sentiment"}}
+    )
+
+    assert response["ok"] is True
+    assert response["result"]["ok"] is False
+    assert response["result"]["error"] == "prime_not_configured"
