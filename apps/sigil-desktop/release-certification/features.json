@@ -641,6 +641,49 @@
         "expected_heading": "Governed news intelligence",
         "controls": []
       }
+    },
+    {
+      "id": "ecosystem.governed-visibility-panel",
+      "name": "Governed ecosystem visibility panel",
+      "description": "Read-only status for optional governed ecosystem workers and adapters: computer use, Hermes WebUI, the Goose worker, and Paperclip.",
+      "criticality": "important",
+      "source_files": [
+        "src/mission-control/governed-visibility-panel.tsx",
+        "electron/main.ts",
+        "electron/preload.ts"
+      ],
+      "expected_user_behavior": "Selecting Ecosystem shows installed/enabled/health status for computer use, Hermes WebUI, the Goose worker, and Paperclip without taking any action.",
+      "automated_test_references": [
+        "scripts/release-guardian.test.mjs",
+        "../sigil/tests/test_desktop_bridge.py",
+        "../sigil/tests/test_goose_bridge.py",
+        "../sigil/tests/test_governed_goose_worker.py",
+        "../sigil/tests/test_paperclip_bridge.py"
+      ],
+      "development_build_test_method": "Open Ecosystem in the Electron development build and verify each card renders a bounded read-only status with no destructive controls.",
+      "packaged_build_test_method": "Repeat the same verification in the installed application.",
+      "required_backend_or_dependency": "Local read-only Python bridge; each underlying worker (computer use, Hermes WebUI, Goose, Paperclip) is independently optional and disabled by default.",
+      "safe_fallback_behavior": "A worker that is disabled, uninstalled, or unreachable is shown as unavailable/disabled rather than breaking the panel.",
+      "prohibited_side_effects": [
+        "broker submission",
+        "shell execution",
+        "filesystem mutation",
+        "credential exposure",
+        "fleet administrative action"
+      ],
+      "current_certification_status": "NOT_TESTED",
+      "ipc_channels": [
+        "sigil:get-computer-use-visibility",
+        "sigil:get-goose-worker-visibility",
+        "sigil:get-hermes-webui-status",
+        "sigil:get-hermes-webui-deep-link",
+        "sigil:get-paperclip-status"
+      ],
+      "ui": {
+        "navigation_label": "Ecosystem",
+        "expected_heading": "Computer use & Hermes WebUI visibility",
+        "controls": []
+      }
     }
   ]
 }

@@ -36,6 +36,7 @@ describe('Sigil Release Guardian', () => {
       'Reconciliation',
       'Audit',
       'News',
+      'Ecosystem',
       'Settings'
     ])
     expect(coverage.inventory.ipc_channels).toEqual([
@@ -47,6 +48,11 @@ describe('Sigil Release Guardian', () => {
       'sigil:reset-paper-runtime',
       'sigil:get-provider-snapshot',
       'sigil:get-ai-status',
+      'sigil:get-computer-use-visibility',
+      'sigil:get-goose-worker-visibility',
+      'sigil:get-hermes-webui-status',
+      'sigil:get-hermes-webui-deep-link',
+      'sigil:get-paperclip-status',
       'sigil:get-governed-news-status',
       'sigil:get-governed-news-stream-status',
       'sigil:get-governed-news-timeline',
