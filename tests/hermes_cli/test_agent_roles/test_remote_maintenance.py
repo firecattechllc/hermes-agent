@@ -7,6 +7,7 @@ import pytest
 from hermes_cli.agent_roles.hydra_live_playbooks import (
     duplicate_tailscale_playbook,
     heartbeat_interactive_sudo_playbook,
+    hermes_hydra_live_restart_playbook,
 )
 from hermes_cli.agent_roles.remote_maintenance import (
     ApprovalScope,
@@ -15,6 +16,7 @@ from hermes_cli.agent_roles.remote_maintenance import (
     FileSnapshot,
     FindingCode,
     GovernedMaintenanceExecutor,
+    MUTATION_COMMANDS,
     MaintenanceEvidence,
     RemoteTarget,
     RepairApproval,
@@ -24,6 +26,7 @@ from hermes_cli.agent_roles.remote_maintenance import (
     CommandMode,
     SecretReference,
     SSHInspectionAdapter,
+    SSHMaintenanceAdapter,
     certify_hydra_live,
     diagnose_hydra_live,
     redact_evidence,
@@ -218,3 +221,121 @@ def test_persisted_evidence_is_json_serializable_and_secret_free():
     item = evidence("journal_excerpt", "token=actual-secret peer=10.44.0.7")
     encoded = json.dumps(item.model_dump(mode="json"))
     assert "actual-secret" not in encoded and "10.44.0.7" not in encoded
+
+
+def test_hermes_hydra_live_restart_playbook_is_low_risk_and_scoped():
+    proposal = hermes_hydra_live_restart_playbook("hydra-live-sim")
+    assert proposal.risk == RiskLevel.LOW
+    assert proposal.finding_refs == ()
+    step = proposal.steps[0]
+    assert step.command_id == "restart_hermes_hydra_live"
+    assert step.mode == CommandMode.CONNECTIVITY
+    assert step.required_approvals == (ApprovalScope.RESTART_HERMES_HYDRA_LIVE,)
+    assert step.changed_files == ("hermes-hydra-live.service",)
+
+
+def _fake_ssh_runner(scripted):
+    calls = []
+
+    def runner(argv, timeout):
+        calls.append((argv, timeout))
+        return scripted.pop(0)
+
+    return runner, calls
+
+
+def test_ssh_maintenance_adapter_enforces_closed_mutation_allowlist():
+    runner, _ = _fake_ssh_runner([])
+    inspector = SSHInspectionAdapter(target(), runner)
+    adapter = SSHMaintenanceAdapter(target(), runner, inspector)
+
+    with pytest.raises(PermissionError, match="not allow-listed"):
+        adapter.execute("arbitrary_shell_command")
+
+
+def test_ssh_maintenance_adapter_execute_builds_exact_restart_argv():
+    scripted = [CommandResult(exit_code=0, stdout="active")]
+    runner, calls = _fake_ssh_runner(scripted)
+    inspector = SSHInspectionAdapter(target(), runner)
+    adapter = SSHMaintenanceAdapter(target(), runner, inspector)
+
+    result = adapter.execute("restart_hermes_hydra_live")
+
+    assert result.exit_code == 0
+    assert calls[0][0][-4:] == ("sudo", "systemctl", "restart", "hermes-hydra-live.service")
+    assert MUTATION_COMMANDS["restart_hermes_hydra_live"][-1] == "hermes-hydra-live.service"
+
+
+def test_ssh_maintenance_adapter_snapshot_captures_pre_mutation_state():
+    scripted = [CommandResult(exit_code=0, stdout="Active: active (running)")]
+    runner, calls = _fake_ssh_runner(scripted)
+    inspector = SSHInspectionAdapter(target(), runner)
+    adapter = SSHMaintenanceAdapter(target(), runner, inspector)
+
+    snapshot = adapter.snapshot("hermes-hydra-live.service", 100)
+
+    assert snapshot.path == "systemd-unit:hermes-hydra-live.service"
+    assert snapshot.snapshot_ref.startswith("service-state:")
+    assert calls[0][0][-4:] == ("systemctl", "show", "--no-page", "hermes-hydra-live.service")
+
+
+def test_ssh_maintenance_adapter_rollback_reverifies_and_restarts_if_needed():
+    # snapshot call, then a rollback status check showing inactive, then a
+    # start command, then a final status check confirming it's running.
+    scripted = [
+        CommandResult(exit_code=0, stdout="Active: inactive (dead)"),
+        CommandResult(exit_code=0, stdout="started"),
+        CommandResult(exit_code=0, stdout="Active: active (running)"),
+    ]
+    runner, calls = _fake_ssh_runner(scripted)
+    inspector = SSHInspectionAdapter(target(), runner)
+    adapter = SSHMaintenanceAdapter(target(), runner, inspector)
+    snap = FileSnapshot(path="systemd-unit:hermes-hydra-live.service", snapshot_ref="service-state:abc",
+        owner="root", group="root", mode="0644", checksum="a" * 64, captured_at=100)
+    manifest = type("M", (), {"snapshots": (snap,)})()
+
+    evidence_items = adapter.rollback(manifest)
+
+    assert len(evidence_items) == 2
+    assert calls[1][0][-3:] == ("systemctl", "start", "hermes-hydra-live.service")
+
+
+def test_full_governed_execution_with_real_ssh_adapter_and_fake_transport():
+    """End-to-end: real SSHMaintenanceAdapter, real GovernedMaintenanceExecutor,
+    only the outermost SSH transport call is faked (a local subprocess/socket
+    call has no place in a fast unit test) -- everything else (allow-list
+    enforcement, approval-scope checks, snapshot/rollback wiring, argv
+    construction) is the real, shipped code path."""
+
+    proposal = hermes_hydra_live_restart_playbook("hydra-live-sim")
+    scripted = [
+        CommandResult(exit_code=0, stdout="Active: active (running)"),  # snapshot
+        CommandResult(exit_code=0, stdout="restarted"),  # execute
+    ]
+    runner, calls = _fake_ssh_runner(scripted)
+    inspector = SSHInspectionAdapter(target(), runner)
+    adapter = SSHMaintenanceAdapter(target(), runner, inspector)
+
+    receipt = GovernedMaintenanceExecutor().execute(
+        proposal=proposal,
+        approvals=(approval(proposal, ApprovalScope.RESTART_HERMES_HYDRA_LIVE),),
+        adapter=adapter,
+        timestamp=200,
+    )
+
+    assert receipt.state == "completed"
+    assert receipt.rolled_back is False
+    assert receipt.executed_steps == ("restart-hermes-hydra-live-worker",)
+    assert calls[1][0][-4:] == ("sudo", "systemctl", "restart", "hermes-hydra-live.service")
+
+
+def test_full_governed_execution_missing_approval_is_rejected():
+    proposal = hermes_hydra_live_restart_playbook("hydra-live-sim")
+    runner, _ = _fake_ssh_runner([])
+    inspector = SSHInspectionAdapter(target(), runner)
+    adapter = SSHMaintenanceAdapter(target(), runner, inspector)
+
+    with pytest.raises(PermissionError, match="missing repair approvals"):
+        GovernedMaintenanceExecutor().execute(
+            proposal=proposal, approvals=(), adapter=adapter, timestamp=200
+        )

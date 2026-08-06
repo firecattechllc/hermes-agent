@@ -53,6 +53,7 @@ from .governed_news_bridge import (
     governed_news_timeline,
 )
 from .hermes_webui_bridge import hermes_webui_deep_link, hermes_webui_status
+from .paperclip_bridge import paperclip_status
 from .market_quotes import market_universe_quotes
 from .market_universe import market_universe_search, market_universe_status
 from .production_research import (
@@ -97,6 +98,7 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "computer_use_visibility",
     "hermes_webui_status",
     "hermes_webui_deep_link",
+    "paperclip_status",
     "market_universe_status",
     "market_universe_search",
     "market_universe_quotes",
@@ -364,6 +366,9 @@ def handle_request(request: object) -> dict[str, Any]:
 
     if command == "hermes_webui_status":
         return {"ok": True, "result": hermes_webui_status()}
+
+    if command == "paperclip_status":
+        return {"ok": True, "result": paperclip_status()}
 
     if command == "hermes_webui_deep_link":
         payload = request.get("payload")

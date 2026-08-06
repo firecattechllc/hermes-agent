@@ -11,6 +11,7 @@ requests, approve itself, promote changes, access credentials, or spend money.
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
 from dataclasses import asdict, dataclass, replace
@@ -22,6 +23,7 @@ from sigil.ai.registry import canonical_digest
 from sigil.integration_registry import AuthorityDenials
 
 SELF_EVOLUTION_SCHEMA_VERSION = 1
+_MAX_DIFF_CONTENT_BYTES = 500_000
 
 _IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -1106,3 +1108,42 @@ def assess_promotion_readiness(
         proposal_digest=proposal.proposal_digest,
         result_digest=None if result is None else result.result_digest,
     )
+
+
+def produce_evidence_diff(
+    *,
+    old_content: str,
+    new_content: str,
+    old_label: str = "before",
+    new_label: str = "after",
+) -> str:
+    """Produce a unified-diff string for governed proposal evidence.
+
+    Hermes add-on continuation run, per operator-authorized scope (see
+    ``docs/architecture/SELF_EVOLUTION_SAFETY_ANALYSIS.md``): the only
+    Self-Evolution capability implemented this run. Pure and read-only in
+    the strongest sense -- no filesystem access, no subprocess, no
+    network, no mutation of any argument. Both ``old_content`` and
+    ``new_content`` must already be in the caller's possession as plain
+    strings; this function reads nothing from disk and writes nothing
+    anywhere. The returned string is evidence/display text only and is
+    never treated as "applied" by anything in this module --
+    ``EvolutionFrameworkConfig.can_modify_source`` remains hardcoded
+    ``False`` regardless of what this function returns.
+    """
+
+    for value, label in ((old_content, "old_content"), (new_content, "new_content")):
+        if not isinstance(value, str):
+            raise SelfEvolutionValidationError(f"{label} must be a string")
+        if len(value.encode("utf-8", errors="replace")) > _MAX_DIFF_CONTENT_BYTES:
+            raise SelfEvolutionValidationError(
+                f"{label} exceeds the maximum diffable size ({_MAX_DIFF_CONTENT_BYTES} bytes)"
+            )
+
+    diff_lines = difflib.unified_diff(
+        old_content.splitlines(keepends=True),
+        new_content.splitlines(keepends=True),
+        fromfile=old_label,
+        tofile=new_label,
+    )
+    return "".join(diff_lines)

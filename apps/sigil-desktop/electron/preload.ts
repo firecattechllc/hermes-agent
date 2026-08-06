@@ -17,6 +17,7 @@ const SIGIL_AI_STATUS_CHANNEL = 'sigil:get-ai-status'
 const SIGIL_COMPUTER_USE_VISIBILITY_CHANNEL = 'sigil:get-computer-use-visibility'
 const SIGIL_HERMES_WEBUI_STATUS_CHANNEL = 'sigil:get-hermes-webui-status'
 const SIGIL_HERMES_WEBUI_DEEP_LINK_CHANNEL = 'sigil:get-hermes-webui-deep-link'
+const SIGIL_PAPERCLIP_STATUS_CHANNEL = 'sigil:get-paperclip-status'
 const SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL = 'sigil:get-market-universe-status'
 const SIGIL_MARKET_UNIVERSE_SEARCH_CHANNEL = 'sigil:search-market-universe'
 const SIGIL_MARKET_UNIVERSE_QUOTES_CHANNEL = 'sigil:get-market-universe-quotes'
@@ -90,6 +91,8 @@ contextBridge.exposeInMainWorld('sigilDesktop', {
   getHermesWebUIStatus: () => ipcRenderer.invoke(SIGIL_HERMES_WEBUI_STATUS_CHANNEL),
   getHermesWebUIDeepLink: (nodeId: string, route: string) =>
     ipcRenderer.invoke(SIGIL_HERMES_WEBUI_DEEP_LINK_CHANNEL, nodeId, route),
+
+  getPaperclipStatus: () => ipcRenderer.invoke(SIGIL_PAPERCLIP_STATUS_CHANNEL),
 
   getGovernedNewsStatus: () => ipcRenderer.invoke('sigil:get-governed-news-status'),
   getGovernedNewsStreamStatus: () => ipcRenderer.invoke(SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL),

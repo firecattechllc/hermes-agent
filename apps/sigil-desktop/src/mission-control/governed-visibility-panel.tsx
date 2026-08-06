@@ -5,6 +5,7 @@ type JsonObject = Record<string, unknown>;
 interface VisibilityDesktopApi {
   getComputerUseVisibility(): Promise<JsonObject>;
   getHermesWebUIStatus(): Promise<JsonObject>;
+  getPaperclipStatus(): Promise<JsonObject>;
 }
 
 function api(): VisibilityDesktopApi | null {
@@ -45,6 +46,7 @@ const STATE_TONE: Record<string, string> = {
 export function GovernedVisibilityPanel(): React.JSX.Element {
   const [computerUse, setComputerUse] = useState<JsonObject>({});
   const [webui, setWebui] = useState<JsonObject>({});
+  const [paperclip, setPaperclip] = useState<JsonObject>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Loading visibility evidence…");
   const actionLocked = useRef(false);
@@ -66,13 +68,15 @@ export function GovernedVisibilityPanel(): React.JSX.Element {
     setBusy(true);
 
     try {
-      const [nextComputerUse, nextWebui] = await Promise.all([
+      const [nextComputerUse, nextWebui, nextPaperclip] = await Promise.all([
         desktop.getComputerUseVisibility(),
         desktop.getHermesWebUIStatus(),
+        desktop.getPaperclipStatus(),
       ]);
 
       setComputerUse(result(nextComputerUse));
       setWebui(result(nextWebui));
+      setPaperclip(result(nextPaperclip));
       setMessage("Visibility evidence refreshed.");
     } catch (error) {
       setMessage(
@@ -210,6 +214,37 @@ export function GovernedVisibilityPanel(): React.JSX.Element {
               ))
             )}
           </div>
+        </div>
+
+        <div className="rounded-lg border border-neutral-800 bg-neutral-950/50 p-4">
+          <h2 className="font-semibold text-neutral-100">Paperclip</h2>
+          <p className="mt-1 text-xs text-neutral-500">
+            Read-only identity check against an operator-configured instance.
+            Disabled by policy unless <code>SIGIL_PAPERCLIP_ENABLED=true</code>.
+          </p>
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs uppercase text-neutral-500">Configured</dt>
+              <dd className="mt-1 text-sm font-semibold text-neutral-100">
+                {paperclip.configured ? "Yes" : "No"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-neutral-500">Connected</dt>
+              <dd
+                className={
+                  paperclip.connected
+                    ? "mt-1 text-sm font-semibold text-emerald-400"
+                    : "mt-1 text-sm font-semibold text-neutral-400"
+                }
+              >
+                {paperclip.connected ? "Yes" : "No"}
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-3 text-xs text-neutral-500">
+            {text(paperclip.reason, text(paperclip.agent_name, "—"))}
+          </p>
         </div>
       </div>
     </section>

@@ -23,6 +23,7 @@ export const SIGIL_AI_STATUS_CHANNEL = 'sigil:get-ai-status'
 export const SIGIL_COMPUTER_USE_VISIBILITY_CHANNEL = 'sigil:get-computer-use-visibility'
 export const SIGIL_HERMES_WEBUI_STATUS_CHANNEL = 'sigil:get-hermes-webui-status'
 export const SIGIL_HERMES_WEBUI_DEEP_LINK_CHANNEL = 'sigil:get-hermes-webui-deep-link'
+export const SIGIL_PAPERCLIP_STATUS_CHANNEL = 'sigil:get-paperclip-status'
 export const SIGIL_GOVERNED_NEWS_STATUS_CHANNEL = 'sigil:get-governed-news-status'
 export const SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL = 'sigil:get-governed-news-stream-status'
 export const SIGIL_GOVERNED_NEWS_TIMELINE_CHANNEL = 'sigil:get-governed-news-timeline'
@@ -417,6 +418,7 @@ export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_COMPUTER_USE_VISIBILITY_CHANNEL)
   ipcMain.removeHandler(SIGIL_HERMES_WEBUI_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_HERMES_WEBUI_DEEP_LINK_CHANNEL)
+  ipcMain.removeHandler(SIGIL_PAPERCLIP_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_GOVERNED_NEWS_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_GOVERNED_NEWS_TIMELINE_CHANNEL)
@@ -476,6 +478,7 @@ export function registerSigilIpc(): void {
       payload: { node_id: nodeId, route }
     })
   )
+  ipcMain.handle(SIGIL_PAPERCLIP_STATUS_CHANNEL, () => runBridgeRequest({ command: 'paperclip_status' }))
   ipcMain.handle(SIGIL_GOVERNED_NEWS_STATUS_CHANNEL, () => runBridgeRequest({ command: 'governed_news_status' }))
   ipcMain.handle(SIGIL_GOVERNED_NEWS_STREAM_STATUS_CHANNEL, () => governedNewsStreamSnapshot())
   ipcMain.handle(SIGIL_GOVERNED_NEWS_TIMELINE_CHANNEL, (_event, symbol: string) =>

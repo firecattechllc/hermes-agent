@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from enum import Enum
 from typing import Callable, Iterable, Mapping, Optional, Protocol, Tuple
 
@@ -69,6 +70,7 @@ class ApprovalScope(str, Enum):
     RESTART_SSH = "restart_ssh"
     FIREWALL = "firewall"
     REBOOT = "reboot"
+    RESTART_HERMES_HYDRA_LIVE = "restart_hermes_hydra_live"
 
 
 READ_ONLY_COMMANDS: Mapping[str, Tuple[str, ...]] = {
@@ -164,11 +166,92 @@ class SSHInspectionAdapter:
             raise ValueError("unsafe inspection subject")
         destination = self.target.host_alias or self.target.endpoint
         remote = READ_ONLY_COMMANDS[command_id] + ((subject,) if subject else ())
-        argv = ("ssh", "-p", str(self.target.port), "--", f"{self.target.user}@{destination}", "--") + remote
+        # Only one "--" is correct: it ends ssh's own option parsing before
+        # the destination. Everything after the destination is already
+        # unambiguously the remote command; a second "--" there gets sent
+        # to the remote shell, which (e.g. bash) tries to parse it as an
+        # option to itself and fails closed with a shell usage error. Found
+        # via a live smoke test against Hydra Live -- the fake-runner unit
+        # tests below only assert argv shape, so they could never catch
+        # this; a real remote shell was required.
+        argv = ("ssh", "-p", str(self.target.port), "--", f"{self.target.user}@{destination}") + remote
         result = self._runner(argv, 20)
         return MaintenanceEvidence.build(
             target=self.target, command_id=command_id, result=result, collected_at=collected_at
         )
+
+
+class SSHMaintenanceAdapter:
+    """Real SSH transport for the narrow ``MUTATION_COMMANDS`` allow-list only.
+
+    The first concrete (non-simulated) mutating executor in this module.
+    Every other mutation command referenced by existing playbooks
+    (``atomic_patch_heartbeat_no_sudo``, ``disable_snap_tailscale``, ...)
+    remains unimplemented here on purpose -- ``execute`` raises
+    ``PermissionError`` for anything not in ``MUTATION_COMMANDS``, mirroring
+    ``SSHInspectionAdapter``'s read-only allow-list pattern exactly. A
+    ``GovernedMaintenanceExecutor`` still enforces that every step it runs
+    carries the matching ``RepairApproval`` scope before this adapter is
+    ever reached; this class adds no bypass of that gate.
+    """
+
+    def __init__(self, target: RemoteTarget, runner: CommandRunner, inspector: SSHInspectionAdapter) -> None:
+        self.target = target
+        self._runner = runner
+        self._inspector = inspector
+
+    def snapshot(self, path: str, timestamp: int) -> "FileSnapshot":
+        """Capture pre-mutation service state as the rollback reference point.
+
+        ``path`` is a systemd unit name here, not a filesystem path -- there
+        is no file to snapshot for a service restart. ``snapshot_ref`` holds
+        the digest of the ``systemctl show`` output captured immediately
+        before mutation, so a reviewer can later diff pre/post state.
+        """
+
+        evidence = self._inspector.inspect("service_state", subject=path, collected_at=timestamp)
+        return FileSnapshot(
+            path=f"systemd-unit:{path}",
+            snapshot_ref=f"service-state:{_digest(evidence.output)[:24]}",
+            owner="root",
+            group="root",
+            mode="0644",
+            checksum=_digest(evidence.output),
+            captured_at=timestamp,
+        )
+
+    def execute(self, command_id: str) -> CommandResult:
+        if command_id not in MUTATION_COMMANDS:
+            raise PermissionError("mutation command is not allow-listed for real execution")
+        destination = self.target.host_alias or self.target.endpoint
+        remote = MUTATION_COMMANDS[command_id]
+        argv = ("ssh", "-p", str(self.target.port), "--", f"{self.target.user}@{destination}") + remote
+        return self._runner(argv, 30)
+
+    def rollback(self, manifest: "RollbackManifest") -> Tuple[MaintenanceEvidence, ...]:
+        """Re-verify the affected unit is active; re-attempt start if it is not.
+
+        There is no meaningful "undo" for a restart beyond ensuring the
+        service ends up running, so rollback here means: check status, and
+        if the unit somehow ended up inactive, issue one bounded ``start``
+        (never ``restart`` again, to avoid a rollback loop).
+        """
+
+        now = int(time.time())
+        results = []
+        for snapshot in manifest.snapshots:
+            unit = snapshot.path.removeprefix("systemd-unit:")
+            evidence = self._inspector.inspect("service_state", subject=unit, collected_at=now)
+            results.append(evidence)
+            if "active (running)" not in evidence.output:
+                destination = self.target.host_alias or self.target.endpoint
+                argv = (
+                    "ssh", "-p", str(self.target.port), "--", f"{self.target.user}@{destination}",
+                    "sudo", "systemctl", "start", unit,
+                )
+                self._runner(argv, 30)
+                results.append(self._inspector.inspect("service_state", subject=unit, collected_at=now))
+        return tuple(results)
 
 
 class FindingCode(str, Enum):
@@ -318,6 +401,19 @@ MUTATION_POLICY: Mapping[str, Tuple[CommandMode, Tuple[ApprovalScope, ...]]] = {
     "restart_ssh": (CommandMode.CONNECTIVITY, (ApprovalScope.RESTART_SSH,)),
     "change_firewall": (CommandMode.CONNECTIVITY, (ApprovalScope.FIREWALL,)),
     "reboot": (CommandMode.CONNECTIVITY, (ApprovalScope.REBOOT,)),
+    "restart_hermes_hydra_live": (CommandMode.CONNECTIVITY, (ApprovalScope.RESTART_HERMES_HYDRA_LIVE,)),
+}
+
+# Closed catalogue of the *only* mutating commands this codebase can execute
+# via SSHMaintenanceAdapter. Deliberately far narrower than MUTATION_POLICY:
+# every other mutation command referenced by an existing playbook
+# (atomic_patch_heartbeat_no_sudo, disable_snap_tailscale, ...) remains
+# simulation-only (no concrete adapter implements them) and this run does
+# not add one. Adding a real executor for one command is already a
+# meaningful trust boundary; silently making every mutation "real" in the
+# same pass would be reckless.
+MUTATION_COMMANDS: Mapping[str, Tuple[str, ...]] = {
+    "restart_hermes_hydra_live": ("sudo", "systemctl", "restart", "hermes-hydra-live.service"),
 }
 
 
