@@ -15,6 +15,7 @@ const SIGIL_PAPER_RUNTIME_RESET_CHANNEL = 'sigil:reset-paper-runtime'
 const SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'
 const SIGIL_AI_STATUS_CHANNEL = 'sigil:get-ai-status'
 const SIGIL_COMPUTER_USE_VISIBILITY_CHANNEL = 'sigil:get-computer-use-visibility'
+const SIGIL_GOOSE_WORKER_VISIBILITY_CHANNEL = 'sigil:get-goose-worker-visibility'
 const SIGIL_HERMES_WEBUI_STATUS_CHANNEL = 'sigil:get-hermes-webui-status'
 const SIGIL_HERMES_WEBUI_DEEP_LINK_CHANNEL = 'sigil:get-hermes-webui-deep-link'
 const SIGIL_MARKET_UNIVERSE_STATUS_CHANNEL = 'sigil:get-market-universe-status'
@@ -87,6 +88,7 @@ contextBridge.exposeInMainWorld('sigilDesktop', {
     ipcRenderer.invoke(SIGIL_EXPLAIN_PROPOSAL_CHANNEL, payload),
 
   getComputerUseVisibility: () => ipcRenderer.invoke(SIGIL_COMPUTER_USE_VISIBILITY_CHANNEL),
+  getGooseWorkerVisibility: () => ipcRenderer.invoke(SIGIL_GOOSE_WORKER_VISIBILITY_CHANNEL),
   getHermesWebUIStatus: () => ipcRenderer.invoke(SIGIL_HERMES_WEBUI_STATUS_CHANNEL),
   getHermesWebUIDeepLink: (nodeId: string, route: string) =>
     ipcRenderer.invoke(SIGIL_HERMES_WEBUI_DEEP_LINK_CHANNEL, nodeId, route),

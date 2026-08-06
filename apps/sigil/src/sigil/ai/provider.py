@@ -17,6 +17,7 @@ class ProviderFailureClass(str, Enum):
     MALFORMED_OUTPUT = "malformed_output"
     CAPABILITY_MISMATCH = "capability_mismatch"
     MODEL_IDENTITY_MISMATCH = "model_identity_mismatch"
+    CANCELLED = "cancelled"
 
 
 @dataclass(frozen=True, slots=True)

@@ -21,6 +21,7 @@ export const SIGIL_PAPER_RUNTIME_RESET_CHANNEL = 'sigil:reset-paper-runtime'
 export const SIGIL_PROVIDER_SNAPSHOT_CHANNEL = 'sigil:get-provider-snapshot'
 export const SIGIL_AI_STATUS_CHANNEL = 'sigil:get-ai-status'
 export const SIGIL_COMPUTER_USE_VISIBILITY_CHANNEL = 'sigil:get-computer-use-visibility'
+export const SIGIL_GOOSE_WORKER_VISIBILITY_CHANNEL = 'sigil:get-goose-worker-visibility'
 export const SIGIL_HERMES_WEBUI_STATUS_CHANNEL = 'sigil:get-hermes-webui-status'
 export const SIGIL_HERMES_WEBUI_DEEP_LINK_CHANNEL = 'sigil:get-hermes-webui-deep-link'
 export const SIGIL_GOVERNED_NEWS_STATUS_CHANNEL = 'sigil:get-governed-news-status'
@@ -415,6 +416,7 @@ export function registerSigilIpc(): void {
   ipcMain.removeHandler(SIGIL_PROVIDER_SNAPSHOT_CHANNEL)
   ipcMain.removeHandler(SIGIL_AI_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_COMPUTER_USE_VISIBILITY_CHANNEL)
+  ipcMain.removeHandler(SIGIL_GOOSE_WORKER_VISIBILITY_CHANNEL)
   ipcMain.removeHandler(SIGIL_HERMES_WEBUI_STATUS_CHANNEL)
   ipcMain.removeHandler(SIGIL_HERMES_WEBUI_DEEP_LINK_CHANNEL)
   ipcMain.removeHandler(SIGIL_GOVERNED_NEWS_STATUS_CHANNEL)
@@ -466,6 +468,9 @@ export function registerSigilIpc(): void {
   ipcMain.handle(SIGIL_AI_STATUS_CHANNEL, () => runBridgeRequest({ command: 'ai_status' }))
   ipcMain.handle(SIGIL_COMPUTER_USE_VISIBILITY_CHANNEL, () =>
     runBridgeRequest({ command: 'computer_use_visibility' })
+  )
+  ipcMain.handle(SIGIL_GOOSE_WORKER_VISIBILITY_CHANNEL, () =>
+    runBridgeRequest({ command: 'goose_worker_visibility' })
   )
   ipcMain.handle(SIGIL_HERMES_WEBUI_STATUS_CHANNEL, () =>
     runBridgeRequest({ command: 'hermes_webui_status' })
