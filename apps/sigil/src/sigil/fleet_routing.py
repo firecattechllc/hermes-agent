@@ -6,6 +6,14 @@ and produces deterministic primary, fallback, and exclusion decisions.
 This module performs no dispatch, provisioning, network requests, SSH,
 authentication, credential resolution, shell execution, filesystem access,
 installation, activation, policy mutation, or financial action.
+
+Non-authoritative / historical, per Hermes add-on Phase A consolidation
+(``docs/roadmap/HERMES_ADDON_ROADMAP.md``): ``hermes_cli/prime/sigil_routing.py``
+and ``hermes_cli/prime/fleet_registry.py`` are the sole authoritative
+fleet-routing implementation for real, live fleet dispatch. This module
+remains in place only because ``ecosystem_certification.py`` and
+``ecosystem_boundary_certification.py`` depend on it as a paper-reference
+evidence source; it is not expanded with new dispatch capability.
 """
 
 from __future__ import annotations

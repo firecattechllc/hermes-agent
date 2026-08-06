@@ -11,6 +11,8 @@ execution, filesystem access, installation, activation, or financial action.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import re
 from dataclasses import asdict, dataclass
@@ -35,6 +37,8 @@ BUZZ_RELAY_ADAPTER_SCHEMA_VERSION = 1
 _IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _SIGNATURE = re.compile(r"^[a-z0-9._-]+:[A-Za-z0-9_-]{32,512}$")
+_HMAC_SHA256_SIGNATURE = re.compile(r"^hmac-sha256:[0-9a-f]{64}$")
+_MINIMUM_SIGNING_KEY_BYTES = 32
 _UTC_TIMESTAMP = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$"
 )
@@ -398,6 +402,21 @@ class BuzzRelayEvent:
     def expected_digest(self) -> str:
         return f"sha256:{canonical_digest(self.digest_payload())}"
 
+    def signable_payload(self) -> dict[str, object]:
+        """Canonical payload a real Buzz relay signature must cover.
+
+        Excludes ``signature`` itself (nothing signs over its own value) and
+        ``event_digest`` (a derived, non-authoritative convenience field);
+        everything else that ``event_digest`` already covers is included, so
+        a forged event that changes any signed field also changes its
+        digest, and a forged event that keeps the digest identical cannot
+        also keep a valid signature without knowing the signing key.
+        """
+
+        payload = self.digest_payload()
+        payload.pop("signature", None)
+        return payload
+
     def validate(self) -> None:
         if self.schema_version != BUZZ_RELAY_ADAPTER_SCHEMA_VERSION:
             raise BuzzRelayValidationError(
@@ -658,6 +677,47 @@ def initial_replay_window() -> BuzzReplayWindow:
     )
 
 
+def sign_event_payload(event: BuzzRelayEvent, signing_key: bytes) -> str:
+    """Produce a real ``hmac-sha256:<hex>`` signature over ``event``'s signable payload.
+
+    For test fixtures and for a future real relay integration to call when
+    constructing outbound events. Never used to fabricate trust in an
+    inbound event — verification always recomputes independently.
+    """
+
+    if len(signing_key) < _MINIMUM_SIGNING_KEY_BYTES:
+        raise BuzzRelayValidationError(
+            f"Buzz relay signing key must be at least {_MINIMUM_SIGNING_KEY_BYTES} bytes"
+        )
+
+    message = canonical_digest(event.signable_payload()).encode("ascii")
+    digest = hmac.new(signing_key, message, hashlib.sha256).hexdigest()
+    return f"hmac-sha256:{digest}"
+
+
+def verify_event_signature(event: BuzzRelayEvent, signing_key: bytes) -> bool:
+    """Real cryptographic verification of ``event.signature`` against ``signing_key``.
+
+    Replaces the format-only ``_SIGNATURE`` regex check (which only proves
+    an attacker knew the *shape* of a signature, not that they held the
+    key) with an HMAC-SHA256 recomputation over the event's canonical
+    signable payload, compared in constant time. An event whose signature
+    is not in the ``hmac-sha256:<hex>`` scheme is treated as unverifiable
+    (returns ``False``) rather than raising, so a relay that has not yet
+    been migrated to this scheme fails closed instead of crashing.
+    """
+
+    if len(signing_key) < _MINIMUM_SIGNING_KEY_BYTES:
+        raise BuzzRelayValidationError(
+            f"Buzz relay signing key must be at least {_MINIMUM_SIGNING_KEY_BYTES} bytes"
+        )
+    if _HMAC_SHA256_SIGNATURE.fullmatch(event.signature) is None:
+        return False
+
+    expected = sign_event_payload(event, signing_key)
+    return hmac.compare_digest(expected, event.signature)
+
+
 def evaluate_relay_event(
     config: BuzzRelayConfig,
     event: BuzzRelayEvent,
@@ -665,8 +725,18 @@ def evaluate_relay_event(
     *,
     age_seconds: int,
     stale_after_seconds: int = 300,
+    signing_key: bytes | None = None,
 ) -> BuzzDeliveryDecision:
-    """Evaluate one injected signed event without contacting Buzz."""
+    """Evaluate one injected signed event without contacting Buzz.
+
+    When ``signing_key`` is supplied, ``event.signature`` is cryptographically
+    verified (see :func:`verify_event_signature`) and a failed verification
+    is rejected as ``BuzzDeliveryState.INVALID`` before any other check.
+    When omitted, only the existing format-level check performed in
+    :meth:`BuzzRelayEvent.validate` applies — callers that have not yet
+    provisioned a real relay signing key keep today's behavior rather than
+    being silently downgraded or broken.
+    """
 
     if not 1 <= stale_after_seconds <= 86400:
         raise BuzzRelayValidationError(
@@ -683,6 +753,16 @@ def evaluate_relay_event(
             state=BuzzDeliveryState.DISABLED,
             accepted=False,
             reason="Buzz Relay adapter is disabled by policy.",
+            event_digest=event.event_digest,
+            next_window=window,
+        )
+
+    if signing_key is not None and not verify_event_signature(event, signing_key):
+        return BuzzDeliveryDecision(
+            event_id=event.event_id,
+            state=BuzzDeliveryState.INVALID,
+            accepted=False,
+            reason="Buzz relay signature failed cryptographic verification.",
             event_digest=event.event_digest,
             next_window=window,
         )

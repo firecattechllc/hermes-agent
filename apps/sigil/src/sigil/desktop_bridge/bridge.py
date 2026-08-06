@@ -6,6 +6,14 @@ ecosystem through deterministic, descriptive-only projections.
 This module performs no networking, dispatch, installation, activation,
 credential resolution, shell execution, filesystem access, policy mutation,
 portfolio mutation, approval, capital authorization, or broker submission.
+
+Non-authoritative / historical, per Hermes add-on Phase A consolidation
+(``docs/roadmap/HERMES_ADDON_ROADMAP.md``): ``tools/computer_use/`` is the
+sole authoritative desktop/computer-use system for real, live desktop
+actions. This module remains in place only because
+``ecosystem_certification.py`` and ``ecosystem_boundary_certification.py``
+depend on it as a paper-reference evidence source; no second competing
+runtime is built here.
 """
 
 from __future__ import annotations

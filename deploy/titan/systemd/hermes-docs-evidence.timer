@@ -1,0 +1,13 @@
+[Unit]
+Description=Hourly Titan documentation evidence collection
+
+[Timer]
+OnCalendar=hourly
+# Spread hourly firings across a 10-minute window so a fleet of Titan-class
+# nodes (or this timer alongside the daily/weekly ones) doesn't all hit
+# GitHub/Ollama/systemd at the same wall-clock second.
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

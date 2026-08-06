@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 from .collectors import CommandExecutor, run_collectors, safe_execute
 from .config import KnowledgeConfig
+from .mission_control_bridge import KnowledgeVisibilityService
 from .models import (
     DiscoverySnapshot,
     EvidencePath,
@@ -22,10 +23,17 @@ from .store import KnowledgeGraphStore
 
 class KnowledgeService:
     def __init__(
-        self, config: KnowledgeConfig, *, store: KnowledgeGraphStore | None = None
+        self,
+        config: KnowledgeConfig,
+        *,
+        store: KnowledgeGraphStore | None = None,
+        visibility: Optional[KnowledgeVisibilityService] = None,
+        project_id: str = "hermes-platform",
     ) -> None:
         self.config = config
         self.store = store or KnowledgeGraphStore(config.database_path)
+        self._visibility = visibility
+        self._project_id = project_id
 
     def discover(
         self,
@@ -62,6 +70,25 @@ class KnowledgeService:
             evidence,
             missed_threshold=self.config.missed_snapshot_threshold,
         )
+
+        if self._visibility is not None:
+            timestamp = int(completed.timestamp())
+            self._visibility.publish_snapshot(
+                project_id=self._project_id,
+                node_id=self.config.node_id,
+                entities=entities,
+                relationships=relationships,
+                timestamp=timestamp,
+                correlation_id=snapshot.snapshot_id,
+            )
+            if changes:
+                self._visibility.publish_drift(
+                    project_id=self._project_id,
+                    node_id=self.config.node_id,
+                    changes=changes,
+                    correlation_id=snapshot.snapshot_id,
+                )
+
         return snapshot, changes
 
     def status(self) -> dict:

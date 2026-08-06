@@ -61,6 +61,17 @@ from .public_execution import (
     normalize_public_symbol,
     protected_account_binding,
 )
+from .default_registry import build_default_financial_data_registry
+from .fred import (
+    FRED_ADAPTER_VERSION,
+    FRED_ALLOWED_HOSTS,
+    FRED_API_KEY_ENVIRONMENT_VARIABLE,
+    FRED_PROVIDER_ID,
+    FRED_SUPPORTED_OPERATIONS,
+    FredProvider,
+    fred_request,
+    normalize_series_id,
+)
 from .sec_edgar import (
     SEC_ADAPTER_VERSION,
     SEC_ALLOWED_HOSTS,
@@ -104,6 +115,12 @@ __all__ = [
     "PUBLIC_EXECUTION_PROVIDER_ID",
     "PUBLIC_EXECUTION_SUPPORTED_OPERATIONS",
     "PUBLIC_FORBIDDEN_CAPABILITIES",
+    "FRED_ADAPTER_VERSION",
+    "FRED_ALLOWED_HOSTS",
+    "FRED_API_KEY_ENVIRONMENT_VARIABLE",
+    "FRED_PROVIDER_ID",
+    "FRED_SUPPORTED_OPERATIONS",
+    "normalize_series_id",
     "SEC_ADAPTER_VERSION",
     "SEC_ALLOWED_HOSTS",
     "SEC_PROVIDER_ID",
@@ -145,7 +162,10 @@ __all__ = [
     "PublicPreflightRecord",
     "PublicSubmissionIntent",
     "SECEdgarProvider",
+    "FredProvider",
     "alpaca_request",
+    "build_default_financial_data_registry",
+    "fred_request",
     "freeze_json",
     "normalize_alpaca_symbol",
     "normalize_cik",

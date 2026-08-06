@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly Titan documentation contradiction/provenance audit
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,4 +1,13 @@
-"""Governed, disabled-by-default Mac Ollama role profile and embedding adapter."""
+"""Governed, disabled-by-default Mac Ollama role profile and embedding adapter.
+
+Scope boundary (Hermes add-on Phase A consolidation, see
+``docs/architecture/OLLAMA_ROUTING_BOUNDARY.md``): this module is the
+authoritative path for local, in-process Sigil advisory inference on the Mac
+desktop host only. It does not perform fleet dispatch. Cross-node dispatch
+(Prime routing a request to Titan's or Mac's Ollama endpoint over the
+network) is the responsibility of ``hermes_cli/prime/ollama_node.py``
+exclusively. The two are non-overlapping by design, not duplicates.
+"""
 
 from __future__ import annotations
 

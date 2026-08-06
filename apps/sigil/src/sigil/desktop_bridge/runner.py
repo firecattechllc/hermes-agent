@@ -45,12 +45,15 @@ from .autonomous_paper import (
     paper_execution_status,
     reconcile_paper_orders,
 )
+from .computer_use_bridge import computer_use_visibility
 from .governed_news_bridge import (
     governed_alpaca_news_collect,
     governed_news_advisory_summary,
     governed_news_status,
     governed_news_timeline,
 )
+from .hermes_webui_bridge import hermes_webui_deep_link, hermes_webui_status
+from .paperclip_bridge import paperclip_status
 from .market_quotes import market_universe_quotes
 from .market_universe import market_universe_search, market_universe_status
 from .production_research import (
@@ -92,6 +95,10 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "governed_news_timeline",
     "governed_news_advisory_summary",
     "governed_alpaca_news_collect",
+    "computer_use_visibility",
+    "hermes_webui_status",
+    "hermes_webui_deep_link",
+    "paperclip_status",
     "market_universe_status",
     "market_universe_search",
     "market_universe_quotes",
@@ -353,6 +360,32 @@ def handle_request(request: object) -> dict[str, Any]:
             }
         except ValueError as error:
             return error_response("paper_reset_denied", str(error))
+
+    if command == "computer_use_visibility":
+        return {"ok": True, "result": computer_use_visibility()}
+
+    if command == "hermes_webui_status":
+        return {"ok": True, "result": hermes_webui_status()}
+
+    if command == "paperclip_status":
+        return {"ok": True, "result": paperclip_status()}
+
+    if command == "hermes_webui_deep_link":
+        payload = request.get("payload")
+        if not isinstance(payload, dict):
+            return error_response(
+                "invalid_payload",
+                "Hermes WebUI deep link requires a payload object.",
+            )
+        try:
+            return {
+                "ok": True,
+                "result": hermes_webui_deep_link(
+                    payload.get("node_id"), payload.get("route")
+                ),
+            }
+        except Exception as error:  # noqa: BLE001 - fail closed with a message, not a crash
+            return error_response("invalid_payload", str(error))
 
     if command == "governed_news_status":
         return {"ok": True, "result": governed_news_status()}

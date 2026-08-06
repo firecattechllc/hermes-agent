@@ -1,0 +1,15 @@
+[Unit]
+Description=Daily Titan documentation consolidated report
+
+[Timer]
+# Configurable time: the governance requirement is "daily at a configurable
+# time," and systemd timers don't read process environment, so the knob is
+# this OnCalendar line itself. To change it without hand-editing this
+# packaged file, use `systemctl edit hermes-docs-daily.timer` and override
+# OnCalendar= in the drop-in (see the installation runbook).
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=1800
+Persistent=true
+
+[Install]
+WantedBy=timers.target

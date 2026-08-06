@@ -24,7 +24,9 @@ from sigil.buzz_relay_adapter import (
     initial_replay_window,
     lifecycle_projection,
     project_worker_job,
+    sign_event_payload,
     validate_buzz_registry_entry,
+    verify_event_signature,
 )
 from sigil.integration_registry import (
     AuthorityDenials,
@@ -389,6 +391,95 @@ def test_disabled_adapter_rejects_delivery_without_mutating_window() -> None:
     assert decision.state is BuzzDeliveryState.DISABLED
     assert decision.accepted is False
     assert decision.next_window == window
+
+
+SIGNING_KEY = b"k" * 32
+OTHER_KEY = b"o" * 32
+
+
+def signed_event(key: bytes = SIGNING_KEY, **overrides: object) -> BuzzRelayEvent:
+    base = make_event(**overrides)
+    signature = sign_event_payload(base, key)
+    return replace(base, signature=signature, event_digest="")
+
+
+def test_sign_and_verify_round_trip_succeeds() -> None:
+    event = signed_event()
+
+    assert verify_event_signature(event, SIGNING_KEY) is True
+
+
+def test_verify_fails_with_wrong_key() -> None:
+    event = signed_event()
+
+    assert verify_event_signature(event, OTHER_KEY) is False
+
+
+def test_verify_fails_when_payload_tampered_after_signing() -> None:
+    event = signed_event()
+    tampered = replace(
+        event,
+        payload={**event.payload, "status": "approved"},
+        payload_digest=f"sha256:{canonical_digest({**event.payload, 'status': 'approved'})}",
+        event_digest="",
+    )
+
+    assert verify_event_signature(tampered, SIGNING_KEY) is False
+
+
+def test_verify_rejects_legacy_non_hmac_signature_format() -> None:
+    legacy_event = make_event()  # uses the format-only "ed25519:AAA..." fixture signature
+
+    assert verify_event_signature(legacy_event, SIGNING_KEY) is False
+
+
+def test_sign_and_verify_reject_short_keys() -> None:
+    event = signed_event()
+
+    with pytest.raises(BuzzRelayValidationError, match="at least"):
+        sign_event_payload(event, b"too-short")
+
+    with pytest.raises(BuzzRelayValidationError, match="at least"):
+        verify_event_signature(event, b"too-short")
+
+
+def test_evaluate_relay_event_accepts_valid_signature_when_key_supplied() -> None:
+    config = BuzzRelayConfig(enabled=True)
+    window = initial_replay_window()
+    event = signed_event()
+
+    decision = evaluate_relay_event(
+        config, event, window, age_seconds=10, signing_key=SIGNING_KEY
+    )
+
+    assert decision.state is BuzzDeliveryState.ACCEPTED
+    assert decision.accepted is True
+
+
+def test_evaluate_relay_event_rejects_forged_signature_when_key_supplied() -> None:
+    config = BuzzRelayConfig(enabled=True)
+    window = initial_replay_window()
+    event = signed_event(key=OTHER_KEY)  # signed with the wrong key
+
+    decision = evaluate_relay_event(
+        config, event, window, age_seconds=10, signing_key=SIGNING_KEY
+    )
+
+    assert decision.state is BuzzDeliveryState.INVALID
+    assert decision.accepted is False
+    assert decision.next_window == window
+    assert "cryptographic" in decision.reason
+
+
+def test_evaluate_relay_event_without_signing_key_preserves_legacy_behavior() -> None:
+    config = BuzzRelayConfig(enabled=True)
+    window = initial_replay_window()
+    event = make_event()  # format-only legacy signature, never cryptographically valid
+
+    decision = evaluate_relay_event(config, event, window, age_seconds=10)
+
+    assert decision.state is BuzzDeliveryState.ACCEPTED
+    assert decision.accepted is True
 
 
 def test_enabled_adapter_accepts_current_event() -> None:
