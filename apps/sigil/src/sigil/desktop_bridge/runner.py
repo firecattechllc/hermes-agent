@@ -52,6 +52,7 @@ from .governed_news_bridge import (
     governed_news_status,
     governed_news_timeline,
 )
+from .goose_bridge import goose_worker_visibility
 from .hermes_webui_bridge import hermes_webui_deep_link, hermes_webui_status
 from .paperclip_bridge import paperclip_status
 from .market_quotes import market_universe_quotes
@@ -96,6 +97,7 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "governed_news_advisory_summary",
     "governed_alpaca_news_collect",
     "computer_use_visibility",
+    "goose_worker_visibility",
     "hermes_webui_status",
     "hermes_webui_deep_link",
     "paperclip_status",
@@ -363,6 +365,9 @@ def handle_request(request: object) -> dict[str, Any]:
 
     if command == "computer_use_visibility":
         return {"ok": True, "result": computer_use_visibility()}
+
+    if command == "goose_worker_visibility":
+        return {"ok": True, "result": goose_worker_visibility()}
 
     if command == "hermes_webui_status":
         return {"ok": True, "result": hermes_webui_status()}

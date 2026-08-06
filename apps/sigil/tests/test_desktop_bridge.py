@@ -72,6 +72,7 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "governed_news_advisory_summary",
         "governed_alpaca_news_collect",
         "computer_use_visibility",
+        "goose_worker_visibility",
         "hermes_webui_status",
         "hermes_webui_deep_link",
         "paperclip_status",

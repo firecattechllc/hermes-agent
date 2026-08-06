@@ -4,6 +4,7 @@ type JsonObject = Record<string, unknown>;
 
 interface VisibilityDesktopApi {
   getComputerUseVisibility(): Promise<JsonObject>;
+  getGooseWorkerVisibility(): Promise<JsonObject>;
   getHermesWebUIStatus(): Promise<JsonObject>;
   getPaperclipStatus(): Promise<JsonObject>;
 }
@@ -43,9 +44,16 @@ const STATE_TONE: Record<string, string> = {
   incompatible: "text-red-400",
 };
 
+const GOOSE_HEALTH_TONE: Record<string, string> = {
+  healthy: "text-emerald-400",
+  unavailable: "text-neutral-500",
+  disabled: "text-neutral-500",
+};
+
 export function GovernedVisibilityPanel(): React.JSX.Element {
   const [computerUse, setComputerUse] = useState<JsonObject>({});
   const [webui, setWebui] = useState<JsonObject>({});
+  const [goose, setGoose] = useState<JsonObject>({});
   const [paperclip, setPaperclip] = useState<JsonObject>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Loading visibility evidence…");
@@ -68,14 +76,16 @@ export function GovernedVisibilityPanel(): React.JSX.Element {
     setBusy(true);
 
     try {
-      const [nextComputerUse, nextWebui, nextPaperclip] = await Promise.all([
+      const [nextComputerUse, nextWebui, nextGoose, nextPaperclip] = await Promise.all([
         desktop.getComputerUseVisibility(),
         desktop.getHermesWebUIStatus(),
+        desktop.getGooseWorkerVisibility(),
         desktop.getPaperclipStatus(),
       ]);
 
       setComputerUse(result(nextComputerUse));
       setWebui(result(nextWebui));
+      setGoose(result(nextGoose));
       setPaperclip(result(nextPaperclip));
       setMessage("Visibility evidence refreshed.");
     } catch (error) {
@@ -129,7 +139,7 @@ export function GovernedVisibilityPanel(): React.JSX.Element {
         {message}
       </p>
 
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-5 xl:grid-cols-3">
         <div className="rounded-lg border border-neutral-800 bg-neutral-950/50 p-4">
           <h2 className="font-semibold text-neutral-100">
             Governed computer use
@@ -214,6 +224,81 @@ export function GovernedVisibilityPanel(): React.JSX.Element {
               ))
             )}
           </div>
+        </div>
+
+        <div className="rounded-lg border border-neutral-800 bg-neutral-950/50 p-4">
+          <h2 className="font-semibold text-neutral-100">Goose worker</h2>
+          <p className="mt-1 text-xs text-neutral-500">
+            Optional governed worker. Disabled by default; never has direct
+            Sigil execution or fleet-administrative authority.
+          </p>
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs uppercase text-neutral-500">Status</dt>
+              <dd
+                className={`mt-1 text-sm font-semibold ${
+                  GOOSE_HEALTH_TONE[String(goose.health ?? "")] ??
+                  "text-neutral-400"
+                }`}
+              >
+                {text(goose.health).toUpperCase()}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-neutral-500">
+                Installed
+              </dt>
+              <dd className="mt-1 text-sm font-semibold text-neutral-100">
+                {goose.installed ? "Yes" : "No"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-neutral-500">Version</dt>
+              <dd className="mt-1 text-sm text-neutral-300">
+                {text(goose.version)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-neutral-500">
+                Provider / model
+              </dt>
+              <dd className="mt-1 text-sm text-neutral-300">
+                {text(goose.provider)} / {text(goose.model)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-neutral-500">
+                Active jobs
+              </dt>
+              <dd className="mt-1 text-sm text-neutral-300">
+                {typeof goose.active_jobs === "number" ? goose.active_jobs : 0}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-neutral-500">
+                Last execution
+              </dt>
+              <dd className="mt-1 text-sm text-neutral-300">
+                {(() => {
+                  const last = object(goose.last_execution);
+
+                  if (Object.keys(last).length === 0) {
+                    return "No governed runs yet.";
+                  }
+
+                  return last.succeeded ? "Succeeded" : "Failed";
+                })()}
+              </dd>
+            </div>
+          </dl>
+          {!goose.enabled ? (
+            <p className="mt-3 text-xs text-neutral-500">
+              Disabled by configuration (optional worker).
+            </p>
+          ) : null}
+          {goose.reason ? (
+            <p className="mt-3 text-xs text-amber-400">{text(goose.reason)}</p>
+          ) : null}
         </div>
 
         <div className="rounded-lg border border-neutral-800 bg-neutral-950/50 p-4">
