@@ -97,7 +97,10 @@ def test_second_run_with_unchanged_evidence_is_idempotent(worker_config, monkeyp
     # proof), but the idempotency gate is specifically about *main already
     # having this content*, not about "ran twice in a row."
     subprocess.run(
-        ["git", "merge", "--no-ff", "-m", "merge automation PR", first.branch],
+        [
+            "git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
+            "merge", "--no-ff", "-m", "merge automation PR", first.branch,
+        ],
         cwd=worker_config.docs_repo_path, check=True, capture_output=True, text=True,
     )
     subprocess.run(
