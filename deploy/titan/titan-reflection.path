@@ -1,0 +1,14 @@
+[Unit]
+Description=Event-driven wake for Titan's governed reflection cycle on new queued work
+# Watches the persistent task queue directory (see
+# hermes_cli.prime.titan_task_queue.PersistentTaskQueue) so a newly enqueued
+# task triggers a reflection cycle immediately instead of waiting for the
+# next titan-reflection.timer floor firing -- this is the "wake when a
+# queued task becomes eligible" trigger, not a poll.
+
+[Path]
+PathChanged=/var/lib/hermes-prime/titan-reflection/queue
+Unit=titan-reflection.service
+
+[Install]
+WantedBy=multi-user.target
