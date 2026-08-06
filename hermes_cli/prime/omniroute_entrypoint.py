@@ -49,8 +49,15 @@ def build_upstreams(config: TitanRoutingConfig) -> Dict[str, object]:
     upstreams: Dict[str, object] = {}
 
     if config.titan_ollama_enabled:
+        # Keyed by concrete model tag (not by OmniRoute's governed alias
+        # name): TitanOllamaUpstreamAdapter.generate() below is called with
+        # the already-resolved concrete model (via
+        # TitanRoutingConfig.resolve_alias_detailed), and forwards it as
+        # OllamaNodeProviderAdapter.generate(alias=model, ...), which looks
+        # that value up directly in this dict. Keying by the governed alias
+        # name here would make every lookup miss and fail closed.
         model_aliases = {
-            alias: model
+            model: model
             for alias, (provider_id, model) in config.alias_routes.items()
             if provider_id == "titan_ollama"
         }
