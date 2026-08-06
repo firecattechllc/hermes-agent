@@ -1,0 +1,46 @@
+[Unit]
+Description=Titan documentation worker — hourly evidence collection
+# Best-effort ordering only: the worker's own collectors and repo_sync guard
+# already tolerate Ollama, the network, or the documentation remote being
+# unavailable at any point (they degrade to Unknown/skip closed rather than
+# crash), so nothing here is a hard dependency.
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hermes-docs
+Group=hermes-docs
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/hermes/docs-worker.env
+ExecStart=/opt/hermes/venv/bin/python -m hermes_docs_worker collect
+# Slightly above HERMES_DOCS_WORKER_MAX_RUN_SECONDS' default (600s) so the
+# worker's own internal deadline is what ends a stuck run, not systemd
+# killing it mid-write.
+TimeoutStartSec=660
+Restart=no
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryMax=512M
+CPUQuota=50%
+TasksMax=32
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# HERMES_DOCS_WORKER_HERMES_SOURCE_DIR is discovered per-deployment (see the
+# installation runbook) and therefore isn't a fixed path this unit can list
+# here; ProtectSystem=strict already makes it (and everything else outside
+# ReadWritePaths) read-only for this service.
+ReadWritePaths=/var/lib/hermes-docs-worker /opt/hermes-docs/hydra-docs
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
