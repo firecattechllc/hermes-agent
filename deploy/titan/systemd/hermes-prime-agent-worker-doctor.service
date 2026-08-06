@@ -1,0 +1,55 @@
+# Periodic read-only health check for the Prime Agent worker.
+#
+# This is deliberately the ONLY systemd unit for this worker. Prime
+# Agent's own daemon self-forks and detaches from its invoking process on
+# first use (observed directly: it persists after the invoking SSH
+# session returns) -- it is not a foreground-friendly process a
+# Type=simple unit could correctly supervise, and it already starts
+# on-demand and idles at near-zero CPU with no token usage between tasks.
+# Wrapping it in a permanently-running systemd service would fight its
+# own lifecycle management for no governance benefit; see
+# docs/hermes-prime-agent-worker/architecture.md.
+#
+# Hermes dispatches actual bounded task runs directly (`python -m
+# hermes_prime_agent_worker run ...`) through its own scheduling/admission
+# path, not through this unit -- this unit exists only to surface
+# `prime-agent doctor` (read-only; never --fix) into evidence/logs on a
+# schedule, so a wedged or orphaned local daemon state is visible even
+# when nothing has dispatched a task recently.
+[Unit]
+Description=Hermes Titan Prime Agent worker — periodic read-only health check
+After=network.target
+
+[Service]
+Type=oneshot
+User=hermes-prime-agent
+Group=hermes-prime-agent
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/opt/hermes/releases/current/source
+EnvironmentFile=/etc/hermes-prime-agent-worker/worker.env
+WorkingDirectory=/opt/hermes/releases/current/source
+ExecStart=/opt/hermes/releases/current/venv/bin/python -m hermes_prime_agent_worker doctor
+TimeoutStartSec=60
+Restart=no
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryMax=512M
+CPUQuota=50%
+TasksMax=16
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/opt/hermes/releases/current /etc/hermes-prime-agent-worker
+ReadWritePaths=/var/lib/hermes-prime-agent
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
