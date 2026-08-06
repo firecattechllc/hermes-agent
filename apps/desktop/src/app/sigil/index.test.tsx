@@ -16,9 +16,7 @@ describe('SigilOperatorView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Executions' }))
     expect(screen.getByText('Simulated executions')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /submit/i })).toBeNull()
-    expect(screen.getByRole('status').textContent).toContain(
-      'No broker submission'
-    )
+    expect(screen.getByRole('status').textContent).toContain('No broker submission')
   })
 
   it('keeps manual proposal actions locked when governed paper runtime controls are active', async () => {
@@ -33,9 +31,7 @@ describe('SigilOperatorView', () => {
 
     expect(approveButtons.every(button => button.hasAttribute('disabled'))).toBe(true)
     expect(rejectButtons.every(button => button.hasAttribute('disabled'))).toBe(true)
-    expect(
-      screen.queryByRole('button', { name: 'Enable simulated operator actions' })
-    ).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Enable simulated operator actions' })).toBeNull()
     expect(screen.queryByText('Confirm simulated approval')).toBeNull()
     expect(apply).not.toHaveBeenCalled()
   })
