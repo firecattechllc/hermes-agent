@@ -75,6 +75,7 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "goose_worker_visibility",
         "hermes_webui_status",
         "hermes_webui_deep_link",
+        "paperclip_status",
         "market_universe_status",
         "market_universe_search",
         "market_universe_quotes",
