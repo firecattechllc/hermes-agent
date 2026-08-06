@@ -1,0 +1,45 @@
+[Unit]
+Description=Hermes Titan governed reflection cycle (one-shot, dynamic wake)
+# Soft-ordered after OmniRoute (dispatch target) and Ollama/Docker (its
+# upstreams), but none is a hard dependency -- a cycle that finds its
+# dependencies unavailable simply parks or fails closed via the same
+# bounded-retry/circuit-breaker machinery OmniRoute itself uses. There is
+# deliberately no dependency on any Mac/Tailscale unit.
+After=network-online.target ollama.service docker.service omniroute.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hermes
+Group=hermes
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/hermes-prime/titan-reflection.env
+ExecStart=/opt/hermes/venv/bin/python -m hermes_cli.prime.titan_reflection_entrypoint
+# Hard ceiling matching SchedulerPolicy.max_reflection_runtime_seconds
+# (10 minutes default) -- if a cycle somehow hangs past this, systemd kills
+# it rather than letting it become a de facto permanent process.
+TimeoutStartSec=600
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryMax=1G
+CPUQuota=100%
+TasksMax=32
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/opt/hermes/current /etc/hermes-prime
+ReadWritePaths=/var/lib/hermes-prime
+UMask=0077
+
+# No [Install] WantedBy=multi-user.target here on purpose: this unit is
+# triggered exclusively by titan-reflection.timer (periodic floor) and
+# titan-reflection.path (event-driven on new queued work), never enabled or
+# started directly at boot.
