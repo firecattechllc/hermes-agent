@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 import pytest
 
+import hermes_docs_worker.config as config_module
 from hermes_docs_worker.config import DocsWorkerConfig, DocsWorkerConfigError
 
 
@@ -97,3 +99,18 @@ def test_is_within_allowlist(tmp_path: Path) -> None:
     config = DocsWorkerConfig.from_env(_env(tmp_path))
     assert config.is_within_allowlist(config.docs_repo_path / "foo.md")
     assert not config.is_within_allowlist(Path("/etc/passwd"))
+
+
+def test_does_not_import_across_unmerged_omniroute_branch() -> None:
+    """hermes_docs_worker must not depend on hermes_cli.prime.omniroute_config,
+    which lives on a separate, not-yet-merged branch
+    (feat/titan-omniroute-freellmapi). A cross-branch import here previously
+    broke test collection for every Python CI slice with
+    ModuleNotFoundError, since that module isn't present on this branch."""
+    source = inspect.getsource(config_module)
+    import_lines = [
+        line.strip()
+        for line in source.splitlines()
+        if line.strip().startswith("import ") or line.strip().startswith("from ")
+    ]
+    assert not any("hermes_cli" in line for line in import_lines), import_lines

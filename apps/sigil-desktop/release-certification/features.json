@@ -641,6 +641,43 @@
         "expected_heading": "Governed news intelligence",
         "controls": []
       }
+    },
+    {
+      "id": "visibility.ecosystem-panel",
+      "name": "Ecosystem governed visibility panel",
+      "description": "Read-only evidence surfaced from tools/computer_use/, sigil.hermes_webui_adapter, and an operator-configured Paperclip instance. No action is taken by this panel.",
+      "criticality": "important",
+      "source_files": [
+        "src/mission-control/governed-visibility-panel.tsx",
+        "electron/main.ts",
+        "electron/preload.ts"
+      ],
+      "expected_user_behavior": "Selecting Ecosystem opens the governed visibility panel and shows read-only computer-use driver readiness, Hermes WebUI target status, and Paperclip connection status without taking any action.",
+      "automated_test_references": [
+        "electron/governed-visibility.test.ts",
+        "scripts/release-guardian.test.mjs"
+      ],
+      "development_build_test_method": "Open the Ecosystem navigation destination and verify computer-use, Hermes WebUI, and Paperclip evidence render in a read-only state.",
+      "packaged_build_test_method": "Open Ecosystem in the packaged desktop application and verify the panel remains read-only with no destructive controls.",
+      "required_backend_or_dependency": "Optional read-only Python bridge (tools/computer_use/, sigil.hermes_webui_adapter, Paperclip); every source is disabled by default and degrades to an unavailable state.",
+      "safe_fallback_behavior": "Display a bounded unavailable or empty evidence state without attempting any destructive or mutating action.",
+      "prohibited_side_effects": [
+        "computer-use action execution",
+        "Hermes WebUI mutation",
+        "Paperclip credential disclosure"
+      ],
+      "current_certification_status": "NOT_TESTED",
+      "ipc_channels": [
+        "sigil:get-computer-use-visibility",
+        "sigil:get-hermes-webui-status",
+        "sigil:get-hermes-webui-deep-link",
+        "sigil:get-paperclip-status"
+      ],
+      "ui": {
+        "navigation_label": "Ecosystem",
+        "expected_heading": "Computer use & Hermes WebUI visibility",
+        "controls": []
+      }
     }
   ]
 }

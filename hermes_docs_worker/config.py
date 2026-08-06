@@ -12,6 +12,12 @@ requirement is "discover from configured deployment rather than assuming a
 path" -- so :data:`HERMES_SOURCE_DIR` is a required environment variable
 (set by the systemd unit's EnvironmentFile, which is itself produced by the
 Titan install runbook from the actual deployment) rather than a guess.
+
+The Mac-dependency guard below is intentionally a local copy of
+``hermes_cli.prime.omniroute_config.validate_no_mac_dependency`` rather than
+an import of it: that module lives on a separate, not-yet-merged branch, and
+this worker must not take a hard dependency on unmerged code. Keep the two
+copies in sync if the shared policy changes.
 """
 
 from __future__ import annotations
@@ -21,10 +27,80 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 
-from hermes_cli.prime.omniroute_config import (
-    DEFAULT_FORBIDDEN_MAC_ADDRESSES,
-    validate_no_mac_dependency,
+# Discovered Mac Tailscale identity (see
+# docs/architecture/hydra-ecosystem/evidence/TITAN_DISCOVERY.md and
+# MACBOOK_DISCOVERY.md). Always forbidden; operators may only *extend* this
+# set via HERMES_DOCS_WORKER_FORBIDDEN_MAC_ADDRESSES, never shrink it.
+DEFAULT_FORBIDDEN_MAC_ADDRESSES: Tuple[str, ...] = (
+    "100.68.14.37",
+    "matthews-macbook-air",
 )
+
+_MAC_HOSTNAME_MARKERS = (
+    "macbook",
+    "mac-mini",
+    "mac-studio",
+    "mac-pro",
+    "mac-air",
+    ".local",
+)
+_MAC_FALLBACK_MARKERS = ("mac_fallback", "mac-fallback", "macfallback", "mac fallback")
+_USERS_PATH_PATTERN = re.compile(r"/Users/")
+_HOST_DOCKER_INTERNAL = "host.docker.internal"
+
+
+def validate_no_mac_dependency(
+    values: Mapping[str, Optional[str]],
+    *,
+    forbidden_mac_addresses: Tuple[str, ...] = DEFAULT_FORBIDDEN_MAC_ADDRESSES,
+) -> Tuple[str, ...]:
+    """Scan configuration values for forbidden Mac dependencies. Fail closed.
+
+    Returns every violation found (never just the first) so a single
+    configuration error report can be shown in full. An empty tuple means no
+    Mac dependency was found in any of ``values``. This function only reads
+    ``values`` and forms an error message; it performs no I/O and never
+    reflects a secret value back into its output.
+    """
+    violations: list[str] = []
+    lowered_forbidden = tuple(marker.lower() for marker in forbidden_mac_addresses)
+
+    for name, raw in values.items():
+        if raw is None:
+            continue
+        value = str(raw)
+        lowered = value.lower()
+
+        if _USERS_PATH_PATTERN.search(value):
+            violations.append(f"{name} contains a Mac filesystem path (/Users/...)")
+
+        if _HOST_DOCKER_INTERNAL in lowered:
+            violations.append(
+                f"{name} references host.docker.internal; use a localhost or "
+                "private-network address that resolves on Titan itself instead"
+            )
+
+        for marker in lowered_forbidden:
+            if marker and marker in lowered:
+                violations.append(
+                    f"{name} references a known Mac Tailscale identity ({marker!r})"
+                )
+
+        for marker in _MAC_HOSTNAME_MARKERS:
+            if marker in lowered:
+                violations.append(
+                    f"{name} looks like a Mac hostname ({marker!r} marker found)"
+                )
+
+        for marker in _MAC_FALLBACK_MARKERS:
+            if marker in lowered:
+                violations.append(f"{name} names a Mac fallback provider ({marker!r})")
+
+    # De-duplicate while preserving first-seen order.
+    seen: dict[str, None] = {}
+    for item in violations:
+        seen.setdefault(item, None)
+    return tuple(seen.keys())
 
 # Fixed, non-configurable naming conventions -- these are part of the
 # governance contract itself (exact branch/commit format), not a knob an
