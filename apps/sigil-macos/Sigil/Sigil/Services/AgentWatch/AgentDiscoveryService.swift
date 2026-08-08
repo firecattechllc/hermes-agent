@@ -62,6 +62,7 @@ nonisolated struct AgentDiscoveryService: Sendable {
                 id: "\(kind.rawValue):\(process.processID):\(Int(process.startTime?.timeIntervalSince1970 ?? 0))",
                 kind: kind, displayName: kind.displayName, state: .unknown,
                 stateReason: "Process detected; no reliable activity signal",
+                evidenceSource: .processDiscovery, evidenceConfidence: .low,
                 processID: process.processID, parentProcessID: process.parentProcessID,
                 host: "This Mac", workingDirectory: nil,
                 associatedApplication: process.associatedApplication,
