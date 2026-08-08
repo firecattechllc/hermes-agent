@@ -87,6 +87,34 @@ _PROMOTION_STATES = frozenset({
     "deployed",
 })
 
+_FLEET_NODE_ROLES = frozenset({
+    "prime",
+    "titan",
+    "mac",
+    "hydra_live",
+})
+
+_FLEET_NODE_CONNECTION_STATES = frozenset({
+    "unknown",
+    "connected",
+    "degraded",
+    "stale",
+    "disconnected",
+    "revoked",
+})
+
+_FLEET_ADMISSION_OUTCOMES = frozenset({
+    "admitted",
+    "denied",
+    "quarantined",
+})
+
+_FLEET_CERTIFICATION_STATUSES = frozenset({
+    "certified",
+    "blocked",
+    "failed",
+})
+
 _TELEMETRY_SEVERITIES = frozenset({
     "debug",
     "info",
@@ -180,6 +208,20 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "release_readiness_blocked",
     "evidence_chain_certified",
     "rollback_readiness_recorded",
+    # Fleet Unification Stage 2 — Prime control plane
+    "prime_identity_registered",
+    "prime_health_reported",
+    "prime_admission_decided",
+    "prime_sigil_contract_invoked",
+    "prime_remote_maintenance_decided",
+    "prime_fleet_certified",
+    # Fleet Unification live-runtime — Prime node registry, heartbeat, dispatch
+    "prime_fleet_node_registered",
+    "prime_fleet_node_registration_rejected",
+    "prime_fleet_node_connection_changed",
+    "prime_dispatch_decided",
+    "prime_desktop_use_decided",
+    "prime_operator_approval_recorded",
 })
 
 
@@ -418,6 +460,85 @@ class PromotionStateSnapshot(BaseModel):
         return _validate_schema(v)
 
 
+# ── Fleet node state snapshot ───────────────────────────────────────────────
+
+class FleetNodeStateSnapshot(BaseModel):
+    """Point-in-time snapshot of one live fleet node's observable state.
+
+    Deliberately never represents unknown or stale data as healthy:
+    ``connection_state`` defaults to ``"unknown"`` (not ``"connected"``), and
+    is only ever set by a real ``prime_fleet_node_connection_changed`` event
+    — a node this snapshot has no heartbeat event for stays ``"unknown"``.
+    This mirrors the same fail-closed convention as
+    ``hermes_cli.prime.heartbeat.HeartbeatService.current_connection_state``:
+    the two are expected to agree, since both derive from the same
+    underlying heartbeat evaluation, but this snapshot is a read-only
+    telemetry projection and does not itself re-evaluate staleness against
+    the current wall clock — a caller wanting a live answer should still
+    prefer the Prime heartbeat service directly.
+    """
+    natural_key: str = Field(..., min_length=1, max_length=64)
+    project_id: str = Field(..., min_length=1, max_length=128)
+    identity_id: Optional[str] = Field(None, max_length=128)
+    role: Optional[str] = Field(None)
+    connection_state: str = Field(default="unknown")
+    model_inventory: List[str] = Field(default_factory=list)
+    last_seen_at: Optional[int] = Field(None)
+    last_admission_outcome: Optional[str] = Field(None)
+    last_admission_reason_codes: List[str] = Field(default_factory=list)
+    last_certification_status: Optional[str] = Field(None)
+    revoked: bool = False
+    last_event_id: Optional[str] = Field(None, max_length=128)
+    last_event_type: Optional[str] = Field(None, max_length=128)
+    updated_at: int = Field(default_factory=_utc_now)
+    schema_version: int = Field(default=CURRENT_SCHEMA_VERSION)
+
+    @field_validator("role")
+    @classmethod
+    def _check_role(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in _FLEET_NODE_ROLES:
+            raise ValueError(f"unknown fleet node role: {v!r}")
+        return v
+
+    @field_validator("connection_state")
+    @classmethod
+    def _check_connection_state(cls, v: str) -> str:
+        if v not in _FLEET_NODE_CONNECTION_STATES:
+            raise ValueError(f"unknown fleet node connection_state: {v!r}")
+        return v
+
+    @field_validator("last_admission_outcome")
+    @classmethod
+    def _check_admission_outcome(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in _FLEET_ADMISSION_OUTCOMES:
+            raise ValueError(f"unknown fleet admission outcome: {v!r}")
+        return v
+
+    @field_validator("last_certification_status")
+    @classmethod
+    def _check_certification_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in _FLEET_CERTIFICATION_STATUSES:
+            raise ValueError(f"unknown fleet certification status: {v!r}")
+        return v
+
+    @field_validator("schema_version")
+    @classmethod
+    def _check_version(cls, v: int) -> int:
+        return _validate_schema(v)
+
+    def is_healthy(self) -> bool:
+        """True only for a non-revoked, currently-connected, admitted node.
+
+        Never returns True for ``"unknown"`` — the fail-closed default — or
+        for any degraded/stale/disconnected/revoked state.
+        """
+        return (
+            not self.revoked
+            and self.connection_state == "connected"
+            and self.last_admission_outcome == "admitted"
+        )
+
+
 # ── MissionControlSnapshot ────────────────────────────────────────────────────
 
 class MissionControlSnapshot(BaseModel):
@@ -438,6 +559,7 @@ class MissionControlSnapshot(BaseModel):
     approval_states: List[ApprovalStateSnapshot] = Field(default_factory=list)
     evidence_states: List[EvidenceStateSnapshot] = Field(default_factory=list)
     promotion_states: List[PromotionStateSnapshot] = Field(default_factory=list)
+    fleet_node_states: List[FleetNodeStateSnapshot] = Field(default_factory=list)
     schema_version: int = Field(default=CURRENT_SCHEMA_VERSION)
 
     @field_validator("schema_version")

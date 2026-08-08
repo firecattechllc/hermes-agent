@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "certification_scope": "post_phase9_stage3_hermes_webui_adapter",
+  "branch": "beta-post9-03-hermes-webui",
+  "operational_result": "focused_validation_passed",
+  "adapter_schema_version": 1,
+  "topology": {
+    "hermes_titan": {
+      "role": "primary",
+      "enabled": false
+    },
+    "hermes_mac": {
+      "role": "senior",
+      "enabled": false
+    },
+    "buzz_integration": false
+  },
+  "validation": {
+    "focused_registry_worker_webui_tests": 63,
+    "git_diff_check": "passed"
+  },
+  "deterministic_coverage": [
+    "disabled_default",
+    "titan_and_mac_target_model",
+    "private_and_tailnet_origin_validation",
+    "public_origin_rejection",
+    "credentialed_origin_rejection",
+    "approved_route_allowlist",
+    "approved_query_key_allowlist",
+    "sanitized_deep_link_projection",
+    "stale_health_rejection",
+    "unavailable_health_rejection",
+    "degraded_health_projection",
+    "worker_contract_schema_compatibility",
+    "probe_identity_validation",
+    "future_probe_rejection",
+    "credential_redaction",
+    "immutable_target_digest"
+  ],
+  "governance": {
+    "paper_only": true,
+    "broker_submission": false,
+    "execution_authorized": false,
+    "approval_authority": false,
+    "capital_authority": false,
+    "portfolio_mutation": false,
+    "policy_mutation": false,
+    "credential_access": false,
+    "arbitrary_shell": false,
+    "arbitrary_filesystem": false,
+    "governance_bypass": false,
+    "activation_authorized": false,
+    "installation_authorized": false
+  },
+  "network_probe_implemented": false,
+  "authentication_implemented": false,
+  "service_control_implemented": false,
+  "worker_dispatch_implemented": false,
+  "buzz_relay_implemented": false,
+  "external_integration_installed_or_activated": false,
+  "stage4_paperclip_adapter_implemented": false
+}

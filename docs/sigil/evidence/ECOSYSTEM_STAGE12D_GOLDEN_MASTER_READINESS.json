@@ -1,0 +1,164 @@
+{
+  "artifacts": [
+    {
+      "artifact_id": "stage12-certification-document",
+      "repository_reference": "docs/sigil/ECOSYSTEM_STAGE12_CERTIFICATION.md",
+      "sha256": "sha256:1f07909d874577aeccf6921451dd2f9c159e3d89b324a91cc66cedaa0a0babbb"
+    },
+    {
+      "artifact_id": "stage12a-manifest",
+      "repository_reference": "docs/sigil/evidence/ECOSYSTEM_STAGE12A_CERTIFICATION_MANIFEST.json",
+      "sha256": "sha256:c31f3e8c2cf4de6b32e7a7b0e04039a84adce505153fad74fe1bc7a3231b8552"
+    },
+    {
+      "artifact_id": "stage12b-boundary-matrix",
+      "repository_reference": "docs/sigil/evidence/ECOSYSTEM_STAGE12B_BOUNDARY_MATRIX.json",
+      "sha256": "sha256:95d5788ef0bd3480293ea4825afe12c15349bcaaed7688d115242d0a82dbcad6"
+    },
+    {
+      "artifact_id": "stage12c-replay-certification",
+      "repository_reference": "docs/sigil/evidence/ECOSYSTEM_STAGE12C_REPLAY_CERTIFICATION.json",
+      "sha256": "sha256:d72e82d69de1dfd5091df34e32cfd026e2f0436be457e1a5880d273f8058ecc2"
+    }
+  ],
+  "automatic_promotion": false,
+  "broker_submission": false,
+  "certification_stage": "12D",
+  "decision": "READY",
+  "expected_working_tree_paths": [
+    "apps/sigil/src/sigil/ecosystem_golden_master.py",
+    "apps/sigil/tests/test_ecosystem_golden_master.py",
+    "docs/sigil/ECOSYSTEM_STAGE12_CERTIFICATION.md",
+    "docs/sigil/evidence/ECOSYSTEM_STAGE12D_GOLDEN_MASTER_READINESS.json"
+  ],
+  "feature_expansion_prohibited": true,
+  "paper_only": true,
+  "readiness_identity": "sha256:f26ea355cd6d3bc9e5997471404e57957ab7967cafabd1292c7bc1cffea1f241",
+  "schema_version": 1,
+  "stage12a_identity": "sha256:4804f0b10d1fd32921fde2f7c2370fb4c0e215c1ac589404f0bf2e07f48cbf9a",
+  "stage12b_identity": "sha256:582cd06b082c4f634bdd0845ffc5bf0d193bf272d97c19c7599421f0755104a3",
+  "stage12c_identity": "sha256:35226b8b2f0641ebf989aee8f6bf116a29365cb45c530ccd87fd859d632513f9",
+  "unresolved_blockers": [],
+  "validations": [
+    {
+      "command": "cd apps/sigil && uv run python -m compileall -q src tests scripts",
+      "failed_count": 0,
+      "passed_count": null,
+      "result_summary": "All Sigil Python files compiled.",
+      "status": "passed",
+      "validation_id": "backend-compileall"
+    },
+    {
+      "command": "cd apps/sigil && uv run ruff check --select E9,F63,F7,F82 .",
+      "failed_count": 0,
+      "passed_count": null,
+      "result_summary": "Critical Python Ruff validation passed.",
+      "status": "passed",
+      "validation_id": "backend-critical-ruff"
+    },
+    {
+      "command": "cd apps/sigil && uv run pytest -q",
+      "failed_count": 0,
+      "passed_count": 1850,
+      "result_summary": "The complete Sigil backend suite passed.",
+      "status": "passed",
+      "validation_id": "backend-full-pytest"
+    },
+    {
+      "command": "cd apps/sigil && SIGIL_DESKTOP_STATE_DIR=<temporary> uv run python <paper-runtime-boundary-check>",
+      "failed_count": 0,
+      "passed_count": null,
+      "result_summary": "Sigil imported with a healthy paper-only runtime and broker submission disabled.",
+      "status": "passed",
+      "validation_id": "backend-import-paper-runtime"
+    },
+    {
+      "command": "npm run --prefix apps/sigil-desktop lint",
+      "failed_count": 0,
+      "passed_count": null,
+      "result_summary": "Desktop ESLint validation passed.",
+      "status": "passed",
+      "validation_id": "desktop-lint"
+    },
+    {
+      "command": "npm run --prefix apps/sigil-desktop build",
+      "failed_count": 0,
+      "passed_count": null,
+      "result_summary": "Production desktop build completed successfully.",
+      "status": "passed",
+      "validation_id": "desktop-production-build"
+    },
+    {
+      "command": "npm run --prefix apps/sigil-desktop test",
+      "failed_count": 0,
+      "passed_count": 88,
+      "result_summary": "All desktop Vitest tests passed.",
+      "status": "passed",
+      "validation_id": "desktop-tests"
+    },
+    {
+      "command": "npm run --prefix apps/sigil-desktop typecheck",
+      "failed_count": 0,
+      "passed_count": null,
+      "result_summary": "Desktop TypeScript validation passed.",
+      "status": "passed",
+      "validation_id": "desktop-typecheck"
+    },
+    {
+      "command": "git status --short",
+      "failed_count": 0,
+      "passed_count": null,
+      "result_summary": "Only expected Stage 12D files were present.",
+      "status": "passed",
+      "validation_id": "expected-working-tree-only"
+    },
+    {
+      "command": "git diff --check",
+      "failed_count": 0,
+      "passed_count": null,
+      "result_summary": "No whitespace or patch-format errors were found.",
+      "status": "passed",
+      "validation_id": "git-diff-check"
+    },
+    {
+      "command": "npm run --prefix apps/sigil-desktop test:packaged-backend",
+      "failed_count": 0,
+      "passed_count": null,
+      "result_summary": "Packaged backend certification passed.",
+      "status": "passed",
+      "validation_id": "packaged-backend"
+    },
+    {
+      "command": "grep for source-controlled broker-submission enablement",
+      "failed_count": 0,
+      "passed_count": null,
+      "result_summary": "No source-controlled broker-submission enablement was found.",
+      "status": "passed",
+      "validation_id": "paper-only-source-scan"
+    },
+    {
+      "command": "cd apps/sigil-desktop && npx vitest run scripts/release-guardian.test.mjs",
+      "failed_count": 0,
+      "passed_count": 8,
+      "result_summary": "Release Guardian passed under Vitest.",
+      "status": "passed",
+      "validation_id": "release-guardian-tests"
+    },
+    {
+      "command": "npm run --prefix apps/sigil-desktop release:verify",
+      "failed_count": 0,
+      "passed_count": null,
+      "result_summary": "Release verification completed with unsigned-test classification.",
+      "status": "passed",
+      "validation_id": "release-verification"
+    },
+    {
+      "command": "PYTHONPATH=apps/sigil/src python3 -m pytest apps/sigil/tests/test_ecosystem_certification_manifest.py apps/sigil/tests/test_ecosystem_boundary_certification.py apps/sigil/tests/test_ecosystem_replay_certification.py apps/sigil/tests/test_ecosystem_golden_master.py -q",
+      "failed_count": 0,
+      "passed_count": 73,
+      "result_summary": "All Stage 12 focused certification tests passed.",
+      "status": "passed",
+      "validation_id": "stage12-focused-tests"
+    }
+  ]
+}

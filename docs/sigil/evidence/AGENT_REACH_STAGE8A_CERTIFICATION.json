@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "certification_scope": "post_phase9_stage8a_agent_reach_adapter",
+  "branch": "beta-post9-08a-agent-reach",
+  "base_commit": "8316bbfab",
+  "certified_at": "2026-08-02T00:25:00Z",
+  "status": "passed",
+  "implementation": {
+    "adapter": "apps/sigil/src/sigil/agent_reach_adapter.py",
+    "tests": "apps/sigil/tests/test_agent_reach_adapter.py",
+    "architecture_document": "docs/beta/post-phase9/AGENT_REACH_ADAPTER.md",
+    "disabled_by_default": true,
+    "live_outreach_enabled": false,
+    "authentication_enabled": false,
+    "credential_exchange_enabled": false,
+    "message_delivery_enabled": false,
+    "remote_execution_enabled": false,
+    "external_integration_installed_or_activated": false
+  },
+  "modeled_concepts": [
+    "external_agent_identity",
+    "organization_identity",
+    "trust_tier",
+    "worker_contract_schema",
+    "capability_declarations",
+    "machine_support",
+    "profile_support",
+    "communication_route_references",
+    "request_envelopes",
+    "response_envelopes",
+    "correlation_idempotency",
+    "evidence_requirements",
+    "evidence_references",
+    "rate_limits",
+    "in_flight_limits",
+    "byte_limits",
+    "runtime_limits",
+    "exact_decimal_cost_limits",
+    "heartbeat_evidence",
+    "freshness",
+    "compatibility",
+    "worker_lifecycle_projection"
+  ],
+  "validation": {
+    "focused_stage1_through_stage8a_tests": {
+      "result": "passed",
+      "passed": 304
+    },
+    "full_sigil_python_tests": {
+      "result": "passed",
+      "passed": 1649,
+      "warnings": 2,
+      "warning_class": "multiprocessing_fork_deprecation"
+    },
+    "ruff": {
+      "result": "passed"
+    },
+    "git_diff_check": {
+      "result": "passed"
+    }
+  },
+  "authority": {
+    "paper_only": true,
+    "broker_submission": false,
+    "execution_authorized": false,
+    "approval_authority": false,
+    "capital_authority": false,
+    "portfolio_mutation": false,
+    "policy_mutation": false,
+    "credential_access": false,
+    "arbitrary_shell": false,
+    "arbitrary_filesystem": false,
+    "governance_bypass": false,
+    "activation_authorized": false,
+    "installation_authorized": false
+  },
+  "deferred": [
+    "agent_reach_installation",
+    "live_route_discovery",
+    "live_agent_discovery",
+    "authentication",
+    "credential_exchange",
+    "message_delivery",
+    "external_request_submission",
+    "external_response_collection",
+    "signature_verification",
+    "remote_job_execution",
+    "remote_cancellation",
+    "mission_control_projection",
+    "self_evolution",
+    "fleet_routing"
+  ],
+  "stage8a_agent_reach_integration_implemented": true,
+  "stage9_self_evolution_framework_implemented": false
+}

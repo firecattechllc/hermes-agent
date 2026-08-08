@@ -1,0 +1,36 @@
+[Unit]
+Description=Hermes Titan Fleet Worker (heartbeat + local-model nursery)
+After=network-online.target tailscaled.service ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/hermes-prime/titan.env
+ExecStart=/opt/hermes/venv/bin/python -m hermes_cli.prime.entrypoints titan
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryMax=2G
+CPUQuota=150%
+TasksMax=32
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/opt/hermes/current /etc/hermes-prime
+ReadWritePaths=/var/lib/hermes-prime
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

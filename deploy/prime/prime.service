@@ -1,0 +1,38 @@
+[Unit]
+Description=Hermes Prime Fleet Control Plane
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/hermes-prime/prime.env
+ExecStart=/opt/hermes/venv/bin/python -m hermes_cli.prime.entrypoints prime
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+MemoryMax=1G
+CPUQuota=100%
+TasksMax=32
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/opt/hermes/current /etc/hermes-prime
+ReadWritePaths=/var/lib/hermes-prime
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

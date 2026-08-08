@@ -5,6 +5,8 @@ import type {
   MarketUniverseQuoteResult,
   MarketUniverseSearchResult,
   MarketUniverseStatus,
+  PrimeFleetStatus,
+  PrimeSigilRouteResult,
   SigilProviderSnapshot
 } from './mission-control/types'
 
@@ -98,6 +100,11 @@ interface SigilDesktopApi {
   getProviderSnapshot?: () => Promise<
     SigilBackendResponse<SigilProviderSnapshot>
   >
+  getPrimeFleetStatus?: () => Promise<SigilBackendResponse<PrimeFleetStatus>>
+  primeSigilRoute?: (
+    payload: Readonly<Record<string, unknown>>
+  ) => Promise<SigilBackendResponse<PrimeSigilRouteResult>>
+  getAIStatus?: () => Promise<SigilBackendResponse<Record<string, unknown>>>
   getAlpacaMarketDataStatus?: () => Promise<
     SigilBackendResponse<Record<string, unknown>>
   >

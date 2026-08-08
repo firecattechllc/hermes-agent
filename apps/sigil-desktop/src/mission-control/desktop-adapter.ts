@@ -13,6 +13,7 @@ type SigilRuntimeSnapshot = {
   connection: {
     status: string
     last_refresh_at: string
+    market_data_status?: string
   }
   balances: {
     cash: string
@@ -175,6 +176,15 @@ export function runtimeHealthLabel(
   }
 }
 
+export function runtimeDataState(connection: {
+  status: string
+  market_data_status?: string
+}): 'ready' | 'stale' {
+  return connection.status === 'connected' && connection.market_data_status === 'ready'
+    ? 'ready'
+    : 'stale'
+}
+
 function mapVisibility(runtime: SigilRuntimeSnapshot): RuntimeVisibility | undefined {
   const visibility = runtime.runtime_visibility
 
@@ -227,7 +237,7 @@ export function mapRuntime(runtime: SigilRuntimeSnapshot): SigilSnapshot {
   }
 
   return {
-    dataState: runtime.connection.status === 'connected' ? 'ready' : 'stale',
+    dataState: runtimeDataState(runtime.connection),
     lastUpdated: runtime.connection.last_refresh_at,
     environment: 'paper',
     simulation: true,

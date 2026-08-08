@@ -25,7 +25,7 @@
       "@hermes-desktop/*": ["./src/*"]
     }
   },
-  "include": ["src", "../shared/src", "../sigil-desktop/src/mission-control"],
+  "include": ["src", "../shared/src", "../sigil-desktop/src/mission-control", "../sigil-desktop/src/vite-env.d.ts"],
   "exclude": [
     "e2e",
     "electron",

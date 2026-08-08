@@ -1,4 +1,9 @@
+import sys
+from pathlib import Path
+
 import pytest
+
+sys.path.insert(0, str(Path(__file__).parents[3] / "apps/sigil/src"))
 
 from hermes_cli.hermes_link.models import HermesLinkEnvelope, MessageType
 

@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
-import { runtimeHealthLabel } from './desktop-adapter'
+import { runtimeDataState, runtimeHealthLabel } from './desktop-adapter'
+
+describe('runtimeDataState', () => {
+  it('does not report data ready when market-data authentication fails', () => {
+    expect(
+      runtimeDataState({ status: 'connected', market_data_status: 'authentication_failed' })
+    ).toBe('stale')
+  })
+
+  it('reports ready only after the evidence provider is ready', () => {
+    expect(runtimeDataState({ status: 'connected', market_data_status: 'ready' })).toBe('ready')
+  })
+})
 
 describe('runtimeHealthLabel', () => {
   it('reports healthy only for a connected healthy runtime', () => {

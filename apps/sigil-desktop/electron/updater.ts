@@ -37,6 +37,7 @@ type UpdateInfo = Readonly<{
 }>
 
 export type UpdaterClient = {
+  logger?: unknown
   autoDownload: boolean
   autoInstallOnAppQuit: boolean
   allowPrerelease: boolean

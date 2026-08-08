@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from sigil.desktop_bridge import production_research as desktop_production_research
 from sigil.market_data.alpaca import AlpacaConfig
 from sigil.production_research import (
     AlpacaProductionDataClient,
@@ -55,6 +56,20 @@ def test_effective_market_data_configuration_rejects_non_paper_urls(monkeypatch)
     monkeypatch.setenv("APCA_API_BASE_URL", "https://api.alpaca.markets")
     with pytest.raises(RuntimeError, match="unexpected_trading_environment"):
         AlpacaConfig.from_environment()
+
+
+def test_desktop_production_client_uses_governed_credential_resolver(monkeypatch):
+    monkeypatch.setattr(
+        desktop_production_research,
+        "alpaca_credentials",
+        lambda: ("file-key", "file-secret"),
+    )
+
+    client = desktop_production_research._data_client()
+
+    assert client.key_id == "file-key"
+    assert client.secret_key == "file-secret"
+    assert client.base_url == "https://data.alpaca.markets"
 
 
 @pytest.mark.parametrize(
@@ -158,7 +173,7 @@ def score(
 def test_valid_production_evidence_produces_complete_score(tmp_path):
     result = score(service(tmp_path))
     assert result.strategy_id == "sigil-liquid-trend"
-    assert result.strategy_version == "2.9.0"
+    assert result.strategy_version == "3.5.0"
     assert result.eligible is True
     assert result.normalized_score >= Decimal("0.68")
     assert result.confidence >= Decimal("0.80")
@@ -301,7 +316,7 @@ def test_completed_batch_generates_shadow_proposal_before_catalog_traversal(tmp_
     assert status["active_shadow_positions"] == 1
     proposal = research.recent("proposals")["items"][0]
     assert proposal["status"] == "admitted_in_shadow"
-    assert proposal["strategy_version"] == "2.9.0"
+    assert proposal["strategy_version"] == "3.5.0"
     assert proposal["evidence_identity"]
     assert proposal["proposed_notional"] == "25.00"
     assert proposal["exit_plan"]["maximum_holding_days"] == 10
@@ -661,13 +676,13 @@ def test_promotion_metrics_only_include_current_strategy_outcomes(tmp_path) -> N
                 "net_simulated_return": "-0.250000",
             },
             {
-                "strategy_version": "2.9.0",
+                "strategy_version": "3.5.0",
                 "symbol": "NEW1",
                 "entry_at": "2026-07-10T12:00:00+00:00",
                 "net_simulated_return": "0.020000",
             },
             {
-                "strategy_version": "2.9.0",
+                "strategy_version": "3.5.0",
                 "symbol": "NEW2",
                 "entry_at": "2026-07-12T12:00:00+00:00",
                 "net_simulated_return": "-0.005000",

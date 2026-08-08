@@ -9,7 +9,10 @@ describe('standalone Sigil Mission Control', () => {
     render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
 
     expect(await screen.findByTestId('sigil-operator')).toBeTruthy()
-    expect(screen.getByText('Mission control')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Mission Control', level: 2 })).toBeTruthy()
+    expect(await screen.findByText('AI analysis is advisory only.')).toBeTruthy()
+    expect(screen.getByText('No execution authority')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /AI|Gemma|artifact/i })).toBeNull()
 
     for (const label of ['Overview', 'Portfolio', 'Proposals', 'Launch', 'Executions', 'Reconciliation', 'Audit', 'Settings']) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy()
@@ -25,7 +28,7 @@ describe('standalone Sigil Mission Control', () => {
 
     expect(await screen.findByText('•••• 23F4')).toBeTruthy()
     expect(screen.getAllByText(SIGIL_FIRST_LAUNCH_LIMIT).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('DISCONNECTED').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/disconnected/i).length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Reconciliation' }))
     expect(screen.getByText('Required')).toBeTruthy()
     expect(screen.queryByText(/submit order/i)).toBeNull()
@@ -364,6 +367,7 @@ describe('standalone Sigil Mission Control', () => {
       const governedSearch = screen.getByRole('textbox', {
         name: 'Search governed instruments'
       })
+
       fireEvent.change(governedSearch, { target: { value: 'AAPL' } })
 
       await waitFor(() => {
@@ -474,6 +478,7 @@ describe('standalone Sigil Mission Control', () => {
 
   it('confirmation-gates simulated proposal approval and records local audit evidence', async () => {
     const simulator = new MockSigilOperatorAdapter('disconnected')
+
     const adapter = {
       readSnapshot: () => simulator.readSnapshot(),
       applySimulatedAction: (action: Parameters<typeof simulator.applySimulatedAction>[0]) =>
@@ -507,6 +512,7 @@ describe('standalone Sigil Mission Control', () => {
 
   it('confirmation-gates simulated proposal rejection without broker submission', async () => {
     const simulator = new MockSigilOperatorAdapter('disconnected')
+
     const adapter = {
       readSnapshot: () => simulator.readSnapshot(),
       applySimulatedAction: (action: Parameters<typeof simulator.applySimulatedAction>[0]) =>
@@ -583,7 +589,7 @@ describe('standalone Sigil Mission Control', () => {
     render(<SigilOperatorView adapter={new MockSigilOperatorAdapter()} />)
 
     const card = await screen.findByTestId('runtime-visibility')
-    expect(card.textContent).toContain('Governed runtime status')
+    expect(card.textContent).toContain('Runtime visibility')
     expect(card.textContent).toContain('PAUSED')
     expect(card.textContent).toContain('HEALTHY')
     expect(card.textContent).toContain('Completed cycles')

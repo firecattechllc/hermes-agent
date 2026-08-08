@@ -1,12 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
-
 from sigil.desktop_bridge import production_research
 
-
-NOW = datetime(2026, 7, 29, 21, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 29, 21, 0, tzinfo=UTC)
 
 
 class FakeClient:
@@ -40,9 +38,9 @@ def evidence(
 
 def install(monkeypatch, item):
     monkeypatch.setattr(
-        production_research.AlpacaProductionDataClient,
-        "from_environment",
-        classmethod(lambda cls: FakeClient((item,))),
+        production_research,
+        "_data_client",
+        lambda: FakeClient((item,)),
     )
 
 

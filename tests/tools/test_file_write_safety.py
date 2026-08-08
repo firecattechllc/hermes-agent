@@ -471,3 +471,26 @@ class TestBomHandling:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_macos_temp_directory_is_allowed(monkeypatch, tmp_path):
+    from tools import file_tools
+
+    temp_root = tmp_path / "private" / "var" / "folders" / "abc" / "T"
+    target = temp_root / "pytest-of-user" / "sample.txt"
+
+    monkeypatch.setattr(file_tools.tempfile, "gettempdir", lambda: str(temp_root))
+
+    assert file_tools._check_sensitive_path(str(target)) is None
+
+
+def test_private_var_db_remains_blocked_when_temp_is_allowed(monkeypatch, tmp_path):
+    from tools import file_tools
+
+    temp_root = tmp_path / "private" / "var" / "folders" / "abc" / "T"
+    monkeypatch.setattr(file_tools.tempfile, "gettempdir", lambda: str(temp_root))
+
+    result = file_tools._check_sensitive_path("/private/var/db/something")
+
+    assert result is not None
+    assert "sensitive system path" in result

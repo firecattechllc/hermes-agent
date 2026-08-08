@@ -23,6 +23,11 @@ describe('Sigil Electron startup', () => {
     expect(mainSource).toContain("command: 'reset_paper_runtime'")
     expect(mainSource).toContain("confirmation: 'RESET LOCAL PAPER PORTFOLIO'")
     expect(preloadSource).toContain('getProviderSnapshot')
+    expect(mainSource).toContain("SIGIL_AI_STATUS_CHANNEL = 'sigil:get-ai-status'")
+    expect(mainSource).toContain("runBridgeRequest({ command: 'ai_status' })")
+    expect(preloadSource).toContain('getAIStatus')
+    expect(preloadSource).not.toContain('invokeAI')
+    expect(preloadSource).not.toContain('prompt')
     expect(mainSource).toContain("command: 'market_universe_status'")
     expect(mainSource).toContain("command: 'market_universe_search'")
     expect(preloadSource).toContain('getMarketUniverseStatus')
@@ -39,6 +44,18 @@ describe('Sigil Electron startup', () => {
     expect(mainSource).toContain("'runtime_snapshot',")
     expect(mainSource).toContain("'control_paper_cycle'")
     expect(mainSource).toContain('? 45_000')
+  })
+
+  it('exposes real governed Prime fleet status and routing over the bounded bridge', () => {
+    const mainSource = fs.readFileSync(path.resolve('electron/main.ts'), 'utf8')
+    const preloadSource = fs.readFileSync(path.resolve('electron/preload.ts'), 'utf8')
+
+    expect(mainSource).toContain("SIGIL_PRIME_FLEET_STATUS_CHANNEL = 'sigil:get-prime-fleet-status'")
+    expect(mainSource).toContain("runBridgeRequest({ command: 'prime_fleet_status' })")
+    expect(mainSource).toContain("SIGIL_PRIME_SIGIL_ROUTE_CHANNEL = 'sigil:prime-sigil-route'")
+    expect(mainSource).toContain("command: 'prime_sigil_route'")
+    expect(preloadSource).toContain('getPrimeFleetStatus')
+    expect(preloadSource).toContain('primeSigilRoute')
   })
 
   it('enables governed paper execution during startup through the bounded bridge', () => {
@@ -71,7 +88,7 @@ describe('Sigil Electron startup', () => {
     const source = fs.readFileSync(path.resolve('src/mission-control/index.tsx'), 'utf8')
     const mainSource = fs.readFileSync(path.resolve('electron/main.ts'), 'utf8')
 
-    expect(source).toContain("RELEASE_STAGE = 'V2.9'")
+    expect(source).toContain("RELEASE_STAGE = 'V3.7'")
     expect(source).toContain('15-minute delayed SIP')
     expect(source).toContain('live partial-market IEX')
     expect(source).toContain('Live IEX capacity')

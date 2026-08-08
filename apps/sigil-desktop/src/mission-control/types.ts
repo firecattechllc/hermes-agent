@@ -1,6 +1,48 @@
 export type SigilDataState = 'disconnected' | 'empty' | 'error' | 'loading' | 'ready' | 'stale'
 export type SigilTone = 'danger' | 'info' | 'muted' | 'success' | 'warning'
 
+/** Real governed fleet node state from Prime, never fabricated. */
+export interface PrimeFleetNode {
+  natural_key: string
+  role: string
+  identity_id?: string
+  connection_state: 'connected' | 'degraded' | 'disconnected' | 'revoked' | 'stale' | 'unknown'
+  last_seen_at: number | null
+  model_inventory: string[]
+  capabilities?: string[]
+  revoked?: boolean
+}
+
+export interface PrimeCertificationStatus {
+  status: 'blocked' | 'certified' | 'expired' | 'not_certified' | 'unknown'
+  evidence_ref: string | null
+}
+
+export interface PrimeFleetStatus {
+  configured: boolean
+  reachable: boolean
+  base_url: string | null
+  nodes: PrimeFleetNode[]
+  certification: PrimeCertificationStatus
+}
+
+export interface PrimeSigilRouteResult {
+  ok: boolean
+  outcome?: 'accepted' | 'rejected'
+  rejection_code?: string | null
+  error?: string
+  message?: string
+  advisory_output?: {
+    operation?: string
+    routed_to?: string
+    model_alias?: string
+    output_reference?: string
+  }
+  evidence_refs?: string[]
+  caller_admitted?: boolean
+  service_admitted?: boolean
+}
+
 export interface SigilMetric {
   label: string
   value: string
@@ -117,6 +159,13 @@ export interface SigilProviderSnapshot {
   alpaca: {
     status: 'connected' | 'degraded' | 'not_configured'
     message: string
+    health?: {
+      credentials_configured: boolean
+      account: { successful: boolean; http_status: number | null; error_category: string | null }
+      latest_quote: { successful: boolean; http_status: number | null; error_category: string | null }
+      historical_bars: { successful: boolean; http_status: number | null; error_category: string | null }
+      feed: string
+    }
     universe?: {
       scope: string
       total: number

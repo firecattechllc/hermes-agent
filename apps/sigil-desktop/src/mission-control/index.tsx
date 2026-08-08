@@ -17,15 +17,19 @@ import {
   LocalHermesEngine,
   type SigilHermesEngine
 } from '../hermes-engine'
+import { formatEasternDateTime } from '../lib/date-time'
 
 import { desktopSigilOperatorAdapter } from './desktop-adapter'
 import { GovernedNewsPanel } from './governed-news-panel'
 import { sigilOperatorAdapter as mockSigilOperatorAdapter } from './mock-adapter'
+import { PrimeFleetPanel } from './prime-fleet-panel'
+import { ReconciliationPanel } from './reconciliation-panel'
 import type {
   AlpacaMarketDataStatus,
   AssetCatalogStatus,
   AuditEvent,
   MarketUniverseQuote,
+  MarketUniverseQuoteResult,
   MarketUniverseSearchResult,
   MarketUniverseStatus,
   PaperExecutionStatus,
@@ -39,7 +43,7 @@ import type {
   SimulatedOperatorAction
 } from './types'
 
-const RELEASE_STAGE = 'V2.9'
+const RELEASE_STAGE = 'V3.7'
 
 const SECTIONS = ['overview', 'portfolio', 'proposals', 'launch', 'executions', 'reconciliation', 'audit', 'news', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
@@ -113,12 +117,42 @@ function DataNotice({ snapshot }: { snapshot: SigilSnapshot }) {
 
 function MetricStrip({ snapshot }: { snapshot: SigilSnapshot }) {
   const metrics = [
-    { label: 'System health', value: snapshot.systemHealth, detail: 'Local governance checks', tone: 'success' },
-    { label: 'Masked account', value: snapshot.maskedAccountId, detail: 'Credentials never displayed', tone: 'muted' },
-    { label: 'Cash', value: snapshot.cash, detail: 'Paper buying power', tone: 'info' },
-    { label: 'Portfolio', value: snapshot.portfolioValue, detail: 'Simulated market value', tone: 'info' },
-    { label: 'Strategies', value: String(snapshot.activeStrategies), detail: 'Active', tone: 'muted' },
-    { label: 'Approvals', value: String(snapshot.pendingApprovals), detail: 'Pending', tone: 'warning' },
+    {
+      label: 'System health',
+      value: snapshot.systemHealth,
+      detail: 'Local governance checks',
+      tone: 'success'
+    },
+    {
+      label: 'Masked account',
+      value: snapshot.maskedAccountId,
+      detail: 'Credentials never displayed',
+      tone: 'muted'
+    },
+    {
+      label: 'Paper cash',
+      value: snapshot.cash,
+      detail: 'Available simulated buying power',
+      tone: 'info'
+    },
+    {
+      label: 'Portfolio value',
+      value: snapshot.portfolioValue,
+      detail: 'Persisted simulated market value',
+      tone: 'info'
+    },
+    {
+      label: 'Active strategies',
+      value: String(snapshot.activeStrategies),
+      detail: 'Governed strategy count',
+      tone: 'muted'
+    },
+    {
+      label: 'Pending approvals',
+      value: String(snapshot.pendingApprovals),
+      detail: 'Operator review required',
+      tone: snapshot.pendingApprovals > 0 ? 'warning' : 'success'
+    },
     {
       label: 'Kill switch',
       value: snapshot.killSwitch.toUpperCase(),
@@ -128,20 +162,43 @@ function MetricStrip({ snapshot }: { snapshot: SigilSnapshot }) {
   ] as const
 
   return (
-    <dl className="grid border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
-      {metrics.map(metric => (
-        <div
-          className="min-w-0 border-b border-(--ui-stroke-tertiary) px-4 py-2.5 last:border-b-0 sm:border-r lg:border-b-0"
-          key={metric.label}
-        >
-          <dt className="text-[0.625rem] font-medium uppercase tracking-[0.12em] text-(--ui-text-tertiary)">
-            {metric.label}
-          </dt>
-          <dd className="mt-1 truncate font-mono text-xs font-semibold">{metric.value}</dd>
-          <dd className="mt-0.5 truncate text-[0.6875rem] text-(--ui-text-tertiary)">{metric.detail}</dd>
-        </div>
-      ))}
-    </dl>
+    <section
+      aria-label="Mission Control core metrics"
+      className={cn('py-5', PAGE_INSET_X)}
+      data-testid="mission-control-metrics"
+    >
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
+        {metrics.map(metric => (
+          <dl
+            className="
+              sigil-beta-panel
+              group
+              min-w-0
+              px-4 py-4
+              transition-colors
+              hover:border-primary/25
+              hover:bg-(--ui-bg-tertiary)
+            "
+            key={metric.label}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <dt className="sigil-beta-label text-(--ui-text-tertiary)">
+                {metric.label}
+              </dt>
+              <StatusLabel tone={metric.tone}>{metric.tone}</StatusLabel>
+            </div>
+
+            <dd className="sigil-beta-data mt-4 truncate text-base font-semibold text-(--ui-text-primary)">
+              {metric.value}
+            </dd>
+
+            <dd className="mt-2 min-h-8 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)">
+              {metric.detail}
+            </dd>
+          </dl>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -198,35 +255,47 @@ function RuntimeVisibilityCard({
   return (
     <section
       aria-labelledby="runtime-visibility-title"
-      className="border-b border-(--ui-stroke-tertiary)"
+      className={cn('pb-5', PAGE_INSET_X)}
       data-testid="runtime-visibility"
     >
-      <div className={cn('py-4', PAGE_INSET_X)}>
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="sigil-beta-panel overflow-hidden">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-5 py-4">
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="runtime-visibility-title">
-              Governed runtime status
+            <p className="sigil-beta-label text-primary">Governed runtime</p>
+            <h2
+              className="mt-2 text-lg font-semibold tracking-[-0.01em] text-(--ui-text-primary)"
+              id="runtime-visibility-title"
+            >
+              Runtime visibility
             </h2>
             <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
-              Paper-only · {visibility.automationMode}
+              Paper-only operation · {visibility.automationMode}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <StatusLabel tone={stateTone}>{visibility.operationalState.toUpperCase()}</StatusLabel>
-            <StatusLabel tone={healthTone}>{visibility.health.toUpperCase()}</StatusLabel>
-            <StatusLabel tone={visibility.connectionState === 'connected' ? 'success' : 'warning'}>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusLabel tone={stateTone}>
+              {visibility.operationalState.toUpperCase()}
+            </StatusLabel>
+            <StatusLabel tone={healthTone}>
+              {visibility.health.toUpperCase()}
+            </StatusLabel>
+            <StatusLabel
+              tone={visibility.connectionState === 'connected' ? 'success' : 'warning'}
+            >
               {visibility.connectionState}
             </StatusLabel>
           </div>
         </div>
 
-        <dl className="mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) sm:grid-cols-2 xl:grid-cols-4">
+        <div className="px-5 py-5">
+          <dl className="sigil-runtime-metrics grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
             ['Completed cycles', String(visibility.counts.cycles), `Last: ${snapshot.automationLastCycleAt ?? 'Never'}`],
             [
               'Next scheduled cycle',
-              snapshot.automationState === 'running'
-                ? snapshot.automationNextCycleAt ?? 'No cycle scheduled'
+              snapshot.automationState === 'running' && snapshot.automationNextCycleAt
+                ? formatEasternDateTime(snapshot.automationNextCycleAt)
                 : 'No cycle scheduled',
               snapshot.automationState === 'running'
                 ? timeUntil(snapshot.automationNextCycleAt)
@@ -245,16 +314,25 @@ function RuntimeVisibilityCard({
                 : 'No execution'
             ]
           ].map(([label, value, detail]) => (
-            <div className="bg-(--ui-bg-secondary) p-3" key={label}>
-              <dt className="text-[0.625rem] uppercase tracking-[0.1em] text-(--ui-text-tertiary)">{label}</dt>
-              <dd className="mt-1 break-words font-mono text-xs font-semibold">{value}</dd>
-              <dd className="mt-1 break-words text-[0.6875rem] text-(--ui-text-tertiary)">{detail}</dd>
+            <div
+              className="sigil-runtime-metric rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) p-4"
+              key={label}
+            >
+              <dt className="sigil-beta-label text-(--ui-text-tertiary)">
+                {label}
+              </dt>
+              <dd className="sigil-beta-data mt-3 break-words text-sm font-semibold text-(--ui-text-primary)">
+                {value}
+              </dd>
+              <dd className="mt-2 break-words text-[0.6875rem] leading-4 text-(--ui-text-tertiary)">
+                {detail}
+              </dd>
             </div>
           ))}
-        </dl>
+          </dl>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          <div>
+          <div className="sigil-runtime-detail mt-4 grid gap-4 xl:grid-cols-2">
+          <div className="sigil-runtime-safety">
             <h3 className="text-[0.625rem] font-semibold uppercase tracking-[0.1em]">Safety and next action</h3>
             <p className="mt-2 text-xs">{visibility.nextAction}</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -286,24 +364,25 @@ function RuntimeVisibilityCard({
               ))}
             </ul>
           </div>
-          <div>
+          <div className="sigil-runtime-audit">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-[0.625rem] font-semibold uppercase tracking-[0.1em]">Recent audit timeline</h3>
               <Button onClick={onOpenAudit} size="xs" variant="outline">View all</Button>
             </div>
-            <ol className="mt-2 divide-y divide-(--ui-stroke-tertiary)">
+            <ol className="sigil-audit-preview mt-2">
               {recentAudit.map(event => (
-                <li className="py-2 text-[0.6875rem]" key={event.id}>
+                <li className="relative py-2 pl-5 text-[0.6875rem]" key={event.id}>
                   <div className="flex items-start justify-between gap-3">
                     <span>{event.summary}</span>
                     <StatusLabel tone="muted">{event.status}</StatusLabel>
                   </div>
                   <div className="mt-1 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
-                    {event.timestamp} · proposal {event.proposalId} · order {event.orderId} · {event.evidenceReference}
+                    {formatEasternDateTime(event.timestamp)} · proposal {event.proposalId} · order {event.orderId} · {event.evidenceReference}
                   </div>
                 </li>
               ))}
             </ol>
+          </div>
           </div>
         </div>
       </div>
@@ -359,9 +438,9 @@ function ProposalDetails({
   proposal: Proposal
 }) {
   return (
-    <article className="border-b border-(--ui-stroke-tertiary) py-4 last:border-b-0">
+    <article className="sigil-proposal-card sigil-beta-panel mb-3 overflow-hidden p-4 last:mb-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold">{proposal.symbol}</h3>
             <StatusLabel tone={proposal.side === 'BUY' ? 'info' : 'warning'}>{proposal.side}</StatusLabel>
@@ -376,7 +455,7 @@ function ProposalDetails({
           </p>
           <p className="mt-1 font-mono text-[0.625rem] text-(--ui-text-quaternary)">{proposal.id}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="sigil-proposal-actions flex gap-2">
           <Button
             disabled={actionLocked || proposal.status !== 'pending'}
             onClick={() => onAction({ type: 'reject-proposal', proposalId: proposal.id })}
@@ -394,12 +473,12 @@ function ProposalDetails({
           </Button>
         </div>
       </div>
-      <div className="mt-3 grid gap-3 text-[0.6875rem] md:grid-cols-2">
-        <div>
+      <div className="mt-4 grid gap-px overflow-hidden rounded-[3px] border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-[0.6875rem] md:grid-cols-2">
+        <div className="bg-(--ui-bg-primary) p-3">
           <div className="font-medium text-(--ui-text-secondary)">Evidence references</div>
           <div className="mt-1 font-mono text-(--ui-text-tertiary)">{proposal.evidenceReferences.join(' · ')}</div>
         </div>
-        <div>
+        <div className="bg-(--ui-bg-primary) p-3">
           <div className="font-medium text-(--ui-text-secondary)">Risk results</div>
           <ul className="mt-1 space-y-0.5 text-(--ui-text-tertiary)">
             {proposal.riskResults.map(result => (
@@ -515,6 +594,15 @@ function LaunchControl({
           disabled={actionLocked || snapshot.launchState === 'armed' || snapshot.killSwitch === 'engaged'}
           onClick={() => onAction({ type: 'arm-launch' })}
           size="sm"
+          title={
+            actionLocked
+              ? 'Operator actions are locked for this runtime.'
+              : snapshot.killSwitch === 'engaged'
+                ? 'The kill switch is engaged, so simulated launch cannot be armed.'
+                : snapshot.launchState === 'armed'
+                  ? 'Simulated launch is already armed.'
+                  : undefined
+          }
         >
           Arm simulated launch
         </Button>
@@ -522,6 +610,13 @@ function LaunchControl({
           disabled={actionLocked || snapshot.launchState === 'suspended'}
           onClick={() => onAction({ type: 'suspend-launch' })}
           size="sm"
+          title={
+            actionLocked
+              ? 'Operator actions are locked for this runtime.'
+              : snapshot.launchState === 'suspended'
+                ? 'Simulated launch is already suspended.'
+                : undefined
+          }
           variant="outline"
         >
           Suspend
@@ -530,6 +625,13 @@ function LaunchControl({
           disabled={actionLocked || snapshot.killSwitch === 'engaged'}
           onClick={() => onAction({ type: 'engage-kill-switch' })}
           size="sm"
+          title={
+            actionLocked
+              ? 'Operator actions are locked for this runtime.'
+              : snapshot.killSwitch === 'engaged'
+                ? 'The kill switch is already engaged.'
+                : undefined
+          }
           variant="destructive"
         >
           Engage kill switch
@@ -563,7 +665,7 @@ function ExecutionTable({ snapshot }: { snapshot: SigilSnapshot }) {
           {snapshot.receipts.map(receipt => (
             <tr className="border-b border-(--ui-stroke-tertiary) last:border-b-0" key={receipt.id}>
               <td className="px-3 py-3 font-mono text-[0.6875rem]">
-                <span className="block">{receipt.timestamp}</span>
+                <span className="block">{formatEasternDateTime(receipt.timestamp)}</span>
                 <span className="mt-1 block text-[0.625rem] text-(--ui-text-quaternary)">{receipt.id}</span>
               </td>
               <td className="px-3 py-3">
@@ -691,7 +793,7 @@ function PaperPortfolio({
                       <span className="block">{position.unrealizedPnl}</span>
                       <span className="mt-1 block text-[0.625rem] text-(--ui-text-tertiary)">
                         {position.valuationStatus === 'fresh'
-                          ? `${position.markPrice ?? 'Marked'} · ${position.markTimestamp ?? 'timestamp unavailable'}`
+                          ? `${position.markPrice ?? 'Marked'} · ${position.markTimestamp ? formatEasternDateTime(position.markTimestamp) : 'timestamp unavailable'}`
                           : `${position.valuationStatus} mark`}
                       </span>
                     </td>
@@ -757,7 +859,7 @@ function PaperPortfolio({
                     <StatusLabel tone="muted">SIMULATED</StatusLabel>
                   </div>
                   <p className="mt-1 font-mono text-[0.625rem] text-(--ui-text-tertiary)">
-                    {receipt.timestamp}
+                    {formatEasternDateTime(receipt.timestamp)}
                   </p>
                 </div>
                 <div><span className="text-(--ui-text-tertiary)">Qty</span><strong className="mt-1 block font-mono">{receipt.quantity}</strong></div>
@@ -806,11 +908,11 @@ function AuditTable({ events }: { events: AuditEvent[] }) {
           title={events.length === 0 ? 'No audit evidence' : 'No matching evidence'}
         />
       ) : (
-        <div className="divide-y divide-(--ui-stroke-tertiary)">
+        <div className="sigil-audit-table">
           {filtered.map(event => (
-            <details className="group py-3" key={event.id}>
-              <summary className="grid cursor-pointer list-none gap-2 text-xs md:grid-cols-[1fr_1fr_1fr_2fr_auto]">
-                <span className="font-mono text-[0.6875rem]">{event.timestamp}</span>
+            <details className="sigil-audit-event group" key={event.id}>
+              <summary className="grid cursor-pointer list-none gap-2 text-xs md:grid-cols-[1fr_1fr_1fr_2fr_auto] md:items-center">
+                <span className="font-mono text-[0.6875rem]">{formatEasternDateTime(event.timestamp)}</span>
                 <span className="font-mono text-[0.6875rem] text-(--ui-text-tertiary)">{event.orderId}</span>
                 <span className="font-mono text-[0.6875rem] text-(--ui-text-tertiary)">{event.evidenceReference}</span>
                 <span>{event.summary}</span>
@@ -820,7 +922,7 @@ function AuditTable({ events }: { events: AuditEvent[] }) {
                   {event.status}
                 </StatusLabel>
               </summary>
-              <pre className="mt-3 overflow-x-auto border-l border-(--ui-stroke-tertiary) pl-4 text-[0.6875rem] leading-relaxed text-(--ui-text-secondary)">
+              <pre className="sigil-audit-evidence mt-3 overflow-x-auto text-[0.6875rem] leading-relaxed text-(--ui-text-secondary)">
                 {JSON.stringify(event.details, null, 2)}
               </pre>
             </details>
@@ -850,6 +952,19 @@ function ProviderPanel({
   onRefresh: () => void
   snapshot: SigilProviderSnapshot | null
 }) {
+  const alpacaHealth = snapshot?.alpaca.health
+
+  const accountAuthenticated =
+    alpacaHealth?.account.successful ?? alpacaMarketData?.authenticated ?? false
+
+  const marketDataReady = alpacaHealth
+    ? alpacaHealth.latest_quote.successful && alpacaHealth.historical_bars.successful
+    : alpacaMarketData?.provider_state === 'ready'
+
+  const marketDataLabel = alpacaHealth
+    ? marketDataReady ? 'ready' : 'unavailable'
+    : alpacaMarketData?.provider_state.replaceAll('_', ' ') ?? 'unavailable'
+
   const [freshnessNow, setFreshnessNow] = useState(() => Date.now())
   const [freshnessObservedAt, setFreshnessObservedAt] = useState(() => Date.now())
 
@@ -886,7 +1001,7 @@ function ProviderPanel({
       className="border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)"
       data-testid="provider-health"
     >
-      <div className={cn('flex flex-wrap items-center justify-between gap-3 py-3', PAGE_INSET_X)}>
+      <div className={cn('sigil-provider-heading flex flex-wrap items-center justify-between gap-3 py-4', PAGE_INSET_X)}>
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="provider-health-title">
             Read-only provider health
@@ -914,16 +1029,16 @@ function ProviderPanel({
         </div>
       ) : null}
       {alpacaMarketData ? (
-        <div className={cn('border-t border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}>
+        <div className={cn('sigil-provider-market border-t border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 className="text-xs font-semibold">Alpaca Market Data</h3>
               <div className="mt-2 flex flex-wrap gap-2">
-                <StatusLabel tone={alpacaMarketData.configured ? 'success' : 'muted'}>
-                  {alpacaMarketData.authenticated ? 'Authenticated' : 'Unconfigured'}
+                <StatusLabel tone={accountAuthenticated ? 'success' : 'muted'}>
+                  {accountAuthenticated ? 'Authenticated' : 'Account unavailable'}
                 </StatusLabel>
-                <StatusLabel tone={alpacaMarketData.provider_state === 'ready' ? 'success' : 'warning'}>
-                  Market data {alpacaMarketData.provider_state.replaceAll('_', ' ')}
+                <StatusLabel tone={marketDataReady ? 'success' : 'warning'}>
+                  Market data {marketDataLabel}
                 </StatusLabel>
                 <StatusLabel tone="warning">15-minute delayed SIP</StatusLabel>
                 <StatusLabel tone="info">live partial-market IEX</StatusLabel>
@@ -950,11 +1065,11 @@ function ProviderPanel({
             {alpacaControlMessage ??
               'Asset refresh is read-only. Delayed-SIP and streaming IEX controls are unavailable in this build.'}
           </p>
-          <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-            <div><dt className="text-(--ui-text-tertiary)">Asset catalog</dt><dd>{alpacaMarketData.asset_catalog.accepted_count} accepted · {alpacaMarketData.asset_catalog.excluded_count} excluded · {alpacaMarketData.asset_catalog.conflict_count} conflicts</dd></div>
-            <div><dt className="text-(--ui-text-tertiary)">Catalog freshness</dt><dd>{alpacaMarketData.asset_catalog.stale ? 'Cached / stale' : `${catalogAgeSeconds}s old`}</dd></div>
-            <div><dt className="text-(--ui-text-tertiary)">Delayed SIP scan</dt><dd>{alpacaMarketData.delayed_sip.scanned_count}/{alpacaMarketData.delayed_sip.universe_total} · batch {alpacaMarketData.delayed_sip.current_batch}/{alpacaMarketData.delayed_sip.total_batches}</dd></div>
-            <div><dt className="text-(--ui-text-tertiary)">Live IEX capacity</dt><dd>{alpacaMarketData.live_iex.active_symbol_count}/{alpacaMarketData.live_iex.maximum_symbol_count} symbols · {alpacaMarketData.live_iex.stale ? 'stale/unavailable' : 'current'}</dd></div>
+          <dl className="sigil-provider-metrics mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-xs sm:grid-cols-2 lg:grid-cols-4">
+            <div className="bg-(--ui-bg-primary) p-3"><dt className="sigil-beta-label text-(--ui-text-tertiary)">Asset catalog</dt><dd className="mt-2 leading-5">{alpacaMarketData.asset_catalog.accepted_count} accepted · {alpacaMarketData.asset_catalog.excluded_count} excluded · {alpacaMarketData.asset_catalog.conflict_count} conflicts</dd></div>
+            <div className="bg-(--ui-bg-primary) p-3"><dt className="sigil-beta-label text-(--ui-text-tertiary)">Catalog freshness</dt><dd className="mt-2 leading-5">{alpacaMarketData.asset_catalog.stale ? 'Cached / stale' : `${catalogAgeSeconds}s old`}</dd></div>
+            <div className="bg-(--ui-bg-primary) p-3"><dt className="sigil-beta-label text-(--ui-text-tertiary)">Delayed SIP scan</dt><dd className="mt-2 leading-5">{alpacaMarketData.delayed_sip.scanned_count}/{alpacaMarketData.delayed_sip.universe_total} · batch {alpacaMarketData.delayed_sip.current_batch}/{alpacaMarketData.delayed_sip.total_batches}</dd></div>
+            <div className="bg-(--ui-bg-primary) p-3"><dt className="sigil-beta-label text-(--ui-text-tertiary)">Live IEX capacity</dt><dd className="mt-2 leading-5">{alpacaMarketData.live_iex.active_symbol_count}/{alpacaMarketData.live_iex.maximum_symbol_count} symbols · {alpacaMarketData.live_iex.stale ? 'stale/unavailable' : 'current'}</dd></div>
           </dl>
           <p className="mt-3 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
             Subscribed: {alpacaMarketData.live_iex.subscribed_symbols.join(', ') || 'none'} · Last message: {alpacaMarketData.live_iex.last_message_at ?? 'none'} · Provider: {alpacaMarketData.provider_state} · Error: {alpacaMarketData.asset_catalog.last_error ?? 'none'}
@@ -973,6 +1088,11 @@ function ProviderPanel({
               <div>
                 <h3 className="text-xs font-semibold">Alpaca catalog provider status</h3>
                 <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">{snapshot.alpaca.message}</p>
+                {snapshot.alpaca.health ? (
+                  <p className="mt-2 font-mono text-[0.625rem] text-(--ui-text-quaternary)">
+                    Credentials {snapshot.alpaca.health.credentials_configured ? 'configured' : 'missing'} · Account {snapshot.alpaca.health.account.successful ? 'authenticated' : snapshot.alpaca.health.account.error_category} · Quote {snapshot.alpaca.health.latest_quote.successful ? 'ready' : snapshot.alpaca.health.latest_quote.error_category} · History {snapshot.alpaca.health.historical_bars.successful ? 'ready' : snapshot.alpaca.health.historical_bars.error_category} · Feed {snapshot.alpaca.health.feed}
+                  </p>
+                ) : null}
                 {snapshot.alpaca.universe ? (
                   <>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -1140,12 +1260,15 @@ function MarketUniversePanel({
         if (normalizedSymbol === normalizedQuery) {
           return 0
         }
+
         if (normalizedSymbol.startsWith(normalizedQuery)) {
           return 1
         }
+
         if (normalizedName.startsWith(normalizedQuery)) {
           return 2
         }
+
         if (normalizedName.includes(normalizedQuery)) {
           return 3
         }
@@ -1161,7 +1284,7 @@ function MarketUniversePanel({
   }, [results])
 
   useEffect(() => {
-    const api = window.sigilDesktop?.getMarketUniverseQuotes
+    const api = desktopApi()?.getMarketUniverseQuotes
     const symbols = rankedResults.slice(0, 20).map(item => item.symbol)
 
     if (!api || symbols.length === 0) {
@@ -1370,10 +1493,12 @@ function MarketUniversePanel({
           <div className="divide-y divide-(--ui-stroke-tertiary)">
             {rankedResults.map(item => {
               const quote = quotes[item.symbol]
+
               const changePositive =
                 quote?.change_percent !== null &&
                 quote?.change_percent !== undefined &&
                 quote.change_percent > 0
+
               const changeNegative =
                 quote?.change_percent !== null &&
                 quote?.change_percent !== undefined &&
@@ -1535,7 +1660,7 @@ function AutonomousPaperPanel({
           ['Candidates', String(progress.candidates_produced), `${progress.proposals_produced} proposals`],
           ['Rejected', String(progress.proposals_rejected), reasons.map(([reason, count]) => `${reason}: ${count}`).join(' · ') || 'None'],
           ['Paper exposure', `$${status.deployed_paper_capital}`, `$${status.remaining_governed_allocation} governed allocation remains`],
-          ['Broker state', status.broker_submission ? 'Paper mutations enabled' : 'No mutation authority', `${status.open_positions} positions · ${status.open_orders} open orders`]
+          ['External broker', status.broker_submission ? 'Paper submission enabled' : 'Submission disabled', `${status.open_positions} positions · ${status.open_orders} open orders · local monthly paper authority is separate`]
         ].map(([label, value, detail]) => (
           <div className="min-w-0 bg-(--ui-bg-secondary) p-3" key={label}>
             <div className="text-[0.625rem] uppercase text-(--ui-text-tertiary)">{label}</div>
@@ -1629,9 +1754,245 @@ type ProviderResponse =
   | { ok: true; result: SigilProviderSnapshot }
   | { ok: false; error: string; message: string }
 
+export type AIStatus = {
+  enabled: boolean
+  service_state: string
+  configured_model_count: number
+  available_provider_count: number
+  local_gemma_health: string
+  mac_ollama?: {
+    enabled: boolean
+    device_identity?: string
+    fleet_role?: string
+    endpoint_classification?: string
+    embedding_adapter?: string
+    health?: string
+    roles?: Record<'primary' | 'fast' | 'embedding' | 'fallback', {
+      configured: boolean
+      model_identity: string
+      health: string
+      identity_match: boolean
+      readiness: string
+      reason: string | null
+      deprecated: boolean
+      enabled: boolean
+      admission_state: string
+      upstream_revision_evidence: string
+      license_evidence: string
+    }>
+    paper_only: true
+    broker_submission: false
+    execution_authorized: false
+    approval_authority: false
+  }
+  evidence_ledger_health: string
+  artifact_store_health: string
+  artifact_count: number
+  last_successful_analysis_at: string | null
+  latest_analysis_summary?: string | null
+  last_failure_classification: string | null
+  finbert?: {
+    enabled: boolean
+    available: boolean
+    health: string
+    sentiment_artifact_count: number
+    latest_sentiment: {
+      label: string
+      confidence: number
+      source_identity: string
+      freshness: string | null
+      limitations: string[]
+    } | null
+  }
+  embeddinggemma?: {
+    enabled: boolean
+    available: boolean
+    health: string
+    vector_dimension: number
+    corpus_count: number
+    source_count: number
+    chunk_count: number
+    embedding_count: number
+    vector_store_health: string
+    latest_retrieval: {
+      result_count: number
+      freshness: string[]
+      limitations: string[]
+    } | null
+  }
+  kronos?: {
+    enabled: boolean
+    available: boolean
+    health: string
+    model_id: string
+    tokenizer_id: string
+    supported_intervals: string[]
+    maximum_sequence_length: number
+    maximum_horizon: number
+    forecast_artifact_count: number
+    evaluation_artifact_count: number
+    last_successful_forecast: {
+      symbol: string
+      interval: string
+      forecast_horizon: number
+      created_at: string
+      uncertainty_available: boolean
+      freshness: string
+      limitations: string[]
+    } | null
+  }
+  orchestration?: {
+    enabled: boolean
+    health: string
+    active_count: number
+    completed_count: number
+    partial_count: number
+    failed_count: number
+    paused_count: number
+    pending_human_interactions: number
+    buzz: string
+    atlas: string
+    openworker: string
+    latest: {
+      orchestration_id: string
+      plan_id: string
+      state: string
+      capabilities: string[]
+      completed_steps: number
+      failed_steps: number
+      artifact_id: string | null
+      evidence_identities: string[]
+      failure_classification: string | null
+      limitations: string[]
+      updated_at: string
+    } | null
+  }
+  fleet?: {
+    enabled: boolean
+    health: string
+    store_health: string
+    registered_node_count: number
+    healthy_node_count: number
+    nodes: Record<'titan' | 'mac' | 'prime', { node_id: string; state: string; capabilities: string[]; load: number } | null>
+    active_tasks: number
+    queued_tasks: number
+    completion_unknown_tasks: number
+    clock_warnings: number
+    latest_route: { node_id: string | null; state: string; created_at: string } | null
+    latest_failover: { node_id: string | null; failure: string | null } | null
+    recent_failures: number
+    paper_only: true
+    execution_authorized: false
+    broker_submission: false
+  }
+  integration_registry?: {
+    enabled: boolean
+    state: 'disabled' | 'empty' | 'healthy' | 'degraded' | 'invalid'
+    store_health: string
+    reason: string | null
+    schema_version: number
+    registry_revision: string
+    entry_count: number
+    counts_by_lifecycle: Record<string, number>
+    counts_by_category: Record<string, number>
+    pinned_count: number
+    unpinned_count: number
+    valid_count: number
+    invalid_count: number
+    certified_count: number
+    quarantined_count: number
+    deprecated_count: number
+    latest_lifecycle_evidence_identity: string | null
+    paper_only: true
+    broker_submission: false
+    activation_authorized: false
+    installation_authorized: false
+    approval_authority: false
+  }
+  paper_only: true
+  broker_submission: false
+}
+
+export function IntegrationRegistryPanel({ status }: { status: AIStatus['integration_registry'] | null | undefined }) {
+  const lifecycle = status
+    ? Object.entries(status.counts_by_lifecycle)
+      .filter(([, count]) => count > 0)
+      .map(([state, count]) => `${state} ${count}`)
+      .join(' · ') || 'No entries'
+    : 'Unavailable'
+
+  const reason = status?.reason ?? (status?.entry_count === 0 ? 'No tracked integration entries.' : null)
+  const tone: SigilTone = status?.state === 'invalid' ? 'danger' : status?.state === 'healthy' ? 'success' : 'muted'
+
+  return (
+    <section aria-labelledby="integration-registry-title" className={cn('border-b border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)} data-testid="integration-registry-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="integration-registry-title">Integration Registry</h2>
+          <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">Pinned governance metadata · read-only inspection</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusLabel tone={tone}>{status?.state ?? 'unavailable'}</StatusLabel>
+          <StatusLabel tone="muted">Paper only</StatusLabel>
+          <StatusLabel tone="danger">Broker disabled</StatusLabel>
+          <StatusLabel tone="danger">No activation authority</StatusLabel>
+        </div>
+      </div>
+      <dl className="mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-xs sm:grid-cols-2 lg:grid-cols-4">
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Registry revision</dt><dd className="mt-1 break-all font-mono">{status?.registry_revision ?? 'unavailable'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Entries / validation</dt><dd className="mt-1 font-mono">{status?.entry_count ?? 0} entries · {status?.valid_count ?? 0} valid · {status?.invalid_count ?? 0} invalid</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Pinning</dt><dd className="mt-1 font-mono">{status?.pinned_count ?? 0} pinned · {status?.unpinned_count ?? 0} unpinned</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Certified / quarantine</dt><dd className="mt-1 font-mono">{status?.certified_count ?? 0} certified · {status?.quarantined_count ?? 0} quarantined · {status?.deprecated_count ?? 0} deprecated</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3 sm:col-span-2"><dt className="text-(--ui-text-tertiary)">Lifecycle</dt><dd className="mt-1 break-words font-mono">{lifecycle}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3 sm:col-span-2"><dt className="text-(--ui-text-tertiary)">Authority</dt><dd className="mt-1 break-words font-mono">installation denied · activation denied · approval denied · paper only · broker disabled</dd></div>
+        {reason ? <div className="min-w-0 bg-(--ui-bg-secondary) p-3 sm:col-span-2 lg:col-span-4"><dt className="text-(--ui-text-tertiary)">Registry state reason</dt><dd className="mt-1 break-words font-mono">{reason}</dd></div> : null}
+      </dl>
+    </section>
+  )
+}
+
+export function AIFoundationPanel({ status }: { status: AIStatus | null }) {
+  return (
+    <section aria-labelledby="ai-foundation-title" className={cn('border-b border-(--ui-stroke-tertiary) py-4', PAGE_INSET_X)}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.1em]" id="ai-foundation-title">AI Foundation</h2>
+          <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">AI analysis is advisory only.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusLabel tone={status?.enabled ? 'success' : 'muted'}>{status?.service_state ?? 'unavailable'}</StatusLabel>
+          <StatusLabel tone="danger">No execution authority</StatusLabel>
+          <StatusLabel tone="muted">Paper only</StatusLabel>
+        </div>
+      </div>
+      <dl className="mt-4 grid gap-px overflow-hidden border border-(--ui-stroke-tertiary) bg-(--ui-stroke-tertiary) text-xs sm:grid-cols-2 lg:grid-cols-4">
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Local Gemma</dt><dd className="mt-1 font-mono">{status?.local_gemma_health ?? 'unavailable'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Mac Ollama profile</dt><dd className="mt-1 break-words font-mono">{status?.mac_ollama?.enabled ? 'enabled' : 'disabled'} · {status?.mac_ollama?.endpoint_classification ?? status?.mac_ollama?.health ?? 'unavailable'} · {status?.mac_ollama?.fleet_role ?? 'mac'} · paper only</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Ollama primary / fast</dt><dd className="mt-1 break-words font-mono">{status?.mac_ollama?.roles?.primary.health ?? 'unavailable'} · {status?.mac_ollama?.roles?.primary.model_identity ?? 'not configured'} / {status?.mac_ollama?.roles?.fast.health ?? 'unavailable'} · {status?.mac_ollama?.roles?.fast.model_identity ?? 'not configured'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Ollama embedding / fallback</dt><dd className="mt-1 break-words font-mono">{status?.mac_ollama?.embedding_adapter ?? 'unconfigured'} · {status?.mac_ollama?.roles?.embedding.health ?? 'unavailable'} / fallback {status?.mac_ollama?.roles?.fallback.admission_state ?? 'rejected'} · deprecated</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">FinBERT sentiment</dt><dd className="mt-1 font-mono">{status?.finbert?.health ?? 'unavailable'} · {status?.finbert?.sentiment_artifact_count ?? 0} artifacts</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">EmbeddingGemma retrieval</dt><dd className="mt-1 font-mono">{status?.embeddinggemma?.health ?? 'unavailable'} · {status?.embeddinggemma?.source_count ?? 0} sources · {status?.embeddinggemma?.embedding_count ?? 0} embeddings</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Kronos forecasting</dt><dd className="mt-1 font-mono">{status?.kronos?.health ?? 'unavailable'} · {status?.kronos?.forecast_artifact_count ?? 0} forecasts · {status?.kronos?.evaluation_artifact_count ?? 0} evaluations</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Hermes orchestration</dt><dd className="mt-1 font-mono">{status?.orchestration?.health ?? 'unavailable'} · {status?.orchestration?.latest?.state ?? 'idle'} · {status?.orchestration?.pending_human_interactions ?? 0} pending input</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Coordination surfaces</dt><dd className="mt-1 font-mono">Buzz {status?.orchestration?.buzz ?? 'unavailable'} · Atlas {status?.orchestration?.atlas ?? 'unavailable'} · OpenWorker {status?.orchestration?.openworker ?? 'unavailable'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Orchestration evidence</dt><dd className="mt-1 break-all font-mono">{status?.orchestration?.latest ? `${status.orchestration.latest.capabilities.join(', ') || 'no capabilities'} · ${status.orchestration.latest.artifact_id ?? 'no artifact'} · ${status.orchestration.latest.evidence_identities[0] ?? 'no evidence'}` : 'none'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Orchestration limitations</dt><dd className="mt-1 break-words font-mono">{status?.orchestration?.latest?.limitations.join(' · ') || 'none'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Governed fleet</dt><dd className="mt-1 font-mono">{status?.fleet?.health ?? 'unavailable'} · {status?.fleet?.healthy_node_count ?? 0}/{status?.fleet?.registered_node_count ?? 0} healthy · {status?.fleet?.active_tasks ?? 0} active · {status?.fleet?.queued_tasks ?? 0} queued</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Titan / Mac / Prime</dt><dd className="mt-1 font-mono">Titan {status?.fleet?.nodes.titan?.state ?? 'unavailable'} · Mac {status?.fleet?.nodes.mac?.state ?? 'unavailable'} · Prime {status?.fleet?.nodes.prime?.state ?? 'unavailable'}</dd></div>
+        <div className="min-w-0 bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Fleet route / failover</dt><dd className="mt-1 break-words font-mono">{status?.fleet?.latest_route?.node_id ?? 'none'} · failover {status?.fleet?.latest_failover?.node_id ?? 'none'} · {status?.fleet?.completion_unknown_tasks ?? 0} completion unknown</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Fleet evidence / clocks</dt><dd className="mt-1 font-mono">{status?.fleet?.store_health ?? 'unavailable'} · {status?.fleet?.clock_warnings ?? 0} clock warnings · paper only · broker disabled</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Registry</dt><dd className="mt-1 font-mono">{status?.configured_model_count ?? 0} models · {status?.available_provider_count ?? 0} available</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Evidence / artifacts</dt><dd className="mt-1 font-mono">{status?.evidence_ledger_health ?? 'unavailable'} · {status?.artifact_store_health ?? 'unavailable'}</dd></div>
+        <div className="bg-(--ui-bg-secondary) p-3"><dt className="text-(--ui-text-tertiary)">Latest result</dt><dd className="mt-1 break-words font-mono">{status?.last_failure_classification ?? (status?.orchestration?.latest ? `${status.orchestration.latest.state} · ${status.orchestration.latest.completed_steps} completed · ${status.orchestration.latest.failed_steps} failed` : status?.kronos?.last_successful_forecast ? `${status.kronos.last_successful_forecast.symbol} · ${status.kronos.last_successful_forecast.interval} · ${status.kronos.last_successful_forecast.forecast_horizon} points · ${status.kronos.last_successful_forecast.freshness}` : status?.embeddinggemma?.latest_retrieval ? `${status.embeddinggemma.latest_retrieval.result_count} retrieval results · ${status.embeddinggemma.latest_retrieval.freshness.join(', ') || 'no matches'}` : status?.finbert?.latest_sentiment ? `${status.finbert.latest_sentiment.label} · ${Math.round(status.finbert.latest_sentiment.confidence * 100)}% · ${status.finbert.latest_sentiment.source_identity}` : status?.latest_analysis_summary ?? status?.last_successful_analysis_at ?? 'none')}</dd></div>
+      </dl>
+    </section>
+  )
+}
+
 interface MissionControlDesktopApi {
   getRuntimeSnapshot?: () => Promise<unknown>
   getProviderSnapshot?: () => Promise<ProviderResponse>
+  getAIStatus?: () => Promise<{ ok: true; result: AIStatus } | { ok: false; error: string; message: string }>
   getAlpacaMarketDataStatus?: () => Promise<
     { ok: true; result: AlpacaMarketDataStatus } | { ok: false; error: string; message: string }
   >
@@ -1645,6 +2006,11 @@ interface MissionControlDesktopApi {
     payload: Readonly<Record<string, unknown>>
   ) => Promise<
     { ok: true; result: MarketUniverseSearchResult } | { ok: false; error: string; message: string }
+  >
+  getMarketUniverseQuotes?: (
+    payload: Readonly<Record<string, unknown>>
+  ) => Promise<
+    { ok: true; result: MarketUniverseQuoteResult } | { ok: false; error: string; message: string }
   >
   getAssetCatalogStatus?: () => Promise<
     { ok: true; result: AssetCatalogStatus } | { ok: false; error: string; message: string }
@@ -1724,6 +2090,7 @@ export function SigilOperatorView({
   const [providerSnapshot, setProviderSnapshot] = useState<SigilProviderSnapshot | null>(null)
   const [providerLoading, setProviderLoading] = useState(false)
   const [providerError, setProviderError] = useState<string | null>(null)
+  const [aiStatus, setAIStatus] = useState<AIStatus | null>(null)
   const [alpacaMarketData, setAlpacaMarketData] = useState<AlpacaMarketDataStatus | null>(null)
   const [alpacaControlAction, setAlpacaControlAction] = useState<string | null>(null)
   const [alpacaControlMessage, setAlpacaControlMessage] = useState<string | null>(null)
@@ -1738,17 +2105,21 @@ export function SigilOperatorView({
   const [pendingPaperExecutionAction, setPendingPaperExecutionAction] = useState<
     'deactivate' | null
   >(null)
+
   const [paperExecutionActionInFlight, setPaperExecutionActionInFlight] = useState<
     'deactivate' | null
   >(null)
+
   const paperExecutionActionInFlightRef = useRef(false)
 
   const [pendingCycleAction, setPendingCycleAction] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [cycleActionInFlight, setCycleActionInFlight] = useState<'start' | 'pause' | 'stop' | null>(null)
   const [pendingAuthorizationAction, setPendingAuthorizationAction] = useState<'grant' | 'revoke' | null>(null)
+
   const [authorizationActionInFlight, setAuthorizationActionInFlight] = useState<
     'grant' | 'revoke' | null
   >(null)
+
   const [pendingPaperReset, setPendingPaperReset] = useState(false)
   const [paperResetInFlight, setPaperResetInFlight] = useState(false)
   const [controlError, setControlError] = useState<string | null>(null)
@@ -1964,6 +2335,34 @@ export function SigilOperatorView({
   }, [refreshProviders])
 
   useEffect(() => {
+    const request = desktopApi()?.getAIStatus
+
+    if (!request) {
+      return
+    }
+
+    let cancelled = false
+
+    const refresh = (): void => {
+      void request()
+        .then(response => {
+          if (!cancelled && response.ok) {
+            setAIStatus(response.result)
+          }
+        })
+        .catch(() => undefined)
+    }
+
+    refresh()
+    const timer = window.setInterval(refresh, 30_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
     controlAlpaca('refresh_status')
   }, [controlAlpaca])
 
@@ -2103,74 +2502,151 @@ export function SigilOperatorView({
 
   return (
     <section
-      className="flex h-full min-h-0 flex-col bg-(--ui-bg-primary) text-[0.8125rem]"
+      className="sigil-beta-shell flex h-full min-h-0 flex-col text-[0.8125rem]"
       data-testid="sigil-operator"
     >
-      <header
-        className={cn('shrink-0 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) py-3', PAGE_INSET_X)}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="flex items-baseline gap-3">
-              <h1 className="text-base font-bold uppercase tracking-[0.025em]">Sigil Operator</h1>
-              <span
-                className="
-                  rounded-sm
-                  border border-lime-400/70
-                  bg-lime-400/8
-                  px-2 py-0.5
-                  font-mono text-[0.625rem] font-semibold
-                  uppercase tracking-[0.12em]
-                  text-lime-300/90
-                  shadow-[0_0_7px_rgba(163,230,53,0.38)]
-                "
-              >
-                ● {RELEASE_STAGE}
+      <header className="shrink-0 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-chrome)/95 backdrop-blur-xl">
+        <div
+          className={cn(
+            'flex min-h-16 flex-wrap items-center justify-between gap-5 py-3.5',
+            PAGE_INSET_X
+          )}
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <div
+              aria-hidden
+              className="grid size-10 shrink-0 place-items-center rounded-[6px] border border-primary/30 bg-primary/10 shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]"
+            >
+              <Codicon className="text-primary" name="pulse" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-base font-semibold tracking-[-0.01em] text-(--ui-text-primary)">
+                  Sigil
+                </h1>
+              <span className="sigil-beta-label rounded-[4px] border border-primary/35 bg-primary/8 px-2 py-1 text-primary">
+                {RELEASE_STAGE}
               </span>
-              <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-(--ui-text-tertiary)">
-                Mission control
+              <span className="sigil-beta-label text-(--ui-text-tertiary)">
+                Mission Control
               </span>
             </div>
+              <p className="mt-1 text-[0.6875rem] text-(--ui-text-tertiary)">
+                Governed financial intelligence and local paper operations
+              </p>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusLabel tone={snapshot.environment === 'paper' ? 'info' : 'danger'}>
-              {snapshot.environment.toUpperCase()}
-            </StatusLabel>
-            <StatusLabel tone="muted">{snapshot.simulation ? 'SIMULATED' : 'NOT SIMULATED'}</StatusLabel>
-            <StatusLabel tone={snapshot.brokerConnection === 'connected' ? 'success' : 'danger'}>
-              {snapshot.brokerConnection.toUpperCase()}
-            </StatusLabel>
-            <span className="hidden h-5 w-px bg-(--ui-stroke-tertiary) sm:block" />
-            <span className="font-mono text-[0.6875rem] font-semibold text-primary">
-              HEALTH · {snapshot.systemHealth === 'Governance healthy' ? '99.8%' : snapshot.systemHealth}
+
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
+            <span className="sigil-beta-data text-[0.6875rem] text-(--ui-text-secondary)">
+              Health · {snapshot.systemHealth === 'Governance healthy' ? '99.8%' : snapshot.systemHealth}
             </span>
+
             <StatusLabel tone="success">{snapshot.certificationStatus}</StatusLabel>
+
             {desktopApi()?.buildInfo ? (
               <button
                 className="
-                  rounded-sm
-                  border border-lime-400/70
-                  bg-lime-400/8
-                  px-3 py-1
+                  rounded-[4px]
+                  border border-(--ui-stroke-primary)
+                  bg-(--ui-bg-secondary)
+                  px-3 py-1.5
                   font-mono text-[0.625rem] font-semibold
                   uppercase tracking-[0.08em]
-                  text-lime-300/90
-                  shadow-[0_0_8px_rgba(163,230,53,0.35)]
+                  text-(--ui-text-secondary)
                   transition-colors
-                  hover:bg-lime-400/12
-                  hover:text-lime-200
+                  hover:border-primary/50
+                  hover:text-primary
                 "
                 data-sigil-build-badge
                 onClick={() => setAboutOpen(true)}
                 type="button"
               >
-                {RELEASE_STAGE} · v{desktopApi()?.buildInfo?.version} · BUILD {desktopApi()?.buildInfo?.build}
+                v{desktopApi()?.buildInfo?.version} · build {desktopApi()?.buildInfo?.build}
               </button>
             ) : null}
-            <Button onClick={() => setReloadGeneration(value => value + 1)} size="xs" variant="outline">
+
+            <Button
+              className="h-8 rounded-[4px]"
+              onClick={() => setReloadGeneration(value => value + 1)}
+              size="xs"
+              variant="outline"
+            >
               <Codicon name="refresh" />
               Refresh runtime
             </Button>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            'flex min-h-9 flex-wrap items-center justify-between gap-3 border-t border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) py-2',
+            PAGE_INSET_X
+          )}
+          data-testid="global-safety-status"
+        >
+          <div className="flex flex-wrap items-center gap-5">
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="size-1.5 rounded-full bg-primary" />
+              <span className="sigil-beta-label text-primary">Paper only</span>
+            </span>
+
+            <span className="flex items-center gap-2">
+              <span aria-hidden className="size-1.5 rounded-full bg-destructive" />
+              <span className="sigil-beta-label text-destructive">
+                Broker submission disabled
+              </span>
+            </span>
+          </div>
+
+          <div className="sigil-beta-data flex flex-wrap items-center gap-4 text-[0.6875rem] text-(--ui-text-tertiary)">
+            <span>
+              Runtime ·{' '}
+              <strong className="font-medium text-(--ui-text-primary)">
+                {snapshot.runtimeVisibility?.health ?? snapshot.systemHealth}
+              </strong>
+            </span>
+
+            <span className="hidden h-4 w-px bg-(--ui-stroke-tertiary) sm:block" />
+
+            <span>
+              Connection ·{' '}
+              <strong
+                className={cn(
+                  'font-medium',
+                  snapshot.brokerConnection === 'connected'
+                    ? 'text-primary'
+                    : 'text-destructive'
+                )}
+              >
+                {snapshot.brokerConnection}
+              </strong>
+            </span>
+
+            <span className="hidden h-4 w-px bg-(--ui-stroke-tertiary) sm:block" />
+
+            <span>
+              Data ·{' '}
+              <strong
+                className={cn(
+                  'font-medium',
+                  snapshot.dataState === 'stale'
+                    ? 'text-amber-300'
+                    : 'text-(--ui-text-primary)'
+                )}
+              >
+                {snapshot.dataState}
+              </strong>
+            </span>
+
+            <span className="hidden h-4 w-px bg-(--ui-stroke-tertiary) sm:block" />
+
+            <span>
+              Automation ·{' '}
+              <strong className="font-medium text-(--ui-text-primary)">
+                {snapshot.automationState ?? 'stopped'}
+              </strong>
+            </span>
           </div>
         </div>
       </header>
@@ -2218,7 +2694,7 @@ export function SigilOperatorView({
               Paper automation {snapshot.automationState ?? 'stopped'}
             </StatusLabel>
             <span className="font-mono text-(--ui-text-tertiary)">
-              {snapshot.automationCycleCount ?? 0} cycles · refreshed {snapshot.lastUpdated}
+              {snapshot.automationCycleCount ?? 0} cycles · refreshed {formatEasternDateTime(snapshot.lastUpdated)}
             </span>
           </div>
           <div className="flex gap-2">
@@ -2258,6 +2734,22 @@ export function SigilOperatorView({
                   }
                 }}
                 size="xs"
+                title={
+                  cycleActionInFlight !== null
+                    ? `Paper automation ${cycleActionInFlight} is already in progress.`
+                    : action === 'start' && snapshot.automationState === 'running'
+                      ? 'Paper automation is already running.'
+                      : action === 'start' &&
+                          snapshot.paperAuthorization?.status !== 'active'
+                        ? 'Active monthly paper authorization is required before automation can start.'
+                        : action === 'pause' &&
+                            snapshot.automationState !== 'running'
+                          ? 'Paper automation can only be paused while it is running.'
+                          : action === 'stop' &&
+                              snapshot.automationState === 'stopped'
+                            ? 'Paper automation is already stopped.'
+                            : undefined
+                }
                 variant={
                   action === 'stop'
                     ? 'destructive'
@@ -2286,7 +2778,7 @@ export function SigilOperatorView({
       <nav
         aria-label="Sigil sections"
         className={cn(
-          'flex shrink-0 gap-5 overflow-x-auto border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)',
+          'flex shrink-0 gap-1 overflow-x-auto border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-chrome)/95 py-2.5 backdrop-blur-xl',
           PAGE_INSET_X
         )}
       >
@@ -2294,10 +2786,10 @@ export function SigilOperatorView({
           <button
             aria-current={section === item ? 'page' : undefined}
             className={cn(
-              'shrink-0 border-b-2 px-0 py-2.5 text-[0.6875rem] font-semibold uppercase tracking-[0.06em] transition-colors',
+              'shrink-0 rounded-[4px] border px-3.5 py-2 text-[0.6875rem] font-semibold uppercase tracking-[0.06em] transition-all duration-150',
               section === item
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-(--ui-text-tertiary) hover:text-foreground'
+                ? 'border-primary/35 bg-primary/10 text-primary'
+                : 'border-transparent text-(--ui-text-tertiary) hover:border-(--ui-stroke-tertiary) hover:bg-(--ui-bg-secondary) hover:text-(--ui-text-primary)'
             )}
             key={item}
             onClick={() => setSection(item)}
@@ -2309,8 +2801,34 @@ export function SigilOperatorView({
       </nav>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {section === 'overview' ? (
-          <div className="flex min-h-full flex-col xl:flex-row">
+          <div className="flex min-h-full flex-col 2xl:flex-row">
             <div className="min-w-0 flex-1">
+              <div
+                className={cn(
+                  'border-b border-(--ui-stroke-tertiary) bg-[radial-gradient(circle_at_82%_10%,rgb(20_184_166/0.08),transparent_22rem)] py-7',
+                  PAGE_INSET_X
+                )}
+              >
+                <div className="flex flex-wrap items-end justify-between gap-6">
+                  <div>
+                    <p className="sigil-beta-label text-primary">Operational overview</p>
+                    <h2 className="mt-2 text-[1.75rem] font-semibold leading-tight tracking-[-0.035em] text-(--ui-text-primary)">
+                      Mission Control
+                    </h2>
+                    <p className="mt-2 max-w-3xl text-xs leading-5 text-(--ui-text-secondary)">
+                      Verified runtime state, provider health, governed paper controls,
+                      pending decisions, and immutable evidence.
+                    </p>
+                  </div>
+
+                  <div className="grid min-w-[15rem] gap-1 rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)/90 px-4 py-3 shadow-[0_12px_32px_rgb(0_0_0/0.12)]">
+                    <span className="sigil-beta-label text-(--ui-text-tertiary)">Runtime snapshot</span>
+                    <span className="sigil-beta-data text-[0.6875rem] text-(--ui-text-secondary)">
+                      Last verified · {formatEasternDateTime(snapshot.lastUpdated)}
+                    </span>
+                  </div>
+                </div>
+              </div>
               <MetricStrip snapshot={snapshot} />
               <RuntimeVisibilityCard onOpenAudit={() => setSection('audit')} snapshot={snapshot} />
               <ProviderPanel
@@ -2323,6 +2841,9 @@ export function SigilOperatorView({
                 onRefresh={refreshProviders}
                 snapshot={providerSnapshot}
               />
+              <AIFoundationPanel status={aiStatus} />
+              <PrimeFleetPanel />
+              <IntegrationRegistryPanel status={aiStatus?.integration_registry} />
               <AutonomousPaperPanel
                 onAction={setPendingPaperExecutionAction}
                 status={paperExecution}
@@ -2345,14 +2866,23 @@ export function SigilOperatorView({
                   </span>
                 </div>
                 <Pipeline compact stages={snapshot.stages} />
-                <div className="mt-5 grid gap-6 2xl:grid-cols-[1.35fr_1fr]">
-                  <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <h2 className="text-xs font-semibold uppercase tracking-[0.1em]">Pending proposals</h2>
-                      <span className="font-mono text-[0.625rem] text-(--ui-text-tertiary)">
+                <div className="mt-5 grid gap-4 2xl:grid-cols-[1.35fr_1fr]">
+                  <section aria-labelledby="pending-proposals-title" className="sigil-beta-panel sigil-decision-queue overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-3">
+                      <div>
+                        <p className="sigil-beta-label text-primary">Decision queue</p>
+                        <h2
+                          className="mt-1 text-sm font-semibold text-(--ui-text-primary)"
+                          id="pending-proposals-title"
+                        >
+                          Pending proposals
+                        </h2>
+                      </div>
+                      <span className="sigil-beta-data text-[0.6875rem] text-(--ui-text-tertiary)">
                         {snapshot.pendingApprovals} awaiting review
                       </span>
                     </div>
+                    <div className="sigil-proposal-list px-4 py-2">
                     {snapshot.proposals
                       .filter(proposal => proposal.status === 'pending')
                       .slice(0, 2)
@@ -2360,8 +2890,8 @@ export function SigilOperatorView({
                         <button
                           aria-pressed={selectedProposal?.id === proposal.id}
                           className={cn(
-                            'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-t border-(--ui-stroke-tertiary) px-2 py-3 text-left transition-colors last:border-b hover:bg-(--chrome-action-hover)',
-                            selectedProposal?.id === proposal.id && 'border-l-2 border-l-primary bg-(--ui-bg-secondary)'
+                            'sigil-decision-row my-2 grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-[4px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) px-3 py-3 text-left transition-colors hover:border-primary/25 hover:bg-(--ui-bg-tertiary)',
+                            selectedProposal?.id === proposal.id && 'border-primary/40 bg-primary/6'
                           )}
                           key={proposal.id}
                           onClick={() => setSelectedProposalId(proposal.id)}
@@ -2384,11 +2914,23 @@ export function SigilOperatorView({
                           </span>
                         </button>
                       ))}
-                  </div>
-                  <div>
-                    <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.1em]">Launch control</h2>
-                    <LaunchControl actionLocked onAction={setPendingAction} snapshot={snapshot} />
-                  </div>
+                    </div>
+                  </section>
+
+                  <section aria-labelledby="launch-control-title" className="sigil-beta-panel overflow-hidden">
+                    <div className="border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-3">
+                      <p className="sigil-beta-label text-primary">Governed authority</p>
+                      <h2
+                        className="mt-1 text-sm font-semibold text-(--ui-text-primary)"
+                        id="launch-control-title"
+                      >
+                        Launch control
+                      </h2>
+                    </div>
+                    <div className="px-4 py-4">
+                      <LaunchControl actionLocked onAction={setPendingAction} snapshot={snapshot} />
+                    </div>
+                  </section>
                 </div>
               </div>
             </div>
@@ -2450,17 +2992,24 @@ export function SigilOperatorView({
             <LaunchControl actionLocked={actionLocked} onAction={setPendingAction} snapshot={snapshot} />
           </div>
         ) : null}
-        {section === 'executions' || section === 'reconciliation' ? (
+        {section === 'executions' ? (
           <div className={cn('py-5', PAGE_INSET_X)}>
             <div className="mb-4">
-              <h2 className="text-sm font-semibold">
-                {section === 'executions' ? 'Simulated executions' : 'Execution reconciliation'}
-              </h2>
+              <h2 className="text-sm font-semibold">Simulated executions</h2>
               <p className="mt-1 text-xs text-(--ui-text-tertiary)">
                 Immutable receipts · outcome-uncertain states never retry automatically
               </p>
             </div>
             <ExecutionTable snapshot={snapshot} />
+          </div>
+        ) : null}
+        {section === 'reconciliation' ? (
+          <div className={cn('py-5', PAGE_INSET_X)}>
+            <ReconciliationPanel
+              onOpenAudit={() => setSection('audit')}
+              onRefresh={() => setReloadGeneration(value => value + 1)}
+              snapshot={snapshot}
+            />
           </div>
         ) : null}
         {section === 'audit' ? (

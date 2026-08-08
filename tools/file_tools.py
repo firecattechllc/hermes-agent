@@ -5,6 +5,7 @@ import errno
 import json
 import logging
 import os
+import tempfile
 import posixpath
 import sys
 import threading
@@ -600,6 +601,32 @@ def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None
     except (OSError, ValueError):
         resolved = filepath
     normalized = os.path.normpath(_expand_tilde(filepath))
+
+    # Prevent agents from modifying the Hermes config file directly.
+    # approvals.mode and other security settings live here; a malicious or
+    # prompt-injected agent could silently disable exec approval by writing to
+    # this file. Checked before the temp-directory carve-out below so that an
+    # active workspace temp path can never shadow this protection.
+    hermes_config = _get_hermes_config_resolved()
+    if hermes_config and (resolved == hermes_config or normalized == hermes_config):
+        return (
+            f"Refusing to write to Hermes config file: {filepath}\n"
+            "Agent cannot modify security-sensitive configuration. "
+            "Edit ~/.hermes/config.yaml directly or use 'hermes config' instead."
+        )
+
+    # macOS resolves its per-user temporary directory beneath
+    # /private/var/folders/.../T. Treat the active system temp directory and
+    # its descendants as ordinary temporary workspace while preserving the
+    # broader /private/var protection for locations such as /private/var/db.
+    try:
+        resolved_path = Path(resolved).resolve()
+        temp_root = Path(tempfile.gettempdir()).resolve()
+        if resolved_path == temp_root or resolved_path.is_relative_to(temp_root):
+            return None
+    except (OSError, RuntimeError, ValueError):
+        pass
+
     _err = (
         f"Refusing to write to sensitive system path: {filepath}\n"
         "Use the terminal tool with sudo if you need to modify system files."
@@ -609,17 +636,6 @@ def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None
             return _err
     if resolved in _SENSITIVE_EXACT_PATHS or normalized in _SENSITIVE_EXACT_PATHS:
         return _err
-    # Prevent agents from modifying the Hermes config file directly.
-    # approvals.mode and other security settings live here; a malicious or
-    # prompt-injected agent could silently disable exec approval by writing to
-    # this file.
-    hermes_config = _get_hermes_config_resolved()
-    if hermes_config and (resolved == hermes_config or normalized == hermes_config):
-        return (
-            f"Refusing to write to Hermes config file: {filepath}\n"
-            "Agent cannot modify security-sensitive configuration. "
-            "Edit ~/.hermes/config.yaml directly or use 'hermes config' instead."
-        )
     return None
 
 

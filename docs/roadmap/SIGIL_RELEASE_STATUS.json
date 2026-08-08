@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-08-05T14:35:00Z",
+  "releases": [
+    {
+      "id": "sigil-3.7.0",
+      "name": "Governed Fleet Release",
+      "branch": "sigil-v3.7-fleet-ui-release",
+      "objective": "Prime/Titan/Mac deployment, Prime-governed Sigil routing, Mission Control fleet UI, paper-only safeguards",
+      "implementation_status": "complete",
+      "test_status": "green (267 hermes_cli/prime pytest, 2182 apps/sigil pytest, 101 apps/sigil-desktop vitest; ruff/ty/eslint/tsc clean)",
+      "deployment_status": "live: Prime (hydra-prime), Titan (hydra-titan), Mac worker (this machine) deployed and verified; Hydra Live offline/unreachable",
+      "review_status": "PR open, not reviewed, not merged",
+      "certification_status": "live fleet certification CERTIFIED against real deployed state (Stage 1 included); Sigil 3.7 certification tests passing",
+      "blockers": [
+        "independent adversarial review not yet performed",
+        "packaging/signing/notarization not run (no v3.7.0-release.json)",
+        "known architectural limitation: 4 of 5 Sigil advisory operations route to the mac node, the same node Sigil runs on, which self-address invariants correctly reject in a single-Mac topology"
+      ],
+      "evidence_ref": "docs/certification/sigil-v3.7-release-notes.md",
+      "pr_url": "https://github.com/firecattechllc/hermes-agent/pull/69",
+      "next_action": "CI + independent review, then merge decision. Do not tag sigil-v3.7.0 until merged."
+    },
+    {
+      "id": "sigil-3.8.0",
+      "name": "Supabase Platform Release",
+      "branch": "sigil-v3.8-supabase-platform",
+      "objective": "Supabase Auth, invite-only onboarding, profiles, RLS, migrations, dev/prod separation, monitoring, backups, rate limits, audit records",
+      "implementation_status": "not_started",
+      "test_status": "not_started",
+      "deployment_status": "not_started",
+      "review_status": "not_started",
+      "certification_status": "not_started",
+      "blockers": [
+        "real Supabase account/project access not yet confirmed",
+        "must base branch on latest merged main after 3.7 merges (currently based on same origin/main as 3.7 since 3.7 has not merged yet)"
+      ],
+      "evidence_ref": null,
+      "pr_url": null,
+      "next_action": "Confirm Supabase account/project access, then scope and implement."
+    },
+    {
+      "id": "sigil-3.9.0",
+      "name": "Final UI Polish",
+      "branch": "sigil-v3.9-final-ui-polish",
+      "objective": "Native macOS UI refinement, accessibility, performance, final Xcode visual validation",
+      "implementation_status": "not_started",
+      "test_status": "not_started",
+      "deployment_status": "not_started",
+      "review_status": "not_started",
+      "certification_status": "not_started",
+      "blockers": ["depends on 3.8 merging first"],
+      "evidence_ref": null,
+      "pr_url": null,
+      "next_action": "Await 3.8 merge."
+    },
+    {
+      "id": "sigil-4.0.0",
+      "name": "Public Release Ready",
+      "branch": "sigil-v4.0-public-release",
+      "objective": "Signing, notarization, App Store validation, privacy/terms, crash reporting, supply-chain review, launch assets",
+      "implementation_status": "not_started",
+      "test_status": "not_started",
+      "deployment_status": "not_started",
+      "review_status": "not_started",
+      "certification_status": "not_started",
+      "blockers": ["depends on 3.9 merging first", "requires Apple signing credentials"],
+      "evidence_ref": null,
+      "pr_url": null,
+      "next_action": "Await 3.9 merge."
+    },
+    {
+      "id": "sigil-post-4.0-maturation",
+      "name": "Paper-Trading Maturation",
+      "branch": null,
+      "objective": "Maturity scorecards and monitoring for paper performance, drawdown, volatility, uptime, reliability, incidents, evidence integrity, drift",
+      "implementation_status": "not_started",
+      "test_status": "not_started",
+      "deployment_status": "not_started",
+      "review_status": "not_started",
+      "certification_status": "not_started",
+      "blockers": ["depends on 4.0 merging first", "time-based maturity cannot be claimed immediately regardless of implementation status"],
+      "evidence_ref": null,
+      "pr_url": null,
+      "next_action": "Await 4.0 merge."
+    },
+    {
+      "id": "sigil-4.1.0",
+      "name": "Governed Strategy Engine",
+      "branch": "sigil-v4.1-strategy-engine",
+      "objective": "Modular strategy-plugin framework, backtesting, paper trading, ranking/ensembles, governed macro-data service",
+      "implementation_status": "not_started",
+      "test_status": "not_started",
+      "deployment_status": "not_started",
+      "review_status": "not_started",
+      "certification_status": "not_started",
+      "blockers": ["depends on 4.0 merging first"],
+      "evidence_ref": null,
+      "pr_url": null,
+      "next_action": "Await 4.0 merge."
+    },
+    {
+      "id": "obsidian-knowledge-track",
+      "name": "Optional Hermes Knowledge Track — Obsidian",
+      "branch": "feature/obsidian-knowledge-integration",
+      "objective": "Read-only optional Obsidian vault ingestion with path containment and no plugin execution",
+      "implementation_status": "not_started",
+      "test_status": "not_started",
+      "deployment_status": "not_started",
+      "review_status": "not_started",
+      "certification_status": "not_started",
+      "blockers": ["independent of the Sigil release train"],
+      "evidence_ref": null,
+      "pr_url": null,
+      "next_action": "May be prepared in parallel once it cannot bypass an earlier release gate."
+    }
+  ]
+}

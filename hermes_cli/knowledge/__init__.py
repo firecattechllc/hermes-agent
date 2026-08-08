@@ -11,6 +11,12 @@ from .models import (
     KnowledgeRelationship,
     RelationshipType,
 )
+from .mission_control_bridge import (
+    KNOWLEDGE_DRIFT_EVENT,
+    KNOWLEDGE_SNAPSHOT_EVENT,
+    KnowledgeVisibilityAdapter,
+    KnowledgeVisibilityService,
+)
 from .service import KnowledgeService
 from .store import KnowledgeGraphStore
 
@@ -19,11 +25,15 @@ __all__ = [
     "DiscoverySnapshot",
     "GraphChange",
     "ImpactAnalysis",
+    "KNOWLEDGE_DRIFT_EVENT",
+    "KNOWLEDGE_SNAPSHOT_EVENT",
     "KnowledgeConfig",
     "KnowledgeEntity",
     "KnowledgeFederationEnvelope",
     "KnowledgeGraphStore",
     "KnowledgeRelationship",
     "KnowledgeService",
+    "KnowledgeVisibilityAdapter",
+    "KnowledgeVisibilityService",
     "RelationshipType",
 ]

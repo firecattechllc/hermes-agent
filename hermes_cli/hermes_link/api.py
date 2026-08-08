@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from .models import HermesLinkEnvelope, MessageType
+from .security import HermesLinkAuthenticationError, SignedRequestAuthenticator
 from .service import HermesLinkService, LinkPolicyError
 
 TokenVerifier = Callable[[str], bool]
@@ -23,7 +24,14 @@ def static_token_verifier(expected_token: str) -> TokenVerifier:
     return lambda supplied: hmac.compare_digest(supplied, expected_token)
 
 
-def create_app(service: HermesLinkService, *, token_verifier: TokenVerifier) -> FastAPI:
+def create_app(
+    service: HermesLinkService,
+    *,
+    token_verifier: TokenVerifier | None = None,
+    signed_authenticator: SignedRequestAuthenticator | None = None,
+) -> FastAPI:
+    if (token_verifier is None) == (signed_authenticator is None):
+        raise ValueError("exactly one Hermes Link authentication mode is required")
     app = FastAPI(
         title="Titan Hermes Link",
         version=service.service_version,
@@ -31,9 +39,26 @@ def create_app(service: HermesLinkService, *, token_verifier: TokenVerifier) -> 
         redoc_url=None,
     )
 
-    def authenticate(authorization: Optional[str] = Header(default=None)) -> None:
+    async def authenticate(
+        request: Request, authorization: Optional[str] = Header(default=None)
+    ) -> None:
+        if signed_authenticator is not None:
+            try:
+                signed_authenticator.verify(
+                    request.method,
+                    request.url.path,
+                    request.headers,
+                    await request.body(),
+                )
+                return
+            except HermesLinkAuthenticationError as exc:
+                raise HTTPException(
+                    status_code=401,
+                    detail={"code": exc.code, "message": str(exc)},
+                ) from exc
         if (
-            not authorization
+            token_verifier is None
+            or not authorization
             or not authorization.startswith("Bearer ")
             or not token_verifier(authorization[7:])
         ):

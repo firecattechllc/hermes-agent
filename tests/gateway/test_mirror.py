@@ -144,7 +144,11 @@ class TestFindSessionId:
             }
         })
 
-        with patch.object(mirror_mod, "_SESSIONS_INDEX", index_file):
+        with (
+            patch.object(mirror_mod, "_SESSIONS_INDEX", index_file),
+            patch.object(mirror_mod, "_SESSIONS_DIR", sessions_dir),
+            patch("hermes_state.SessionDB", side_effect=RuntimeError("force JSON fallback")),
+        ):
             result = _find_session_id("telegram", "123")
 
         assert result == "sess_1"

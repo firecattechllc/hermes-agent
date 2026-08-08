@@ -1,17 +1,26 @@
 import json
 from datetime import UTC, datetime
+from urllib.error import HTTPError
 
 import pytest
 
 from sigil.asset_catalog import AssetCatalogStore, build_snapshot
 from sigil.desktop_bridge import providers as desktop_bridge_providers
-from sigil.desktop_bridge.providers import load_credentials, provider_snapshot
+from sigil.desktop_bridge.providers import (
+    _alpaca,
+    alpaca_credentials,
+    load_credentials,
+    provider_snapshot,
+)
 from sigil.desktop_bridge.runner import backend_status, handle_request
 
 
 @pytest.fixture(autouse=True)
 def isolated_state(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("SIGIL_DESKTOP_STATE_DIR", str(tmp_path / "paper-state"))
+    monkeypatch.setenv(
+        "SIGIL_PROVIDER_CREDENTIAL_FILE", str(tmp_path / "missing-provider-credentials.txt")
+    )
 
 
 def proposal_request() -> dict[str, object]:
@@ -51,12 +60,22 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "control_paper_authorization",
         "reset_paper_runtime",
         "provider_snapshot",
+        "prime_fleet_status",
+        "prime_sigil_route",
+        "ai_status",
+        "ai_registry_status",
+        "ai_evidence_status",
+        "ai_artifact_status",
+        "ai_recent_artifacts",
+        "ai_artifact_get",
+        "ai_recent_failures",
         "governed_news_status",
         "governed_news_timeline",
         "governed_news_advisory_summary",
         "governed_alpaca_news_collect",
         "market_universe_status",
         "market_universe_search",
+        "market_universe_quotes",
         "alpaca_market_data_status",
         "control_alpaca_market_data",
         "asset_catalog_status",
@@ -350,6 +369,111 @@ class ProviderResponse:
         return json.dumps(self.payload).encode()
 
 
+def test_alpaca_credentials_fall_back_to_private_provider_file(
+    tmp_path, monkeypatch
+) -> None:
+    credential_path = tmp_path / "providers.txt"
+    credential_path.write_text(
+        "SIGIL_ALPACA_API_KEY_ID=file-key\n"
+        "SIGIL_ALPACA_API_SECRET_KEY=file-secret\n"
+    )
+    credential_path.chmod(0o600)
+    for name in (
+        "APCA_API_KEY_ID",
+        "APCA_API_SECRET_KEY",
+        "SIGIL_ALPACA_API_KEY_ID",
+        "SIGIL_ALPACA_API_SECRET_KEY",
+        "ALPACA_API_KEY",
+        "ALPACA_SECRET_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    assert alpaca_credentials(credential_path) == ("file-key", "file-secret")
+
+
+def test_private_provider_file_precedes_legacy_shell_aliases(tmp_path, monkeypatch) -> None:
+    credential_path = tmp_path / "providers.txt"
+    credential_path.write_text(
+        "SIGIL_ALPACA_API_KEY_ID=file-key\n"
+        "SIGIL_ALPACA_API_SECRET_KEY=file-secret\n"
+    )
+    credential_path.chmod(0o600)
+    monkeypatch.setenv("ALPACA_API_KEY", "legacy-key")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "legacy-secret")
+
+    assert alpaca_credentials(credential_path) == ("file-key", "file-secret")
+
+
+def test_alpaca_health_separates_account_quote_and_history() -> None:
+    requests: list[str] = []
+
+    def opener(request, _timeout):  # type: ignore[no-untyped-def]
+        requests.append(request.full_url)
+        if request.full_url.startswith("https://paper-api.alpaca.markets/v2/account"):
+            return ProviderResponse({"id": "paper-account"})
+        if request.full_url.startswith("https://data.alpaca.markets/v2/stocks/AAPL/quotes/latest"):
+            return ProviderResponse({"quote": {"bp": 100, "ap": 101}})
+        if request.full_url.startswith("https://data.alpaca.markets/v2/stocks/AAPL/bars"):
+            raise HTTPError(request.full_url, 503, "unavailable", {}, None)
+        raise AssertionError(request.full_url)
+
+    result = _alpaca(
+        {
+            "SIGIL_ALPACA_API_KEY_ID": "private-key",
+            "SIGIL_ALPACA_API_SECRET_KEY": "private-secret",
+        },
+        opener,
+    )
+
+    assert result["status"] == "degraded"
+    assert result["health"] == {
+        "credentials_configured": True,
+        "account": {"successful": True, "http_status": 200, "error_category": None},
+        "latest_quote": {"successful": True, "http_status": 200, "error_category": None},
+        "historical_bars": {
+            "successful": False,
+            "http_status": 503,
+            "error_category": "provider_error",
+        },
+        "feed": "iex",
+    }
+    assert all("private" not in value for value in requests)
+    assert all("/quotes/" not in value and "/bars" not in value for value in requests if "paper-api" in value)
+
+
+@pytest.mark.parametrize(
+    ("failed_path", "http_status", "failed_field"),
+    [
+        ("quotes/latest", 401, "latest_quote"),
+        ("quotes/latest", 503, "latest_quote"),
+        ("/bars", 401, "historical_bars"),
+    ],
+)
+def test_alpaca_health_fails_closed_per_market_data_probe(
+    failed_path, http_status, failed_field
+) -> None:
+    def opener(request, _timeout):  # type: ignore[no-untyped-def]
+        if failed_path in request.full_url:
+            raise HTTPError(request.full_url, http_status, "failure", {}, None)
+        return ProviderResponse({})
+
+    result = _alpaca(
+        {
+            "SIGIL_ALPACA_API_KEY_ID": "private-key",
+            "SIGIL_ALPACA_API_SECRET_KEY": "private-secret",
+        },
+        opener,
+    )
+
+    assert result["status"] == "degraded"
+    assert result["health"][failed_field]["successful"] is False
+    assert result["health"][failed_field]["http_status"] == http_status
+    other_field = "historical_bars" if failed_field == "latest_quote" else "latest_quote"
+    assert result["health"][other_field]["successful"] is True
+    assert "private-key" not in json.dumps(result)
+    assert "private-secret" not in json.dumps(result)
+
+
 def test_provider_snapshot_is_read_only_masked_and_secret_free(tmp_path) -> None:
     credential_path = tmp_path / "providers.txt"
     credential_path.write_text(
@@ -363,6 +487,12 @@ def test_provider_snapshot_is_read_only_masked_and_secret_free(tmp_path) -> None
 
     def opener(request, _timeout):  # type: ignore[no-untyped-def]
         requests.append(request)
+        if request.full_url == "https://paper-api.alpaca.markets/v2/account":
+            return ProviderResponse({"id": "alpaca-paper-account"})
+        if "/stocks/AAPL/quotes/latest" in request.full_url:
+            return ProviderResponse({"quote": {"bp": 200, "ap": 201}})
+        if "/stocks/AAPL/bars" in request.full_url:
+            return ProviderResponse({"bars": [{"c": 200}]})
         if request.full_url.endswith("/personal/access-tokens"):
             return ProviderResponse({"accessToken": "runtime-token"})
         if request.full_url.endswith("/trading/account"):
@@ -425,7 +555,17 @@ def test_provider_snapshot_is_read_only_masked_and_secret_free(tmp_path) -> None
     assert "alpaca-secret" not in serialized
     assert "public-secret" not in serialized
     assert all(request.method in {"GET", "POST"} for request in requests)
-    assert not any("data.alpaca.markets" in request.full_url for request in requests)
+    assert any("data.alpaca.markets" in request.full_url for request in requests)
+    assert all(
+        "/v2/account" not in request.full_url
+        for request in requests
+        if "data.alpaca.markets" in request.full_url
+    )
+    assert all(
+        "/quotes/" not in request.full_url and "/bars" not in request.full_url
+        for request in requests
+        if "paper-api.alpaca.markets" in request.full_url
+    )
     assert not any("/order" in request.full_url for request in requests)
     assert not any("transfer" in request.full_url for request in requests)
 
@@ -441,3 +581,34 @@ def test_provider_credential_loader_rejects_unsafe_permissions(tmp_path) -> None
         assert "permissions are unsafe" in str(error)
     else:
         raise AssertionError("unsafe credential permissions must fail closed")
+
+
+def test_handle_request_prime_fleet_status_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HERMES_PRIME_BASE_URL", raising=False)
+    monkeypatch.delenv("HERMES_PRIME_AUTH_TOKEN", raising=False)
+
+    response = handle_request({"command": "prime_fleet_status"})
+
+    assert response["ok"] is True
+    assert response["result"]["configured"] is False
+    assert response["result"]["nodes"] == []
+
+
+def test_handle_request_prime_sigil_route_requires_payload_object() -> None:
+    response = handle_request({"command": "prime_sigil_route"})
+
+    assert response["ok"] is False
+    assert response["error"] == "invalid_payload"
+
+
+def test_handle_request_prime_sigil_route_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HERMES_PRIME_BASE_URL", raising=False)
+    monkeypatch.delenv("HERMES_PRIME_AUTH_TOKEN", raising=False)
+
+    response = handle_request(
+        {"command": "prime_sigil_route", "payload": {"operation": "advisory_financial_sentiment"}}
+    )
+
+    assert response["ok"] is True
+    assert response["result"]["ok"] is False
+    assert response["result"]["error"] == "prime_not_configured"

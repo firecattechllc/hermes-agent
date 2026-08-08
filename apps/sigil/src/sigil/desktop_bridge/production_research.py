@@ -19,11 +19,17 @@ from sigil.production_research.models import decimal, parse_time
 from .autonomous_paper import _service as _execution_service
 from .governed_news_context import production_news_context
 from .governed_news_store import NewsEvidenceStore
+from .providers import alpaca_credentials
 from .runtime import _state_directory
 
 
 def _service() -> ProductionResearchService:
     return ProductionResearchService(ProductionResearchStore(_state_directory()))
+
+
+def _data_client() -> AlpacaProductionDataClient:
+    key, secret = alpaca_credentials()
+    return AlpacaProductionDataClient(key, secret)
 
 
 def production_research_status() -> dict[str, Any]:
@@ -91,7 +97,7 @@ def collect_local_position_marks(
         return {}
 
     try:
-        evidence = AlpacaProductionDataClient.from_environment().collect_batch(
+        evidence = _data_client().collect_batch(
             tuple(sorted(set(symbols))),
             now=now,
         )
@@ -208,7 +214,7 @@ def emergency_paper_liquidation() -> dict[str, Any]:
     if not symbols:
         return execution.status()
     now = datetime.now().astimezone()
-    evidence = AlpacaProductionDataClient.from_environment().collect_batch(symbols, now=now)
+    evidence = _data_client().collect_batch(symbols, now=now)
     prices = {
         item.symbol: item.bid
         for item in evidence
@@ -264,7 +270,7 @@ def run_production_batch(
     snapshot = _fresh_catalog_snapshot(now)
     selected = set(symbols)
     assets = [asset for asset in snapshot.normalized_assets if asset.symbol in selected]
-    data_client = AlpacaProductionDataClient.from_environment()
+    data_client = _data_client()
     provider_failure = None
     try:
         evidence = data_client.collect_batch(tuple(symbols), now=now)
