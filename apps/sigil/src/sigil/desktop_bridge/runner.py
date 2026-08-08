@@ -121,6 +121,7 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "paper_orders",
     "paper_positions",
     "paper_fills",
+    "recent_audit",
     "reconcile_paper_orders",
     "emergency_paper_stop",
     "production_research_status",
@@ -588,6 +589,7 @@ def handle_request(request: object) -> dict[str, Any]:
         "paper_orders": "orders",
         "paper_positions": "positions",
         "paper_fills": "fills",
+        "recent_audit": "audit",
     }
     if command in collection_commands:
         return {

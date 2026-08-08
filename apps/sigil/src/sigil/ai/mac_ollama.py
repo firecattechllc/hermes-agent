@@ -92,6 +92,7 @@ class MacOllamaProfileConfig:
     embedding_dimension: int = 768
     embedding_max_input_chars: int = 8_000
     embedding_max_batch_size: int = 8
+    probe_service: bool = False
 
     def __post_init__(self) -> None:
         parsed = urllib.parse.urlsplit(self.endpoint)
@@ -160,6 +161,7 @@ class MacOllamaProfileConfig:
                 "SIGIL_AI_MAC_OLLAMA_EMBEDDING_MAX_INPUT_CHARS", 8_000
             ),
             embedding_max_batch_size=integer("SIGIL_AI_MAC_OLLAMA_EMBEDDING_MAX_BATCH_SIZE", 8),
+            probe_service=source.get("SIGIL_AI_MAC_OLLAMA_PROBE_SERVICE", "").lower() in truth,
         )
 
 
@@ -224,6 +226,46 @@ class MacOllamaInspector:
         )
         return _show_identity(model, tags, show)
 
+    def _probe_service(self) -> dict[str, object]:
+        """Unconditional, read-only reachability + inventory probe.
+
+        Answers "is Ollama running, and what does it have locally / loaded
+        right now" independent of whether any text role is admitted under
+        the approved model manifest -- so that signal is never conflated
+        with per-role admission health. Opt-in only (`probe_service`); off
+        by default so existing callers that never enable it see no change
+        in behavior, response shape, or network activity.
+        """
+        endpoint = self.config.endpoint.rstrip("/")
+        timeout_seconds = self.config.timeout_ms / 1_000
+
+        def models_from(url: str) -> list[dict[str, object]] | None:
+            try:
+                response = self.transport.request(
+                    method="GET", url=url, payload=None, timeout_seconds=timeout_seconds
+                )
+            except GemmaTransportError:
+                return None
+            if not isinstance(response, dict) or not isinstance(response.get("models"), list):
+                return None
+            return [
+                {
+                    "name": item.get("name"),
+                    "size": item.get("size") if isinstance(item.get("size"), int) else None,
+                    "digest": item.get("digest") if isinstance(item.get("digest"), str) else None,
+                }
+                for item in response["models"]
+                if isinstance(item, dict) and isinstance(item.get("name"), str)
+            ]
+
+        installed = models_from(f"{endpoint}/api/tags")
+        running = models_from(f"{endpoint}/api/ps") if installed is not None else None
+        return {
+            "service_reachable": installed is not None,
+            "installed_models": installed or [],
+            "running_models": running or [],
+        }
+
     def status(self) -> dict[str, object]:
         roles = {
             "primary": (self.config.primary_model, False, self.config.enabled),
@@ -273,7 +315,7 @@ class MacOllamaInspector:
                 if identity is None or identity.license_evidence is None
                 else identity.license_evidence,
             }
-        return {
+        response: dict[str, object] = {
             "enabled": self.config.enabled,
             "device_identity": self.config.device_id,
             "fleet_role": self.config.fleet_role,
@@ -282,6 +324,9 @@ class MacOllamaInspector:
             "roles": result,
             **GOVERNANCE_BOUNDARIES,
         }
+        if self.config.probe_service:
+            response.update(self._probe_service())
+        return response
 
 
 class MacOllamaRoleProvider(LocalGemmaProvider):

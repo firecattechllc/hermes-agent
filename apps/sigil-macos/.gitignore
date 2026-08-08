@@ -1,0 +1,8 @@
+# Xcode per-user / machine-local state — never meaningful to share.
+xcuserdata/
+*.xcuserstate
+DerivedData/
+.build/
+
+# Local dev shim runtime artifacts (log/pid files from script/build_and_run.sh).
+.dev-support/
