@@ -99,6 +99,7 @@ def test_backend_status_is_read_only_and_paper_only() -> None:
         "paper_orders",
         "paper_positions",
         "paper_fills",
+        "recent_audit",
         "reconcile_paper_orders",
         "emergency_paper_stop",
         "production_research_status",
