@@ -51,6 +51,15 @@ struct AgentWatchSessionDetail: View {
     }
 }
 
+/// Monitoring lifetime belongs to the app/service layer, not this view's
+/// visibility: `AgentWatchService.start()` is called exactly once, from
+/// `RootView`'s `.task` at app launch, and `.stop()` is called exactly once,
+/// from `SigilApp`'s `NSApplication.willTerminateNotification` handler.
+/// This view (and `AgentWatchMenuBarView` below) must never call `start()`
+/// or `stop()` — doing so from `onAppear`/`onDisappear` previously tied
+/// background polling and the keep-awake power assertion to whether the
+/// Agent Watch sidebar tab happened to be on screen, silently halting
+/// monitoring the moment the user navigated to any other section.
 struct AgentWatchView: View {
     @ObservedObject var service: AgentWatchService
     @State private var selection: AgentWatchSession.ID?
@@ -74,7 +83,7 @@ struct AgentWatchView: View {
                     else { ContentUnavailableView("Select a Session", systemImage: "sidebar.right") }
                 }
             }
-        }.padding(24).onAppear { service.start() }.onDisappear { service.stop() }
+        }.padding(24)
     }
 }
 
@@ -91,6 +100,6 @@ struct AgentWatchMenuBarView: View {
             Divider()
             Button("Open Agent Watch") { openWindow(id: "agent-watch") }
             Text(service.isKeepingAwake ? "Keep Awake: On" : "Keep Awake: Off").font(.caption)
-        }.padding().frame(width: 290).onAppear { service.start() }
+        }.padding().frame(width: 290)
     }
 }

@@ -120,6 +120,56 @@ struct AgentWatchTests {
         #expect(power.transitions == [true, false, true, false])
     }
 
+    /// Regression guard for the sidebar-navigation lifecycle bug: monitoring
+    /// and the keep-awake assertion belong to the app/service layer
+    /// (`RootView.task` starts once at launch; `SigilApp`'s
+    /// `willTerminateNotification` handler stops once at quit) — never to
+    /// whether the Agent Watch sidebar tab happens to be on screen.
+    /// `AgentWatchView`/`AgentWatchMenuBarView` previously called
+    /// `service.start()`/`service.stop()` from `onAppear`/`onDisappear`,
+    /// which silently tore down background polling and released the power
+    /// assertion the instant a user navigated to any other section. This
+    /// test simulates the app remaining open and continuing to poll across
+    /// many refresh cycles — standing in for the user navigating freely
+    /// between sidebar sections while the service itself is never told to
+    /// stop — and asserts monitoring and the assertion survive untouched
+    /// until an explicit `stop()` (the sole app-termination-equivalent
+    /// action) is called.
+    @Test @MainActor func sidebarNavigationMustNotStopMonitoringOrReleaseAssertion() async {
+        let processProvider = MutableProcessProvider(items: [process("claude", pid: 10)])
+        let power = RecordingPowerManager()
+        let evidence = MutableEvidenceProvider(event: .beganWork)
+        let service = AgentWatchService(
+            discovery: AgentDiscoveryService(provider: processProvider),
+            notifications: AgentNotificationService(delivery: RecordingNotificationDelivery()),
+            power: power,
+            evidenceProvider: evidence,
+            thresholds: .init()
+        )
+
+        await service.refresh(now: Date(timeIntervalSince1970: 200))
+        #expect(power.transitions == [true])
+        #expect(power.isKeepingAwake == true)
+        #expect(service.isKeepingAwake == true)
+
+        // Many further refresh cycles — the only thing that changes in the
+        // background while a user freely opens/closes/switches away from the
+        // Agent Watch tab. None of this may release the assertion or clear
+        // sessions: the agent is still reporting `beganWork` the whole time.
+        for tick in 1...20 {
+            await service.refresh(now: Date(timeIntervalSince1970: 200 + Double(tick)))
+            #expect(power.transitions == [true], "tick \(tick): navigation-equivalent activity must not touch the assertion")
+            #expect(power.isKeepingAwake == true, "tick \(tick): keep-awake must still be held")
+            #expect(!service.sessions.isEmpty, "tick \(tick): monitoring must still be observing the session")
+        }
+
+        // Only an explicit stop() — the app-termination-equivalent action —
+        // may release the assertion.
+        service.stop()
+        #expect(power.transitions == [true, false])
+        #expect(power.isKeepingAwake == false)
+    }
+
     @Test @MainActor func terminalEvidenceSurvivesProcessDisappearanceWithinRetention() async {
         let processProvider = MutableProcessProvider(items: [process("claude", pid: 10)])
         let evidence = MutableEvidenceProvider(event: .beganWork)
