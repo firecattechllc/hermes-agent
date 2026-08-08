@@ -254,6 +254,7 @@ export function runBridgeRequest<T>(request: BridgeRequest): Promise<BridgeRespo
       env: {
         ...process.env,
         PYTHONPATH: sourceRoot,
+        PYTHONDONTWRITEBYTECODE: '1',
         SIGIL_DESKTOP_STATE_DIR: governedNewsStateDirectory()
       },
       stdio: ['pipe', 'pipe', 'pipe']

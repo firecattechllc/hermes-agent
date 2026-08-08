@@ -23,6 +23,7 @@ import { desktopSigilOperatorAdapter } from './desktop-adapter'
 import { GovernedNewsPanel } from './governed-news-panel'
 import { sigilOperatorAdapter as mockSigilOperatorAdapter } from './mock-adapter'
 import { PrimeFleetPanel } from './prime-fleet-panel'
+import { ReconciliationPanel } from './reconciliation-panel'
 import type {
   AlpacaMarketDataStatus,
   AssetCatalogStatus,
@@ -2991,17 +2992,24 @@ export function SigilOperatorView({
             <LaunchControl actionLocked={actionLocked} onAction={setPendingAction} snapshot={snapshot} />
           </div>
         ) : null}
-        {section === 'executions' || section === 'reconciliation' ? (
+        {section === 'executions' ? (
           <div className={cn('py-5', PAGE_INSET_X)}>
             <div className="mb-4">
-              <h2 className="text-sm font-semibold">
-                {section === 'executions' ? 'Simulated executions' : 'Execution reconciliation'}
-              </h2>
+              <h2 className="text-sm font-semibold">Simulated executions</h2>
               <p className="mt-1 text-xs text-(--ui-text-tertiary)">
                 Immutable receipts · outcome-uncertain states never retry automatically
               </p>
             </div>
             <ExecutionTable snapshot={snapshot} />
+          </div>
+        ) : null}
+        {section === 'reconciliation' ? (
+          <div className={cn('py-5', PAGE_INSET_X)}>
+            <ReconciliationPanel
+              onOpenAudit={() => setSection('audit')}
+              onRefresh={() => setReloadGeneration(value => value + 1)}
+              snapshot={snapshot}
+            />
           </div>
         ) : null}
         {section === 'audit' ? (
