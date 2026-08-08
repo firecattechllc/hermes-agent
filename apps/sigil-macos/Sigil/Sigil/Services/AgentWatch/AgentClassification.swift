@@ -29,10 +29,13 @@ nonisolated enum AgentAdapters {
 nonisolated struct AgentStateEvidence: Equatable, Sendable {
     var processAlive: Bool
     var activelyExecuting: Bool = false
+    var idleReason: String?
     var attentionReason: String?
     var waitingReason: String?
     var completionReason: String?
     var failureReason: String?
+    var source: AgentEvidenceSource = .nativeLifecycle
+    var confidence: AgentEvidenceConfidence = .high
 }
 
 nonisolated struct AgentStateClassifier: Sendable {
@@ -41,6 +44,7 @@ nonisolated struct AgentStateClassifier: Sendable {
         if let reason = evidence.failureReason { return (.stuck, reason) }
         if let reason = evidence.completionReason { return (.done, reason) }
         if let reason = evidence.waitingReason { return (.waiting, reason) }
+        if let reason = evidence.idleReason { return (.idle, reason) }
         if evidence.processAlive && evidence.activelyExecuting { return (.working, "Agent reports active work") }
         if evidence.processAlive { return (.unknown, "Process detected; no reliable activity signal") }
         return (.done, "Process exited")

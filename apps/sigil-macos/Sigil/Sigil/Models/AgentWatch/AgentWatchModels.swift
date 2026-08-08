@@ -33,12 +33,24 @@ nonisolated enum AgentKind: String, Codable, CaseIterable, Sendable {
     }
 }
 
+nonisolated enum AgentEvidenceSource: String, Codable, Sendable {
+    case processDiscovery
+    case nativeLifecycle
+}
+
+nonisolated enum AgentEvidenceConfidence: String, Codable, Sendable {
+    case low
+    case high
+}
+
 nonisolated struct AgentWatchSession: Identifiable, Equatable, Sendable {
     let id: String
     let kind: AgentKind
     let displayName: String
     var state: AgentWatchState
     var stateReason: String
+    var evidenceSource: AgentEvidenceSource
+    var evidenceConfidence: AgentEvidenceConfidence
     let processID: Int32
     let parentProcessID: Int32?
     let host: String

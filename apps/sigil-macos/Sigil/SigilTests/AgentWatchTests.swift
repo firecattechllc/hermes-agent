@@ -46,7 +46,10 @@ struct AgentWatchTests {
         #expect(provider.event(hookName: "Notification", notificationType: "permission_prompt") == .approvalRequired)
         #expect(provider.event(hookName: "Notification", notificationType: "idle_prompt") == .waitingForInput)
         #expect(provider.event(hookName: "Stop") == .completed)
-        #expect(provider.event(hookName: "PostToolUse") == nil)
+        #expect(provider.event(hookName: "SessionStart") == .sessionStarted)
+        #expect(provider.event(hookName: "PostToolUse") == .beganWork)
+        #expect(provider.event(hookName: "TaskCompleted") == .completed)
+        #expect(provider.event(hookName: "SessionEnd") == .ended)
     }
 
     @Test func codexStructuredSignalsAreAllowlisted() {
@@ -57,6 +60,9 @@ struct AgentWatchTests {
         #expect(provider.event(method: "turn/completed", terminalStatus: "completed") == .completed)
         #expect(provider.event(method: "turn/completed", terminalStatus: "failed") == .failed)
         #expect(provider.event(method: "item/agentMessage/delta") == nil)
+        #expect(provider.event(method: "SessionStart") == .sessionStarted)
+        #expect(provider.event(method: "PreToolUse") == .beganWork)
+        #expect(provider.event(method: "SessionEnd") == .ended)
     }
 
     @Test func evidenceFileRejectsUnknownFields() throws {
@@ -67,6 +73,39 @@ struct AgentWatchTests {
         try #"{"agent":"claudeCode","processID":10,"event":"beganWork","observedAt":"1970-01-01T00:03:20Z","prompt":"must reject"}"#.write(to: file, atomically: true, encoding: .utf8)
         let provider = LocalAgentStateEvidenceProvider(directory: directory, freshnessInterval: 900)
         #expect(provider.evidence(for: makeSession(state: .unknown), now: Date(timeIntervalSince1970: 200)) == nil)
+    }
+
+    @Test func lifecycleEvidenceUpgradesSourceAndProcessFallbackIsLowConfidence() async {
+        let processProvider = MutableProcessProvider(items: [process("claude", pid: 10)])
+        let evidence = MutableEvidenceProvider(event: .beganWork)
+        let service = await AgentWatchService(
+            discovery: AgentDiscoveryService(provider: processProvider),
+            notifications: AgentNotificationService(delivery: RecordingNotificationDelivery()),
+            power: RecordingPowerManager(), evidenceProvider: evidence,
+            lifecycleIntegration: testLifecycleIntegration(), thresholds: .init()
+        )
+        await service.refresh(now: Date(timeIntervalSince1970: 200))
+        #expect(await service.sessions.first?.evidenceSource == .nativeLifecycle)
+        #expect(await service.sessions.first?.evidenceConfidence == .high)
+        evidence.available = false
+        await service.refresh(now: Date(timeIntervalSince1970: 201))
+        #expect(await service.sessions.first?.state == .unknown)
+        #expect(await service.sessions.first?.evidenceSource == .processDiscovery)
+        #expect(await service.sessions.first?.evidenceConfidence == .low)
+    }
+
+    @Test @MainActor func terminationRemovesOnlyOwnedEvidence() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for name in ["claudeCode-10.json", "codex-11.json", "unrelated.json"] {
+            try Data().write(to: directory.appending(path: name))
+        }
+        let integration = AgentLifecycleIntegration(evidenceDirectory: directory)
+        integration.stop()
+        #expect(!FileManager.default.fileExists(atPath: directory.appending(path: "claudeCode-10.json").path))
+        #expect(!FileManager.default.fileExists(atPath: directory.appending(path: "codex-11.json").path))
+        #expect(FileManager.default.fileExists(atPath: directory.appending(path: "unrelated.json").path))
     }
 
     @Test func staleSourceFallsBackToUnknownAndCanReconnect() throws {
@@ -106,6 +145,7 @@ struct AgentWatchTests {
             notifications: AgentNotificationService(delivery: RecordingNotificationDelivery()),
             power: power,
             evidenceProvider: evidence,
+            lifecycleIntegration: testLifecycleIntegration(),
             thresholds: .init()
         )
         await service.refresh(now: Date(timeIntervalSince1970: 200))
@@ -144,6 +184,7 @@ struct AgentWatchTests {
             notifications: AgentNotificationService(delivery: RecordingNotificationDelivery()),
             power: power,
             evidenceProvider: evidence,
+            lifecycleIntegration: testLifecycleIntegration(),
             thresholds: .init()
         )
 
@@ -178,6 +219,7 @@ struct AgentWatchTests {
             notifications: AgentNotificationService(delivery: RecordingNotificationDelivery()),
             power: RecordingPowerManager(),
             evidenceProvider: evidence,
+            lifecycleIntegration: testLifecycleIntegration(),
             thresholds: AgentWatchThresholds(refreshInterval: .seconds(5), completedRetention: .seconds(30))
         )
         await service.refresh(now: Date(timeIntervalSince1970: 200))
@@ -191,7 +233,14 @@ struct AgentWatchTests {
     }
 
     private func makeSession(state: AgentWatchState) -> AgentWatchSession {
-        AgentWatchSession(id: "claude:10:100", kind: .claudeCode, displayName: "Claude Code", state: state, stateReason: state.label, processID: 10, parentProcessID: 1, host: "This Mac", workingDirectory: nil, associatedApplication: nil, applicationBundleIdentifier: nil, startTime: Date(timeIntervalSince1970: 100), lastActivityTime: nil, lastStateChangeTime: Date(timeIntervalSince1970: 100))
+        AgentWatchSession(id: "claude:10:100", kind: .claudeCode, displayName: "Claude Code", state: state, stateReason: state.label, evidenceSource: .processDiscovery, evidenceConfidence: .low, processID: 10, parentProcessID: 1, host: "This Mac", workingDirectory: nil, associatedApplication: nil, applicationBundleIdentifier: nil, startTime: Date(timeIntervalSince1970: 100), lastActivityTime: nil, lastStateChangeTime: Date(timeIntervalSince1970: 100))
+    }
+
+    @MainActor private func testLifecycleIntegration() -> AgentLifecycleIntegration {
+        AgentLifecycleIntegration(
+            evidenceDirectory: FileManager.default.temporaryDirectory
+                .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        )
     }
 }
 
@@ -208,9 +257,10 @@ private final class MutableProcessProvider: AgentProcessProviding, @unchecked Se
 
 private final class MutableEvidenceProvider: AgentStateEvidenceProviding, @unchecked Sendable {
     var event: SanitizedAgentLifecycleEvent
+    var available = true
     init(event: SanitizedAgentLifecycleEvent) { self.event = event }
     nonisolated func evidence(for session: AgentWatchSession, now: Date) -> AgentStateEvidence? {
-        LocalAgentStateEvidenceProvider.map(event)
+        available ? LocalAgentStateEvidenceProvider.map(event) : nil
     }
 }
 

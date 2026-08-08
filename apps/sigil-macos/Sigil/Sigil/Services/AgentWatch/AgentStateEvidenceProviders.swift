@@ -4,11 +4,13 @@ import Foundation
 /// Payload content, commands, prompts, output, and environment data are not
 /// represented and therefore cannot cross this boundary.
 nonisolated enum SanitizedAgentLifecycleEvent: String, Codable, Sendable {
+    case sessionStarted
     case beganWork
     case waitingForInput
     case approvalRequired
     case completed
     case failed
+    case ended
 }
 
 nonisolated struct SanitizedAgentEvent: Codable, Equatable, Sendable {
@@ -51,6 +53,8 @@ nonisolated struct LocalAgentStateEvidenceProvider: AgentStateEvidenceProviding 
 
     nonisolated static func map(_ event: SanitizedAgentLifecycleEvent) -> AgentStateEvidence {
         switch event {
+        case .sessionStarted:
+            AgentStateEvidence(processAlive: true, idleReason: "Native session started")
         case .beganWork:
             AgentStateEvidence(processAlive: true, activelyExecuting: true)
         case .waitingForInput:
@@ -61,6 +65,8 @@ nonisolated struct LocalAgentStateEvidenceProvider: AgentStateEvidenceProviding 
             AgentStateEvidence(processAlive: true, completionReason: "Agent reported completion")
         case .failed:
             AgentStateEvidence(processAlive: true, failureReason: "Agent reported an unexpected failure")
+        case .ended:
+            AgentStateEvidence(processAlive: false, completionReason: "Native session ended")
         }
     }
 }
@@ -78,25 +84,34 @@ nonisolated extension JSONDecoder {
 nonisolated struct ClaudeCodeStateEvidenceProvider: Sendable {
     nonisolated func event(hookName: String, notificationType: String? = nil) -> SanitizedAgentLifecycleEvent? {
         switch (hookName, notificationType) {
+        case ("SessionStart", _):
+            .sessionStarted
         case ("PermissionRequest", _), ("Notification", "permission_prompt"):
             .approvalRequired
         case ("Notification", "idle_prompt"):
             .waitingForInput
-        case ("PreToolUse", _), ("UserPromptSubmit", _):
+        case ("PreToolUse", _), ("PostToolUse", _), ("PostToolUseFailure", _), ("UserPromptSubmit", _):
             .beganWork
-        case ("Stop", _), ("SessionEnd", _):
+        case ("Stop", _), ("TaskCompleted", _):
             .completed
+        case ("SessionEnd", _):
+            .ended
         default:
             nil
         }
     }
 }
 
-/// Codex app-server/notify lifecycle mapping. Request bodies and turn content
-/// are deliberately ignored; only the method/event name is accepted.
+/// Codex native command-hook lifecycle mapping. Request bodies and turn
+/// content are deliberately ignored; only the allowlisted event name is used.
 nonisolated struct CodexStateEvidenceProvider: Sendable {
     nonisolated func event(method: String, blocking: Bool? = nil, terminalStatus: String? = nil) -> SanitizedAgentLifecycleEvent? {
         switch method {
+        case "SessionStart": .sessionStarted
+        case "UserPromptSubmit", "PreToolUse", "PostToolUse": .beganWork
+        case "PermissionRequest": .approvalRequired
+        case "Stop": .completed
+        case "SessionEnd": .ended
         case "turn/started": .beganWork
         case "item/commandExecution/requestApproval", "item/fileChange/requestApproval", "item/permissions/requestApproval": .approvalRequired
         case "item/tool/requestUserInput" where blocking == true: .waitingForInput

@@ -1,8 +1,16 @@
 import AppKit
 import SwiftUI
 
+@MainActor
+private final class SigilAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillTerminate(_ notification: Notification) {
+        AgentLifecycleIntegration().stop()
+    }
+}
+
 @main
 struct SigilApp: App {
+    @NSApplicationDelegateAdaptor(SigilAppDelegate.self) private var appDelegate
     @StateObject private var agentWatch = AgentWatchService()
 
     var body: some Scene {

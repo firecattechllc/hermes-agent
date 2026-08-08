@@ -48,6 +48,8 @@ final class AgentWatchService: ObservableObject {
             var fresh = fresh
             if let evidence = evidenceProvider.evidence(for: fresh, now: now) {
                 (fresh.state, fresh.stateReason) = AgentStateClassifier().classify(evidence)
+                fresh.evidenceSource = evidence.source
+                fresh.evidenceConfidence = evidence.confidence
                 fresh.lastActivityTime = now
             }
             guard let old = previous[fresh.id] else { return fresh }
@@ -62,6 +64,8 @@ final class AgentWatchService: ObservableObject {
             if let evidence = evidenceProvider.evidence(for: missing, now: now) {
                 let priorState = missing.state
                 (missing.state, missing.stateReason) = AgentStateClassifier().classify(evidence)
+                missing.evidenceSource = evidence.source
+                missing.evidenceConfidence = evidence.confidence
                 if missing.state != priorState { missing.lastStateChangeTime = now }
                 missing.lastActivityTime = now
             }

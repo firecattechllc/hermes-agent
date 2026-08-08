@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code hook adapter that persists only Agent Watch lifecycle metadata."""
+"""Codex command-hook adapter that persists only lifecycle metadata."""
 
 from __future__ import annotations
 
@@ -18,11 +18,8 @@ EVENT_MAP = {
     "UserPromptSubmit": "beganWork",
     "PreToolUse": "beganWork",
     "PostToolUse": "beganWork",
-    "PostToolUseFailure": "beganWork",
     "PermissionRequest": "approvalRequired",
     "Stop": "completed",
-    "StopFailure": "failed",
-    "TaskCompleted": "completed",
     "SessionEnd": "ended",
 }
 
@@ -37,7 +34,6 @@ def parent_pid(pid: int) -> int:
     size = libproc.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
     if size <= 0:
         return 0
-    # pbi_ppid is the seventh uint32 in proc_bsdinfo on Darwin.
     return ctypes.cast(ctypes.byref(info), ctypes.POINTER(ctypes.c_uint32))[6]
 
 
@@ -49,11 +45,11 @@ def process_path(pid: int) -> str:
     return buffer.value.decode("utf-8", errors="ignore")
 
 
-def claude_ancestor() -> int:
+def codex_ancestor() -> int:
     pid = os.getppid()
     for _ in range(12):
         path = process_path(pid).lower()
-        if pathlib.Path(path).name == "claude" or "/claude.app/" in path:
+        if pathlib.Path(path).name in {"codex", "codex-cli"} or "/codex.app/" in path:
             return pid
         pid = parent_pid(pid)
         if pid <= 1:
@@ -62,16 +58,10 @@ def claude_ancestor() -> int:
 
 
 def sanitized_record(payload: dict, pid: int, observed_at: str) -> dict | None:
-    hook = payload.get("hook_event_name")
-    notification = payload.get("notification_type")
-    event = EVENT_MAP.get(hook)
-    if hook == "Notification" and notification == "permission_prompt":
-        event = "approvalRequired"
-    elif hook == "Notification" and notification == "idle_prompt":
-        event = "waitingForInput"
+    event = EVENT_MAP.get(payload.get("hook_event_name"))
     if event is None or pid <= 1:
         return None
-    return {"agent": "claudeCode", "processID": pid, "event": event, "observedAt": observed_at}
+    return {"agent": "codex", "processID": pid, "event": event, "observedAt": observed_at}
 
 
 def sigil_is_running() -> bool:
@@ -90,7 +80,7 @@ def main() -> int:
         return 0
     if not sigil_is_running():
         return 0
-    pid = claude_ancestor()
+    pid = codex_ancestor()
     observed_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     record = sanitized_record(payload, pid, observed_at)
     if record is None:
@@ -100,8 +90,8 @@ def main() -> int:
         "Application Support/SigilDev/AgentWatch/Events"
     )
     target_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    target = target_dir / f"claudeCode-{pid}.json"
-    fd, temporary = tempfile.mkstemp(prefix=".claude-", dir=target_dir)
+    target = target_dir / f"codex-{pid}.json"
+    fd, temporary = tempfile.mkstemp(prefix=".codex-", dir=target_dir)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(record, handle, separators=(",", ":"))
