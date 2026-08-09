@@ -33,24 +33,13 @@
 # any dev-build action and compared after, and the script fails loudly if
 # either changed.
 #
-# READ-ONLY HERMES BRIDGE (Phase 2)
-# ----------------------------------------------------------------------------
-# This script also starts (if not already running) a small local, loopback-
-# only, read-only HTTP shim — apps/sigil/src/sigil/desktop_bridge/http_shim.py
-# — that the native app polls for real backend status. That shim is pointed
-# at its OWN isolated paper-runtime state directory
-# (~/Library/Application Support/SigilDev/paper-runtime), never the one
-# Sigil 3.7 uses (~/Library/Application Support/Sigil/paper-runtime), so
-# nothing this script or the dev app does can affect Sigil 3.7's runtime
-# state. If the shim can't be started (e.g. the Python venv is missing),
-# this script prints a warning and continues — the native app degrades to
-# showing "Bridge Unreachable" rather than failing the build.
+# The governed loopback bridge is an embedded XPC service. Launching SigilDev
+# activates it automatically; this script never starts an external runtime.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}/.."
-REPO_ROOT="$(cd "${PROJECT_ROOT}/../.." && pwd)"
 XCODE_PROJECT="${PROJECT_ROOT}/Sigil/Sigil.xcodeproj"
 SCHEME="Sigil"
 CONFIGURATION="Debug"
@@ -63,15 +52,6 @@ VERIFY_MODE=0
 EXPECTED_DEV_BUNDLE_ID="com.firecattechnology.Sigil.dev"
 LEGACY_BUNDLE_ID="com.firecattechnology.sigil"
 
-# Hermes read-only bridge shim constants.
-BRIDGE_HOST="127.0.0.1"
-BRIDGE_PORT="8799"
-BRIDGE_PYTHON="${REPO_ROOT}/apps/sigil/.venv/bin/python"
-BRIDGE_PYTHONPATH="${REPO_ROOT}/apps/sigil/src"
-BRIDGE_STATE_DIR="${HOME}/Library/Application Support/SigilDev/paper-runtime"
-BRIDGE_RUN_DIR="${PROJECT_ROOT}/.dev-support"
-BRIDGE_LOG_FILE="${BRIDGE_RUN_DIR}/hermes-bridge-shim.log"
-BRIDGE_PID_FILE="${BRIDGE_RUN_DIR}/hermes-bridge-shim.pid"
 
 for arg in "$@"; do
   case "$arg" in
@@ -211,132 +191,6 @@ terminate_dev_build() {
     kill -9 "$pid" 2>/dev/null || true
   fi
 }
-
-# --- Prime credentials (Phase 3C) -------------------------------------------
-# HERMES_PRIME_BASE_URL/HERMES_PRIME_AUTH_TOKEN are not stored anywhere in
-# this repo, in Swift source, or in this script. On a Mac that already runs
-# the real com.hermes.mac-worker LaunchAgent, they already exist there —
-# this reuses that exact, already-installed, already-trusted credential
-# source instead of inventing a second one. The token is read into a shell
-# variable and exported only into the bridge shim's own child-process
-# environment; it is never echoed, never logged, and never written to any
-# file this script creates. If the plist or those keys aren't present
-# (e.g. on a Mac that doesn't run the mac-worker), this is a silent no-op —
-# prime_fleet_status simply keeps reporting configured:false, honestly.
-MAC_WORKER_PLIST="$HOME/Library/LaunchAgents/com.hermes.mac-worker.plist"
-DISCOVERED_PRIME_BASE_URL=""
-DISCOVERED_PRIME_AUTH_TOKEN=""
-
-load_prime_credentials() {
-  if [[ ! -f "$MAC_WORKER_PLIST" ]] || ! command -v /usr/libexec/PlistBuddy >/dev/null 2>&1; then
-    echo "==> Prime credentials: none found (no mac-worker LaunchAgent on this Mac)"
-    return
-  fi
-  DISCOVERED_PRIME_BASE_URL="$(/usr/libexec/PlistBuddy -c "Print :EnvironmentVariables:HERMES_PRIME_BASE_URL" "$MAC_WORKER_PLIST" 2>/dev/null || true)"
-  DISCOVERED_PRIME_AUTH_TOKEN="$(/usr/libexec/PlistBuddy -c "Print :EnvironmentVariables:HERMES_PRIME_AUTH_TOKEN" "$MAC_WORKER_PLIST" 2>/dev/null || true)"
-  if [[ -n "$DISCOVERED_PRIME_BASE_URL" && -n "$DISCOVERED_PRIME_AUTH_TOKEN" ]]; then
-    # Base URL is not a secret; the token is never printed.
-    echo "==> Prime credentials: found (reusing com.hermes.mac-worker), base_url=$DISCOVERED_PRIME_BASE_URL"
-  else
-    DISCOVERED_PRIME_BASE_URL=""
-    DISCOVERED_PRIME_AUTH_TOKEN=""
-    echo "==> Prime credentials: mac-worker LaunchAgent present but keys not found — leaving unconfigured"
-  fi
-}
-
-# --- Alpaca paper credentials (Settings screen, Keychain-backed) -----------
-# The Settings screen stores these in this Mac's Keychain under a service
-# name unique to the Sigil 4.0 dev identity
-# (com.firecattechnology.Sigil.dev.credentials) -- never in a file, never in
-# git, never logged. Reading them here and exporting into the shim's own
-# child-process environment mirrors the exact same pattern as the Prime
-# credentials above. If nothing has been saved in Settings yet, this is a
-# silent no-op -- the backend's own `_configured_credentials()` fallback to
-# ALPACA_API_KEY/ALPACA_SECRET_KEY simply finds nothing, honestly.
-DISCOVERED_ALPACA_API_KEY=""
-DISCOVERED_ALPACA_SECRET_KEY=""
-
-load_alpaca_credentials() {
-  DISCOVERED_ALPACA_API_KEY="$(security find-generic-password -s "com.firecattechnology.Sigil.dev.credentials" -a "alpaca_api_key" -w 2>/dev/null || true)"
-  DISCOVERED_ALPACA_SECRET_KEY="$(security find-generic-password -s "com.firecattechnology.Sigil.dev.credentials" -a "alpaca_secret_key" -w 2>/dev/null || true)"
-  if [[ -n "$DISCOVERED_ALPACA_API_KEY" && -n "$DISCOVERED_ALPACA_SECRET_KEY" ]]; then
-    echo "==> Alpaca paper credentials: found in Keychain (Settings)"
-  else
-    DISCOVERED_ALPACA_API_KEY=""
-    DISCOVERED_ALPACA_SECRET_KEY=""
-    echo "==> Alpaca paper credentials: none saved in Settings"
-  fi
-}
-
-# --- Read-only Hermes bridge shim (start if not already running) -----------
-bridge_is_up() {
-  curl -s -o /dev/null -m 2 -w "%{http_code}" "http://${BRIDGE_HOST}:${BRIDGE_PORT}/health" 2>/dev/null | grep -q "^200$"
-}
-
-ensure_hermes_bridge_shim() {
-  echo "==> Checking Hermes read-only bridge shim (http://${BRIDGE_HOST}:${BRIDGE_PORT})..."
-
-  if bridge_is_up; then
-    echo "==> Bridge shim already running and healthy"
-    return
-  fi
-
-  if [[ ! -x "$BRIDGE_PYTHON" ]]; then
-    echo "==> WARNING: no Python venv at $BRIDGE_PYTHON; skipping bridge shim." >&2
-    echo "    The dev app will show 'Bridge Unreachable' for live fields." >&2
-    return
-  fi
-
-  mkdir -p "$BRIDGE_RUN_DIR" "$BRIDGE_STATE_DIR"
-
-  # Isolation: SIGIL_DESKTOP_STATE_DIR points at a dedicated SigilDev state
-  # directory, never Sigil 3.7's own paper-runtime directory.
-  (
-    export PYTHONPATH="$BRIDGE_PYTHONPATH"
-    export PYTHONDONTWRITEBYTECODE=1
-    export SIGIL_DESKTOP_STATE_DIR="$BRIDGE_STATE_DIR"
-    export SIGIL_DEV_BRIDGE_HOST="$BRIDGE_HOST"
-    export SIGIL_DEV_BRIDGE_PORT="$BRIDGE_PORT"
-    # Opt in to the read-only Mac Ollama service/inventory probe (Phase 3A).
-    # Off by default everywhere else, including Sigil 3.7 — see mac_ollama.py.
-    # This does NOT admit any model into Sigil's approved manifest and does
-    # NOT change which provider Sigil would use; it only adds an honest
-    # "is Ollama reachable, what's installed, what's loaded" read.
-    export SIGIL_AI_MAC_OLLAMA_PROBE_SERVICE=1
-    # Reuse the real Prime credentials discovered above, if any (Phase 3C).
-    # Scoped to this one child process's environment only.
-    if [[ -n "$DISCOVERED_PRIME_BASE_URL" ]]; then
-      export HERMES_PRIME_BASE_URL="$DISCOVERED_PRIME_BASE_URL"
-      export HERMES_PRIME_AUTH_TOKEN="$DISCOVERED_PRIME_AUTH_TOKEN"
-    fi
-    # Reuse any Alpaca paper credentials saved via the Settings screen, if
-    # any. Scoped to this one child process's environment only.
-    if [[ -n "$DISCOVERED_ALPACA_API_KEY" ]]; then
-      export ALPACA_API_KEY="$DISCOVERED_ALPACA_API_KEY"
-      export ALPACA_SECRET_KEY="$DISCOVERED_ALPACA_SECRET_KEY"
-    fi
-    cd "$REPO_ROOT"
-    nohup "$BRIDGE_PYTHON" -m sigil.desktop_bridge.http_shim >"$BRIDGE_LOG_FILE" 2>&1 &
-    echo $! >"$BRIDGE_PID_FILE"
-  )
-  disown 2>/dev/null || true
-
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if bridge_is_up; then
-      echo "==> Bridge shim started: pid $(cat "$BRIDGE_PID_FILE" 2>/dev/null), state dir: $BRIDGE_STATE_DIR"
-      return
-    fi
-    sleep 0.5
-  done
-
-  echo "==> WARNING: bridge shim did not become healthy within 5s; see $BRIDGE_LOG_FILE" >&2
-  echo "    The dev app will show 'Bridge Unreachable' for live fields." >&2
-}
-
-# --- Start the read-only Hermes bridge shim, if needed ---------------------
-load_prime_credentials
-load_alpaca_credentials
-ensure_hermes_bridge_shim
 
 # --- Regression check (before): record installed Sigil 3.7 state -----------
 echo "==> Checking installed Sigil 3.7 app (bundle id $LEGACY_BUNDLE_ID)..."

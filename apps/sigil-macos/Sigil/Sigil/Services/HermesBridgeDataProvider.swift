@@ -1,7 +1,7 @@
 import Foundation
 
 /// Reads real, read-only status from the governed Hermes backend via the
-/// local bridge shim and maps it into `MissionControlSnapshot`.
+/// embedded, loopback-only XPC bridge and maps it into `MissionControlSnapshot`.
 ///
 /// Every field here is either genuinely live (state derived from the
 /// backend's own semantic health values) or an honest `.unavailable` /
@@ -98,7 +98,7 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
             return StatusEntry(
                 title: "Hermes Bridge",
                 state: .offline,
-                detail: "Unreachable at \(HermesBridgeClient.defaultBaseURLString). Start it via script/build_and_run.sh."
+                detail: "Embedded bridge unavailable at \(HermesBridgeClient.defaultBaseURLString)."
             )
         }
         return StatusEntry(

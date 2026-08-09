@@ -34,8 +34,7 @@ nonisolated struct LocalAgentStateEvidenceProvider: AgentStateEvidenceProviding 
     let freshnessInterval: TimeInterval
 
     nonisolated init(
-        directory: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appending(path: "SigilDev/AgentWatch/Events", directoryHint: .isDirectory),
+        directory: URL = AgentWatchPaths.evidenceDirectory(),
         freshnessInterval: TimeInterval = 15 * 60
     ) {
         self.directory = directory
@@ -112,6 +111,29 @@ nonisolated struct LocalAgentStateEvidenceProvider: AgentStateEvidenceProviding 
         case .ended:
             AgentStateEvidence(processAlive: false, completionReason: "Native session ended")
         }
+    }
+}
+
+nonisolated enum AgentWatchPaths {
+    static func evidenceDirectory(
+        bundle: Bundle = .main,
+        applicationSupportDirectory: URL = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        )[0]
+    ) -> URL {
+        guard let identifier = bundle.bundleIdentifier,
+              let contractURL = bundle.url(forResource: "agent_watch_paths", withExtension: "json"),
+              let data = try? Data(contentsOf: contractURL),
+              let mapping = try? JSONDecoder().decode([String: String].self, from: data),
+              let relativePath = relativePath(bundleIdentifier: identifier, mapping: mapping)
+        else {
+            preconditionFailure("Unsupported or missing Agent Watch product identity")
+        }
+        return applicationSupportDirectory.appending(path: relativePath, directoryHint: .isDirectory)
+    }
+
+    static func relativePath(bundleIdentifier: String, mapping: [String: String]) -> String? {
+        mapping[bundleIdentifier]
     }
 }
 

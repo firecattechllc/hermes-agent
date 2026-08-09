@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import pathlib
+import plistlib
 import shlex
 import tempfile
 
@@ -39,18 +40,44 @@ def merge_hooks(config: dict, events: tuple[str, ...], command: str) -> bool:
         groups = hooks.setdefault(event, [])
         if not isinstance(groups, list):
             raise ValueError(f"refusing to replace non-list hook event: {event}")
-        already_present = any(
-            isinstance(group, dict)
-            and any(
-                isinstance(hook, dict) and hook.get("command") == command
-                for hook in group.get("hooks", [])
-            )
-            for group in groups
-        )
-        if not already_present:
-            groups.append({"hooks": [{"type": "command", "command": command}]})
-            changed = True
+        original = list(groups)
+        filtered = []
+        for group in groups:
+            if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+                filtered.append(group)
+                continue
+            retained = [
+                hook for hook in group["hooks"]
+                if not (
+                    isinstance(hook, dict)
+                    and (
+                        "agent_watch_" in str(hook.get("command", ""))
+                        or "sigil-agent-watch-" in str(hook.get("command", ""))
+                        or hook.get("command") == command
+                    )
+                )
+            ]
+            if retained:
+                replacement = dict(group)
+                replacement["hooks"] = retained
+                filtered.append(replacement)
+        groups[:] = filtered
+        groups.append({"hooks": [{"type": "command", "command": command}]})
+        changed = groups != original or changed
     return changed
+
+
+def emitter_product(project: pathlib.Path) -> tuple[pathlib.Path, str]:
+    installed = pathlib.Path("/Applications/Sigil.app/Contents/Resources")
+    if (installed / "agent_watch_codex_emitter.py").is_file() and (
+        installed / "agent_watch_claude_emitter.py"
+    ).is_file():
+        info = plistlib.loads((installed.parent / "Info.plist").read_bytes())
+        identifier = info.get("CFBundleIdentifier")
+        if identifier != "com.firecattechnology.sigil.macos":
+            raise ValueError("installed Sigil has unexpected bundle identifier")
+        return installed, identifier
+    return project / "Sigil/Sigil/Support", "com.firecattechnology.Sigil.dev"
 
 
 def atomic_write(path: pathlib.Path, value: dict) -> None:
@@ -76,7 +103,7 @@ def main() -> int:
     args = parser.parse_args()
 
     project = pathlib.Path(__file__).resolve().parents[1]
-    support = project / "Sigil/Sigil/Support"
+    support, bundle_identifier = emitter_product(project)
     targets = (
         (args.home / ".claude/settings.json", CLAUDE_EVENTS, support / "agent_watch_claude_emitter.py"),
         (args.home / ".codex/hooks.json", CODEX_EVENTS, support / "agent_watch_codex_emitter.py"),
@@ -84,7 +111,10 @@ def main() -> int:
     for path, events, emitter in targets:
         if not emitter.is_file():
             raise FileNotFoundError(f"hook emitter missing: {emitter}")
-        command = f"/usr/bin/python3 {shlex.quote(str(emitter))}"
+        command = (
+            f"/usr/bin/python3 {shlex.quote(str(emitter))} "
+            f"--bundle-identifier {shlex.quote(bundle_identifier)}"
+        )
         config = load_object(path)
         changed = merge_hooks(config, events, command)
         if args.install and changed:

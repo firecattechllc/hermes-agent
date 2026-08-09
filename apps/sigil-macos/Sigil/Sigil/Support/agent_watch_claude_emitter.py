@@ -5,13 +5,15 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import argparse
 import datetime
 import json
 import os
 import pathlib
-import subprocess
 import sys
 import tempfile
+
+from agent_watch_paths import evidence_directory
 
 EVENT_MAP = {
     "SessionStart": "sessionStarted",
@@ -74,31 +76,23 @@ def sanitized_record(payload: dict, pid: int, observed_at: str) -> dict | None:
     return {"agent": "claudeCode", "processID": pid, "event": event, "observedAt": observed_at}
 
 
-def sigil_is_running() -> bool:
-    return subprocess.run(
-        ["/usr/bin/pgrep", "-x", "SigilDev"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    ).returncode == 0
-
-
 def main() -> int:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--bundle-identifier", required=True)
+    args = parser.parse_args()
     try:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, OSError):
-        return 0
-    if not sigil_is_running():
         return 0
     pid = claude_ancestor()
     observed_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     record = sanitized_record(payload, pid, observed_at)
     if record is None:
         return 0
-    target_dir = pathlib.Path.home() / (
-        "Library/Containers/com.firecattechnology.Sigil.dev/Data/Library/"
-        "Application Support/SigilDev/AgentWatch/Events"
-    )
+    try:
+        target_dir = evidence_directory(args.bundle_identifier)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return 0
     target_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     target = target_dir / f"claudeCode-{pid}.json"
     fd, temporary = tempfile.mkstemp(prefix=".claude-", dir=target_dir)

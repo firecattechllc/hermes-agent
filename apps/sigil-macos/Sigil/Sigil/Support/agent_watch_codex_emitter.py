@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import argparse
 import datetime
 import json
 import os
@@ -12,6 +13,8 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+
+from agent_watch_paths import evidence_directory
 
 EVENT_MAP = {
     "SessionStart": "sessionStarted",
@@ -96,31 +99,58 @@ def sanitized_record(payload: dict, pid: int, observed_at: str) -> dict | None:
     return {"agent": "codex", "processID": pid, "event": event, "observedAt": observed_at}
 
 
-def sigil_is_running() -> bool:
-    return subprocess.run(
-        ["/usr/bin/pgrep", "-x", "SigilDev"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    ).returncode == 0
+def transcript_owner_pid(payload: dict, *, runner=subprocess.run) -> int:
+    """Resolve the sole Codex process holding the hook's exact transcript."""
+    value = payload.get("transcript_path")
+    if not isinstance(value, str) or not value:
+        return 0
+    transcript = pathlib.Path(value)
+    if not transcript.is_file():
+        return 0
+    try:
+        result = runner(
+            ["/usr/sbin/lsof", "-t", "--", str(transcript)],
+            check=False, capture_output=True, text=True, timeout=2,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    owners = set()
+    for line in result.stdout.splitlines():
+        try:
+            pid = int(line)
+        except ValueError:
+            continue
+        path = process_path(pid).lower()
+        if pathlib.Path(path).name in {"codex", "codex-cli"} or "/codex.app/" in path:
+            owners.add(pid)
+    return owners.pop() if len(owners) == 1 else 0
+
+
+def process_id(payload: dict) -> int:
+    """Resolve a supplied test PID, exact transcript owner, or Codex ancestor."""
+    supplied = payload.get("process_id")
+    if isinstance(supplied, int) and not isinstance(supplied, bool) and supplied > 1:
+        return supplied
+    return transcript_owner_pid(payload) or codex_ancestor()
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--bundle-identifier", required=True)
+    args = parser.parse_args()
     try:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, OSError):
         return 0
-    if not sigil_is_running():
-        return 0
-    pid = codex_ancestor()
+    pid = process_id(payload)
     observed_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     record = sanitized_record(payload, pid, observed_at)
     if record is None:
         return 0
-    target_dir = pathlib.Path.home() / (
-        "Library/Containers/com.firecattechnology.Sigil.dev/Data/Library/"
-        "Application Support/SigilDev/AgentWatch/Events"
-    )
+    try:
+        target_dir = evidence_directory(args.bundle_identifier)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return 0
     target_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     target = target_dir / f"codex-{pid}.json"
     fd, temporary = tempfile.mkstemp(prefix=".codex-", dir=target_dir)

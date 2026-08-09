@@ -3,6 +3,20 @@ import Testing
 @testable import SigilDev
 
 struct AgentWatchTests {
+    @Test func debugProductUsesItsExactApplicationSupportPath() {
+        let root = URL(filePath: "/tmp/Application Support", directoryHint: .isDirectory)
+        #expect(AgentWatchPaths.evidenceDirectory(applicationSupportDirectory: root).path == "/tmp/Application Support/SigilDev/AgentWatch/Events")
+    }
+
+    @Test func releaseAndDebugProductIdentitiesResolveIndependently() {
+        let mapping = [
+            "com.firecattechnology.sigil.macos": "Sigil/AgentWatch/Events",
+            "com.firecattechnology.Sigil.dev": "SigilDev/AgentWatch/Events",
+        ]
+        #expect(AgentWatchPaths.relativePath(bundleIdentifier: "com.firecattechnology.sigil.macos", mapping: mapping) == "Sigil/AgentWatch/Events")
+        #expect(AgentWatchPaths.relativePath(bundleIdentifier: "com.firecattechnology.Sigil.dev", mapping: mapping) == "SigilDev/AgentWatch/Events")
+        #expect(AgentWatchPaths.relativePath(bundleIdentifier: "unknown", mapping: mapping) == nil)
+    }
     private func process(_ name: String, path: String? = nil, pid: Int32 = 42) -> AgentProcessSnapshot {
         AgentProcessSnapshot(processID: pid, parentProcessID: 1, executablePath: path ?? "/usr/local/bin/\(name)", executableName: name, arguments: [], startTime: Date(timeIntervalSince1970: 100), associatedApplication: nil, applicationBundleIdentifier: nil)
     }

@@ -7,8 +7,7 @@ final class AgentLifecycleIntegration {
     private let evidenceDirectory: URL
 
     nonisolated init(
-        evidenceDirectory: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appending(path: "SigilDev/AgentWatch/Events", directoryHint: .isDirectory)
+        evidenceDirectory: URL = AgentWatchPaths.evidenceDirectory()
     ) {
         self.evidenceDirectory = evidenceDirectory
     }
