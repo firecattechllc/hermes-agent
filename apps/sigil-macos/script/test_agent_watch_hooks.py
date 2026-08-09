@@ -10,8 +10,60 @@ SPEC = importlib.util.spec_from_file_location("installer", SCRIPT_DIR / "install
 installer = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(installer)
 
+CODEX_EMITTER_PATH = (
+    SCRIPT_DIR.parent / "Sigil/Sigil/Support/agent_watch_codex_emitter.py"
+)
+
+
+def load_codex_emitter():
+    spec = importlib.util.spec_from_file_location("codex_emitter", CODEX_EMITTER_PATH)
+    emitter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(emitter)
+    return emitter
+
 
 class AgentWatchHookTests(unittest.TestCase):
+    def test_codex_parent_pid_uses_documented_libproc_field(self):
+        emitter = load_codex_emitter()
+        class LibProc:
+            def proc_pidinfo(self, pid, flavor, argument, pointer, size):
+                self.call = (pid, flavor, argument, size)
+                pointer._obj.pbi_ppid = 10640
+                return size
+
+        library = LibProc()
+        self.assertEqual(emitter.parent_pid(988, library=library), 10640)
+        self.assertEqual(library.call, (988, 3, 0, 136))
+
+    def test_codex_ancestor_traverses_multiple_levels(self):
+        emitter = load_codex_emitter()
+        parents = {300: 200, 200: 100, 100: 1}
+        paths = {300: "/bin/zsh", 200: "/usr/bin/python3", 100: "/Applications/Codex.app/Contents/MacOS/codex"}
+        self.assertEqual(
+            emitter.codex_ancestor(
+                start_pid=300,
+                parent_resolver=lambda pid: parents[pid],
+                path_resolver=lambda pid: paths[pid],
+            ),
+            100,
+        )
+
+    def test_codex_ancestor_returns_zero_without_match_or_parent(self):
+        emitter = load_codex_emitter()
+        self.assertEqual(
+            emitter.codex_ancestor(
+                start_pid=300,
+                parent_resolver=lambda _pid: 0,
+                path_resolver=lambda _pid: "/bin/zsh",
+            ),
+            0,
+        )
+        class FailedLibProc:
+            def proc_pidinfo(self, *_args):
+                return 0
+
+        self.assertEqual(emitter.parent_pid(999999, library=FailedLibProc()), 0)
+
     def test_merge_preserves_unrelated_hooks_and_is_idempotent(self):
         config = {"other": 7, "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "existing"}]}]}}
         self.assertTrue(installer.merge_hooks(config, ("PreToolUse", "Stop"), "sigil"))

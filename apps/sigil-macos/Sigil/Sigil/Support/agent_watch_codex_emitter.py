@@ -23,18 +23,45 @@ EVENT_MAP = {
     "SessionEnd": "ended",
 }
 
-
 class ProcBSDInfo(ctypes.Structure):
-    _fields_ = [("_opaque", ctypes.c_byte * 136)]
+    """Documented proc_bsdinfo layout from macOS libproc.h."""
+
+    _fields_ = [
+        ("pbi_flags", ctypes.c_uint32),
+        ("pbi_status", ctypes.c_uint32),
+        ("pbi_xstatus", ctypes.c_uint32),
+        ("pbi_pid", ctypes.c_uint32),
+        ("pbi_ppid", ctypes.c_uint32),
+        ("pbi_uid", ctypes.c_uint32),
+        ("pbi_gid", ctypes.c_uint32),
+        ("pbi_ruid", ctypes.c_uint32),
+        ("pbi_rgid", ctypes.c_uint32),
+        ("pbi_svuid", ctypes.c_uint32),
+        ("pbi_svgid", ctypes.c_uint32),
+        ("rfu_1", ctypes.c_uint32),
+        ("pbi_comm", ctypes.c_char * 16),
+        ("pbi_name", ctypes.c_char * 32),
+        ("pbi_nfiles", ctypes.c_uint32),
+        ("pbi_pgid", ctypes.c_uint32),
+        ("pbi_pjobc", ctypes.c_uint32),
+        ("e_tdev", ctypes.c_uint32),
+        ("e_tpgid", ctypes.c_uint32),
+        ("pbi_nice", ctypes.c_int32),
+        ("pbi_start_tvsec", ctypes.c_uint64),
+        ("pbi_start_tvusec", ctypes.c_uint64),
+    ]
 
 
-def parent_pid(pid: int) -> int:
-    libproc = ctypes.CDLL(ctypes.util.find_library("proc") or "/usr/lib/libproc.dylib")
+def parent_pid(pid: int, *, library=None) -> int:
+    """Return only the documented parent PID field from macOS libproc."""
+    libproc = library or ctypes.CDLL(
+        ctypes.util.find_library("proc") or "/usr/lib/libproc.dylib"
+    )
     info = ProcBSDInfo()
-    size = libproc.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
-    if size <= 0:
-        return 0
-    return ctypes.cast(ctypes.byref(info), ctypes.POINTER(ctypes.c_uint32))[6]
+    size = libproc.proc_pidinfo(
+        pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info)
+    )
+    return int(info.pbi_ppid) if size == ctypes.sizeof(info) else 0
 
 
 def process_path(pid: int) -> str:
@@ -45,13 +72,18 @@ def process_path(pid: int) -> str:
     return buffer.value.decode("utf-8", errors="ignore")
 
 
-def codex_ancestor() -> int:
-    pid = os.getppid()
+def codex_ancestor(
+    *,
+    start_pid: int | None = None,
+    parent_resolver=parent_pid,
+    path_resolver=process_path,
+) -> int:
+    pid = start_pid if start_pid is not None else os.getppid()
     for _ in range(12):
-        path = process_path(pid).lower()
+        path = path_resolver(pid).lower()
         if pathlib.Path(path).name in {"codex", "codex-cli"} or "/codex.app/" in path:
             return pid
-        pid = parent_pid(pid)
+        pid = parent_resolver(pid)
         if pid <= 1:
             break
     return 0
