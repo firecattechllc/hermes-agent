@@ -26,10 +26,10 @@ struct LaunchView: View {
 
         var message: String {
             switch self {
-            case .activate: return "This starts the governed paper-only automation lifecycle on this isolated dev instance. No live broker submission will ever occur."
-            case .deactivate: return "This deactivates paper automation and engages the kill switch on this isolated dev instance."
-            case .pause: return "This pauses paper automation on this isolated dev instance."
-            case .resume: return "This resumes previously-activated paper automation on this isolated dev instance."
+            case .activate: return "This starts the governed paper-only automation lifecycle when a governed backend is configured. No live broker submission will ever occur."
+            case .deactivate: return "This deactivates configured paper automation and engages the kill switch."
+            case .pause: return "This pauses configured paper automation."
+            case .resume: return "This resumes previously-activated configured paper automation."
             }
         }
     }
@@ -52,13 +52,20 @@ struct LaunchView: View {
                             }
                             HStack {
                                 Text("Kill switch"); Spacer()
-                                StatusBadge(state: status.killSwitch ? .offline : .connected)
+                                StatusBadge(state: status.killSwitch ? .connected : .degraded)
                             }
                             if let message = store.lastActionMessage {
                                 Text(message).font(.caption).foregroundStyle(.secondary)
                             }
                             if let error = store.errorMessage {
                                 Text(error).font(.caption).foregroundStyle(.red)
+                            }
+                            if status.lifecycleActionsAvailable == false {
+                                StatusRowView(entry: StatusEntry(
+                                    title: "Governed Backend",
+                                    state: .notConfigured,
+                                    detail: status.lifecycleUnavailableReason ?? "Lifecycle actions are not available."
+                                ))
                             }
                         }
                     } else {
@@ -73,13 +80,13 @@ struct LaunchView: View {
                             .foregroundStyle(.secondary)
                         HStack(spacing: 12) {
                             Button("Activate") { pendingAction = .activate }
-                                .disabled(store.isPerformingAction || (store.status?.activated ?? false))
+                                .disabled(store.isPerformingAction || !(store.status?.lifecycleActionsAvailable ?? false) || (store.status?.activated ?? false))
                             Button("Pause") { pendingAction = .pause }
-                                .disabled(store.isPerformingAction || !(store.status?.activated ?? false) || (store.status?.paused ?? false))
+                                .disabled(store.isPerformingAction || !(store.status?.lifecycleActionsAvailable ?? false) || !(store.status?.activated ?? false) || (store.status?.paused ?? false))
                             Button("Resume") { pendingAction = .resume }
-                                .disabled(store.isPerformingAction || !(store.status?.paused ?? false))
+                                .disabled(store.isPerformingAction || !(store.status?.lifecycleActionsAvailable ?? false) || !(store.status?.paused ?? false))
                             Button("Deactivate", role: .destructive) { pendingAction = .deactivate }
-                                .disabled(store.isPerformingAction || !(store.status?.activated ?? false))
+                                .disabled(store.isPerformingAction || !(store.status?.lifecycleActionsAvailable ?? false) || !(store.status?.activated ?? false))
                             if store.isPerformingAction {
                                 ProgressView().controlSize(.small)
                             }

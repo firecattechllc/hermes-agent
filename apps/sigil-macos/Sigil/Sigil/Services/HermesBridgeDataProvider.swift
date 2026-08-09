@@ -55,7 +55,7 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
     // for the badge; the precise backend wording always still appears in the
     // row's detail text.
 
-    private static func state(forBackendHealth raw: String) -> ServiceState {
+    static func state(forBackendHealth raw: String) -> ServiceState {
         switch raw {
         case "healthy":
             return .connected
@@ -63,7 +63,11 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
             return .degraded
         case "disabled":
             return .disabled
-        case "empty", "unconfigured", "not_ready":
+        case "empty":
+            return .noData
+        case "unconfigured", "not_configured":
+            return .notConfigured
+        case "not_ready":
             return .unavailable
         default:
             // "corrupt", "blocked", "identity_mismatch", "configuration_invalid",
@@ -72,11 +76,12 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
         }
     }
 
-    private static func state(forConnection raw: String) -> ServiceState {
+    static func state(forConnection raw: String) -> ServiceState {
         switch raw {
         case "connected": return .connected
         case "degraded": return .degraded
         case "disconnected": return .offline
+        case "not_configured": return .notConfigured
         default: return .unavailable
         }
     }
@@ -117,7 +122,9 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
         return StatusEntry(
             title: "Runtime Health",
             state: state(forBackendHealth: visibility.health),
-            detail: "Governed backend reports runtime health: \(visibility.health)"
+            detail: visibility.health == "not_configured"
+                ? "Bridge connected; governed paper-runtime backend not configured."
+                : "Governed backend reports runtime health: \(visibility.health)"
         )
     }
 
@@ -128,7 +135,9 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
         return StatusEntry(
             title: "Connection State",
             state: state(forConnection: visibility.connectionState),
-            detail: "Backend connection state: \(visibility.connectionState)"
+            detail: visibility.connectionState == "not_configured"
+                ? "No governed backend connection is configured; the embedded bridge remains available."
+                : "Backend connection state: \(visibility.connectionState)"
         )
     }
 
@@ -138,10 +147,10 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
         }
         return StatusEntry(
             title: "Paper Runtime State",
-            state: visibility.paperExecutionAvailable ? .connected : .degraded,
+            state: visibility.paperExecutionAvailable ? .connected : (visibility.health == "not_configured" ? .notConfigured : .degraded),
             detail: visibility.paperExecutionAvailable
                 ? "Paper execution available (paper-only; no broker submission)."
-                : "Paper execution not currently available — see automation/authorization state."
+                : (visibility.health == "not_configured" ? "Paper runtime is optional and not configured on this Mac." : "Paper execution not currently available — see automation/authorization state.")
         )
     }
 
@@ -171,7 +180,7 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
             state: orchestrationState,
             detail: orchestration.enabled
                 ? "active: \(orchestration.activeCount) · completed: \(orchestration.completedCount) · failed: \(orchestration.failedCount) · paused: \(orchestration.pausedCount)"
-                : "Orchestration is not enabled on this backend."
+                : "Optional orchestration is disabled by configuration."
         )
     }
 
@@ -185,12 +194,14 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
         } else if ai.configuredModelCount > 0 {
             registryState = .degraded
         } else {
-            registryState = .disabled
+            registryState = .notConfigured
         }
         return StatusEntry(
             title: "Model Registry",
             state: registryState,
-            detail: "\(ai.availableModelCount)/\(ai.configuredModelCount) models available · revision: \(ai.registryRevision)"
+            detail: ai.configuredModelCount == 0
+                ? "No model registry is configured (optional)."
+                : "\(ai.availableModelCount)/\(ai.configuredModelCount) models available · revision: \(ai.registryRevision)"
         )
     }
 
@@ -216,7 +227,7 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
             return StatusEntry(title: "Ollama Service", state: .offline, detail: "Bridge unreachable — no service data.")
         }
         guard let reachable = macOllama.serviceReachable else {
-            return StatusEntry(title: "Ollama Service", state: .unavailable, detail: "Service probe not enabled on this backend.")
+            return StatusEntry(title: "Ollama Service", state: .optional, detail: "Optional local AI is disabled; service probe was not requested.")
         }
         return StatusEntry(
             title: "Ollama Service",
@@ -230,14 +241,14 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
             return StatusEntry(title: "Installed Models", state: .offline, detail: "Bridge unreachable — no model data.")
         }
         guard let reachable = macOllama.serviceReachable, let installed = macOllama.installedModels else {
-            return StatusEntry(title: "Installed Models", state: .unavailable, detail: "Service probe not enabled on this backend.")
+            return StatusEntry(title: "Installed Models", state: .optional, detail: "Optional local AI is disabled; installed models were not queried.")
         }
         guard reachable else {
             return StatusEntry(title: "Installed Models", state: .offline, detail: "Ollama service unreachable.")
         }
         return StatusEntry(
             title: "Installed Models",
-            state: installed.isEmpty ? .unavailable : .connected,
+            state: installed.isEmpty ? .noData : .connected,
             detail: installed.isEmpty ? "No models installed in Ollama." : "\(installed.count) installed: \(modelSummaryList(installed))"
         )
     }
@@ -247,7 +258,7 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
             return StatusEntry(title: "Loaded Models", state: .offline, detail: "Bridge unreachable — no model data.")
         }
         guard let reachable = macOllama.serviceReachable, let running = macOllama.runningModels else {
-            return StatusEntry(title: "Loaded Models", state: .unavailable, detail: "Service probe not enabled on this backend.")
+            return StatusEntry(title: "Loaded Models", state: .optional, detail: "Optional local AI is disabled; loaded models were not queried.")
         }
         guard reachable else {
             return StatusEntry(title: "Loaded Models", state: .offline, detail: "Ollama service unreachable.")
@@ -266,7 +277,7 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
         guard let reachable = macOllama.serviceReachable,
               let installed = macOllama.installedModels,
               let embeddingRole = macOllama.roles["embedding"] else {
-            return StatusEntry(title: "Embedding Model", state: .unavailable, detail: "Service probe not enabled on this backend.")
+            return StatusEntry(title: "Embedding Model", state: .optional, detail: "Optional local AI is disabled; no embedding role is configured.")
         }
         let targetModel = embeddingRole.modelIdentity
         guard reachable else {
@@ -294,7 +305,7 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
             return StatusEntry(
                 title: "Provider Health",
                 state: .disabled,
-                detail: "Sigil's Mac Ollama role admission is administratively disabled."
+                detail: "Optional Mac Ollama role admission is disabled by configuration."
             )
         }
         let roleSummaries = macOllama.roles
@@ -358,14 +369,14 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
         }
 
         guard prime.configured else {
-            let notConfigured = StatusEntry(title: "Registration", state: .unavailable, detail: "Prime is not configured on this Mac (no base URL/token set).")
+            let notConfigured = StatusEntry(title: "Registration", state: .notConfigured, detail: "Optional Prime fleet connection is not configured on this Mac (base URL and authentication token are missing).")
             return roleInfo.map {
                 FleetNode(
                     name: $0.name, role: $0.role,
                     registration: notConfigured,
-                    health: StatusEntry(title: "Health", state: .unavailable, detail: "Unavailable — Prime not configured."),
-                    eligibility: StatusEntry(title: "Eligible for AI work", state: .unavailable, detail: "Unavailable — Prime not configured."),
-                    capabilitiesText: "Unavailable — Prime not configured.",
+                    health: StatusEntry(title: "Health", state: .notConfigured, detail: "Not checked — Prime is not configured."),
+                    eligibility: StatusEntry(title: "Eligible for AI work", state: .notConfigured, detail: "Not evaluated — Prime is not configured."),
+                    capabilitiesText: "Not queried — Prime is not configured.",
                     modelInventoryText: "Not exposed by backend."
                 )
             }
@@ -436,7 +447,7 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
             return StatusEntry(title: "Fleet Certification", state: .offline, detail: "Bridge unreachable.")
         }
         guard prime.configured else {
-            return StatusEntry(title: "Fleet Certification", state: .unavailable, detail: "Unavailable — Prime not configured.")
+            return StatusEntry(title: "Fleet Certification", state: .notConfigured, detail: "Not evaluated — optional Prime fleet connection is not configured.")
         }
         guard prime.reachable else {
             return StatusEntry(title: "Fleet Certification", state: .offline, detail: "Prime configured but unreachable.")
@@ -462,14 +473,16 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
         } else if fleet.registeredNodeCount > 0 {
             routingState = .degraded
         } else {
-            routingState = .unavailable
+            routingState = .noData
         }
         let routeText = fleet.latestRoute.map { "\($0.nodeId) (\($0.state))" } ?? "None"
         let failoverText = fleet.latestFailover.map { "\($0.nodeId)" } ?? "None"
         return StatusEntry(
             title: "Routing / Failover",
             state: routingState,
-            detail: "Current route: \(routeText) · Fallback: \(failoverText) · \(fleet.healthyNodeCount)/\(fleet.registeredNodeCount) nodes healthy · \(fleet.completionUnknownTasks) tasks completion-unknown"
+            detail: fleet.registeredNodeCount == 0
+                ? "No fleet routing data yet; optional fleet is not configured."
+                : "Current route: \(routeText) · Fallback: \(failoverText) · \(fleet.healthyNodeCount)/\(fleet.registeredNodeCount) nodes healthy · \(fleet.completionUnknownTasks) tasks completion-unknown"
         )
     }
 
@@ -479,21 +492,26 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
         }
         let ledgerState = state(forBackendHealth: ai.evidenceLedgerHealth)
         let artifactState = state(forBackendHealth: ai.artifactStoreHealth)
-        let combinedState: ServiceState
-        if ledgerState == .offline || artifactState == .offline {
-            combinedState = .offline
-        } else if ledgerState == .degraded || artifactState == .degraded {
-            combinedState = .degraded
-        } else if ledgerState == .unavailable && artifactState == .unavailable {
-            combinedState = .unavailable
-        } else {
-            combinedState = .connected
-        }
+        let combinedState = combinedEvidenceState(ledgerState: ledgerState, artifactState: artifactState)
         return StatusEntry(
             title: "Evidence / Artifacts",
             state: combinedState,
             detail: "\(ai.evidenceRecordCount) evidence records (\(ai.evidenceLedgerHealth)) · \(ai.artifactCount) artifacts (\(ai.artifactStoreHealth))"
         )
+    }
+
+    static func combinedEvidenceState(ledgerState: ServiceState, artifactState: ServiceState) -> ServiceState {
+        if ledgerState == .offline || artifactState == .offline {
+            return .offline
+        } else if ledgerState == .degraded || artifactState == .degraded {
+            return .degraded
+        } else if ledgerState == .noData && artifactState == .noData {
+            return .noData
+        } else if ledgerState == .unavailable || artifactState == .unavailable {
+            return .unavailable
+        } else {
+            return .connected
+        }
     }
 
     private static func latestResultEntry(ai: AIStatusResult?, runtime: RuntimeSnapshotResult?) -> StatusEntry {
@@ -509,7 +527,7 @@ struct HermesBridgeDataProvider: MissionControlDataProviding {
         }
         return StatusEntry(
             title: "Latest Result",
-            state: summary != nil ? .connected : .unavailable,
+            state: summary != nil ? .connected : .noData,
             detail: detailParts.joined(separator: " · ")
         )
     }

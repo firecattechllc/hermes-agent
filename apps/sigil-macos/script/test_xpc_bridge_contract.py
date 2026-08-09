@@ -39,16 +39,42 @@ class XPCBridgeContractTests(unittest.TestCase):
         self.assertIn("guard connection == nil else { return }", self.controller)
         self.assertIn("HermesBridgeServiceController.shared.start()", (ROOT / "Sigil/Sigil/App/SigilApp.swift").read_text())
 
-    def test_only_quote_post_route_exists(self):
+    def test_only_explicit_safe_post_routes_exist(self):
         self.assertIn('method == "POST", route == "/market_universe_quotes"', self.service)
-        for forbidden in ("order_submit", "order_preview", "paper_execution_activate", "paper_execution_resume"):
+        for route in (
+            "paper_execution_activate",
+            "paper_execution_pause",
+            "paper_execution_resume",
+            "paper_execution_deactivate",
+        ):
+            self.assertIn(f'"/{route}"', self.service)
+        for forbidden in ("order_submit", "order_preview", "reconcile_paper_orders", "emergency_paper_stop"):
             self.assertNotIn(f'route == "/{forbidden}"', self.service)
+
+    def test_unknown_routes_are_404_and_lifecycle_actions_fail_closed(self):
+        self.assertIn("send(status: 404, object: failure(\"not_found\")", self.service)
+        self.assertIn('"error": "governed_backend_not_configured"', self.service)
+        self.assertIn("lifecycleRoutes.contains(route)", self.service)
+
+    def test_lifecycle_payload_is_bounded_and_shape_validated(self):
+        self.assertIn("body.utf8.count <= 128", self.service)
+        self.assertIn("return object.isEmpty", self.service)
+        self.assertIn('failure("invalid_payload")', self.service)
 
     def test_payload_and_response_are_bounded(self):
         self.assertIn("data.count <= 16_384", self.service)
         self.assertIn("body.count <= 4_096", self.service)
         self.assertIn("data.count <= 1_048_576", self.service)
         self.assertIn("(1...20).contains(symbols.count)", self.service)
+
+    def test_visible_ui_read_routes_are_explicit(self):
+        for route in (
+            "health", "runtime_snapshot", "ai_status", "prime_fleet_status",
+            "paper_execution_status", "paper_positions", "paper_orders", "paper_fills",
+            "recent_proposals", "recent_candidates", "recent_rejections", "recent_audit",
+            "governed_news_status",
+        ):
+            self.assertIn(f'"/{route}"', self.service)
 
     def test_all_safety_fields_are_fail_closed(self):
         for field in ("execution_authorized", "broker_submission_available", "live_trading_enabled"):

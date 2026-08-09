@@ -34,6 +34,18 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Optional System Configuration") {
+                LabeledContent("Governed paper-runtime backend", value: "Not Configured")
+                Text("The embedded bridge is healthy, but this production build has no configured governed backend connection. Lifecycle controls remain fail-closed.")
+                    .font(.caption).foregroundStyle(.secondary)
+                LabeledContent("Prime fleet", value: "Not Configured")
+                Text("Requires a Prime base URL and authentication token supplied outside the UI. Secrets are never displayed here.")
+                    .font(.caption).foregroundStyle(.secondary)
+                LabeledContent("Mac Ollama", value: "Optional · Disabled")
+                Text("Requires an administrator-enabled local AI profile. No model or service is force-enabled by Sigil.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("Agent Watch") {
                 Toggle("Keep Mac available while agents work", isOn: $keepAwakeEnabled)
                 Text("Prevents idle system sleep only while a session has reliable active-work evidence. The display may still sleep.")
@@ -41,7 +53,7 @@ struct SettingsView: View {
             }
 
             Section("Alpaca Paper Trading Credentials") {
-                Text("Stored in this Mac's Keychain only — never written to a file, UserDefaults, or a log. Used solely by the governed backend's existing paper-execution reconciliation calls (Alpaca's paper endpoint, never live trading).")
+                Text("Stored in this Mac's Keychain only — never written to a file, UserDefaults, or a log. In this production build they enable read-only Alpaca IEX market snapshots; they do not configure a governed paper-runtime backend or enable broker submission.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -72,7 +84,7 @@ struct SettingsView: View {
 
             Section("Safety") {
                 LabeledContent("Live execution authority", value: "Never")
-                LabeledContent("Broker submission", value: "Disabled unless governed by the paper runtime")
+                LabeledContent("Broker submission", value: "Disabled")
                 LabeledContent("Hermes authority", value: "Authoritative")
             }
         }

@@ -8,6 +8,8 @@ struct PaperExecutionStatus: Decodable {
     let liveExecution: Bool
     let broker: String
     let brokerSubmission: Bool
+    let lifecycleActionsAvailable: Bool?
+    let lifecycleUnavailableReason: String?
     let activated: Bool
     let paused: Bool
     let killSwitch: Bool
@@ -28,6 +30,8 @@ struct PaperExecutionStatus: Decodable {
         case liveExecution = "live_execution"
         case broker
         case brokerSubmission = "broker_submission"
+        case lifecycleActionsAvailable = "lifecycle_actions_available"
+        case lifecycleUnavailableReason = "lifecycle_unavailable_reason"
         case activated, paused
         case killSwitch = "kill_switch"
         case degradedConditions = "degraded_conditions"
