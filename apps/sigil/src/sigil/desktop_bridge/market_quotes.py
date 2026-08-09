@@ -12,7 +12,7 @@ from sigil.market_data.alpaca.client import (
     AlpacaProviderError,
 )
 
-from .providers import load_credentials
+from .providers import alpaca_credentials
 
 MAX_VISIBLE_QUOTES = 20
 SYMBOL_PATTERN = re.compile(r"^[A-Z0-9.\\-]{1,16}$")
@@ -100,11 +100,8 @@ def market_universe_quotes(
 
     try:
         if client is None:
-            credentials = load_credentials()
-            config = AlpacaConfig(
-                key_id=credentials.get("SIGIL_ALPACA_API_KEY_ID"),
-                secret_key=credentials.get("SIGIL_ALPACA_API_SECRET_KEY"),
-            )
+            key_id, secret_key = alpaca_credentials()
+            config = AlpacaConfig(key_id=key_id, secret_key=secret_key)
             provider = AlpacaHttpClient(config)
         else:
             provider = client
