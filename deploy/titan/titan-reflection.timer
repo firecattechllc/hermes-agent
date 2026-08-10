@@ -1,0 +1,19 @@
+[Unit]
+Description=Periodic floor trigger for Titan's governed reflection cycle
+# This is a *floor*, not the actual dynamic interval: systemd polls at this
+# fixed cadence (matching SchedulerPolicy's minimum wake interval), but the
+# real dynamic-interval decision lives in hermes_cli.prime.titan_scheduler's
+# persistent state, consulted fresh by titan-reflection.service on every
+# firing. A cycle that isn't due yet (per its own persisted next_wake_at)
+# checks that, finds nothing to do, and exits in well under a second --
+# this timer firing every 5 minutes does not mean a reflection actually runs
+# every 5 minutes.
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

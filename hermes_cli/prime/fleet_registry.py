@@ -126,6 +126,8 @@ KNOWN_FLEET_CAPABILITIES = frozenset({
     "remote_maintenance_target",
     "sigil_paper_advisory",
     "governed_maintenance_environment",
+    "omniroute_routing",
+    "freellmapi_upstream",
 })
 
 

@@ -1,0 +1,42 @@
+[Unit]
+Description=Hermes Titan OmniRoute (governed local + FreeLLMAPI model routing)
+# Soft-ordered after Ollama and Docker (FreeLLMAPI's container runtime) so
+# both upstreams are likely already up on a fresh boot, but neither is a
+# hard dependency: OmniRoute's own bounded-retry/circuit-breaker transport
+# (hermes_cli.prime.omniroute_upstreams) tolerates either being unavailable
+# at startup or at any later point without crashing this service. There is
+# deliberately no dependency on any Mac/Tailscale unit.
+After=network-online.target ollama.service docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/hermes-prime/omniroute.env
+ExecStart=/opt/hermes/venv/bin/python -m hermes_cli.prime.omniroute_entrypoint
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryMax=1G
+CPUQuota=100%
+TasksMax=32
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/opt/hermes/current /etc/hermes-prime
+ReadWritePaths=/var/lib/hermes-prime
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
