@@ -1,12 +1,11 @@
 # Hermes Ecosystem Decisions
 
-## Provisional status
+## Status
 
-Phase 9 implementation is locally validated; Phase 9 live-node certification
-remains unproven in committed evidence. These records are provisional Stage 0
-planning decisions. They authorize no implementation, installation, or runtime
-activation. No post–Phase 9 runtime integration may begin until the live-node
-gates are completed and recorded.
+Phase 9 live-node certification is complete and recorded in committed evidence.
+These records are Stage 0 planning decisions. They authorize no implementation,
+installation, or runtime activation. Each later stage must still pass its own
+gate before any post–Phase 9 runtime integration begins.
 
 ## D-001 — Hermes is the sole execution authority
 

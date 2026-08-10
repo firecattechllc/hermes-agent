@@ -1,9 +1,9 @@
 # Governed Agent Roles
 
-## Provisional status
+## Status
 
-Phase 9 is locally validated but lacks committed live-node certification. These
-Stage 0 role definitions are provisional planning only; they grant no identity,
+Phase 9 live-node certification is complete and recorded in committed evidence.
+These Stage 0 role definitions are planning only; they grant no identity,
 tool, execution, installation, or activation authority.
 
 Initial roles: Hermes Governor, Atlas, Planner, Builder, Test Engineer, Reviewer,

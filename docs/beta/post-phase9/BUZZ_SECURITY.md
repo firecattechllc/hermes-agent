@@ -1,9 +1,9 @@
 # Buzz Security Contract
 
-## Provisional status
+## Status
 
-Phase 9 is locally validated but lacks committed live-node certification. This
-Stage 0 contract is provisional planning only. Buzz is not installed or enabled,
+Phase 9 live-node certification is complete and recorded in committed evidence.
+This Stage 0 contract is planning only. Buzz is not installed or enabled,
 and this document grants it no execution authority.
 
 Buzz identity and membership determine who participates and where. Hermes alone

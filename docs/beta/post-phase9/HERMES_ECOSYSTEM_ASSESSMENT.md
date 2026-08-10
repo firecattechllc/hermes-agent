@@ -1,24 +1,21 @@
 # Hermes Ecosystem Assessment
 
-## Provisional status and Phase 9 prerequisite
+## Status and Phase 9 prerequisite
 
-Phase 9 implementation is locally validated, but Phase 9 live-node certification
-remains unproven in committed evidence. This assessment is provisional Stage 0
-architecture planning only. It does not authorize implementation, installation,
-configuration, or activation. No post–Phase 9 runtime integration may begin until
+Phase 9 live-node certification is complete and recorded in committed evidence:
 authenticated Titan/Mac/Prime connectivity, one real read-only task, cancellation
 and reconciliation, bounded failover, and a durable evidence round-trip are
-completed and recorded.
+completed and recorded. This assessment is Stage 0 architecture planning only. It
+does not authorize implementation, installation, configuration, or activation.
 
 ## Scope and evidence basis
 
-This provisional Stage 0 assessment maps the current checkout at commit
+This Stage 0 assessment maps the current checkout at commit
 `45ad3c127` and defines possible integration seams without changing runtime
-behavior. The commit contains locally validated Phase 9 implementation, not
-committed proof of the required live-node gates. External projects are candidates
-only until Phase 9 is certified and their repository, license, release,
-dependencies, and behavior are pinned and reviewed in the governed integration
-registry.
+behavior. Phase 9 live-node certification is now complete and recorded in
+committed evidence. External projects remain candidates only until their
+repository, license, release, dependencies, and behavior are pinned and reviewed
+in the governed integration registry.
 
 All proposed integrations remain disabled by default and have no independent
 execution authority. Sigil remains paper-only with broker submission disabled.
@@ -127,5 +124,6 @@ The repository has strong reusable governance primitives. The safe program is
 adapter-first and registry-first: establish identity, policy, evidence, and
 rollback contracts before installing external services. No broad refactor or
 runtime behavior change is justified or authorized in Stage 0. This conclusion
-is provisional and cannot open Stage 1 or any runtime stage until the missing
-Phase 9 live-node certification is committed and independently reviewable.
+cannot itself open Stage 1 or any runtime stage; the Phase 9 live-node
+certification is now committed and independently reviewable, and each later
+stage must still pass its own separate gate.
