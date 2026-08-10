@@ -1,12 +1,14 @@
 # Post-Phase 9 Hermes Ecosystem Program
 
-> **STATUS: PROVISIONAL — BLOCKED ON PHASE 9 LIVE-NODE CERTIFICATION**
+> **STATUS: PHASE 9 LIVE-NODE CERTIFICATION COMPLETE — COMMITTED EVIDENCE ON FILE**
 >
-> Phase 9 implementation is locally validated. Phase 9 live-node certification
-> remains unproven in committed evidence. No post–Phase 9 runtime integration may
-> begin until the live-node gates are completed and recorded. These Stage 0
-> documents are provisional architecture planning only; their existence does not
-> authorize implementation, installation, configuration, or activation.
+> Phase 9 live-node certification is complete and recorded in committed evidence
+> (`docs/architecture/hydra-ecosystem/evidence/PHASE9_LIVE_CERTIFICATION.json`,
+> verified against `PHASE9_FLEET_EVIDENCE.jsonl`). Sigil remains paper-only and
+> broker submission remains disabled; all external systems remain disabled by
+> default until their own stage gates pass. These Stage 0 documents are
+> architecture planning only; their existence does not authorize implementation,
+> installation, configuration, or activation.
 
 Hermes remains the final authority for identity, permissions, budgets, model and
 provider routing, tools, placement, admission, evidence, approval, promotion,

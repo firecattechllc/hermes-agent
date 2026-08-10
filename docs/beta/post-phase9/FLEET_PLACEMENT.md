@@ -1,9 +1,9 @@
 # Fleet Placement
 
-## Provisional status
+## Status
 
-Phase 9 is locally validated but lacks committed live-node certification. This
-Stage 0 placement is provisional planning only and authorizes no service,
+Phase 9 live-node certification is complete and recorded in committed evidence.
+This Stage 0 placement is planning only and authorizes no service,
 deployment, installation, or runtime activation.
 
 - Titan: governor support, scheduling, queues, embeddings, FinBERT, lightweight

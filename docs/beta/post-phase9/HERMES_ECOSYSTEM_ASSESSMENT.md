@@ -1,14 +1,12 @@
 # Hermes Ecosystem Assessment
 
-## Provisional status and Phase 9 prerequisite
+## Status and Phase 9 prerequisite
 
-Phase 9 implementation is locally validated, but Phase 9 live-node certification
-remains unproven in committed evidence. This assessment is provisional Stage 0
-architecture planning only. It does not authorize implementation, installation,
-configuration, or activation. No post–Phase 9 runtime integration may begin until
+Phase 9 live-node certification is complete and recorded in committed evidence:
 authenticated Titan/Mac/Prime connectivity, one real read-only task, cancellation
 and reconciliation, bounded failover, and a durable evidence round-trip are
-completed and recorded.
+completed and recorded. This assessment is Stage 0 architecture planning only. It
+does not authorize implementation, installation, configuration, or activation.
 
 ## Scope and evidence basis
 
