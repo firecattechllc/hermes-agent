@@ -11,12 +11,21 @@ struct SettingsView: View {
     @AppStorage("agentWatch.keepAwakeEnabled") private var keepAwakeEnabled = true
     private static let apiKeyAccount = "alpaca_api_key"
     private static let secretKeyAccount = "alpaca_secret_key"
+    private static let primeBaseURLAccount = "prime_base_url"
+    private static let primeAuthTokenAccount = "prime_auth_token"
 
     @State private var apiKeyInput = ""
     @State private var secretKeyInput = ""
     @State private var apiKeyStored = false
     @State private var secretKeyStored = false
+
+    @State private var primeBaseURLInput = ""
+    @State private var primeAuthTokenInput = ""
+    @State private var primeBaseURLStored = false
+    @State private var primeAuthTokenStored = false
+
     @State private var saveConfirmation: String?
+    @State private var primeSaveConfirmation: String?
 
     var body: some View {
         Form {
@@ -38,9 +47,52 @@ struct SettingsView: View {
                 LabeledContent("Governed paper-runtime backend", value: "Not Configured")
                 Text("The embedded bridge is healthy, but this production build has no configured governed backend connection. Lifecycle controls remain fail-closed.")
                     .font(.caption).foregroundStyle(.secondary)
-                LabeledContent("Prime fleet", value: "Not Configured")
-                Text("Requires a Prime base URL and authentication token supplied outside the UI. Secrets are never displayed here.")
-                    .font(.caption).foregroundStyle(.secondary)
+                LabeledContent(
+                    "Prime fleet",
+                    value: primeBaseURLStored && primeAuthTokenStored ? "Configured" : "Not Configured"
+                )
+
+                TextField(
+                    primeBaseURLStored ? "Prime base URL (stored — enter to replace)" : "Prime base URL",
+                    text: $primeBaseURLInput
+                )
+
+                SecureField(
+                    primeAuthTokenStored ? "Prime auth token (stored — enter to replace)" : "Prime auth token",
+                    text: $primeAuthTokenInput
+                )
+
+                HStack {
+                    Button("Save Prime Configuration") {
+                        savePrimeConfiguration()
+                    }
+                    .disabled(primeBaseURLInput.isEmpty && primeAuthTokenInput.isEmpty)
+
+                    Button("Clear Prime", role: .destructive) {
+                        clearPrimeConfiguration()
+                    }
+                    .disabled(!primeBaseURLStored && !primeAuthTokenStored)
+
+                    Spacer()
+
+                    if primeBaseURLStored && primeAuthTokenStored {
+                        StatusBadge(state: .connected)
+                    } else if primeBaseURLStored || primeAuthTokenStored {
+                        StatusBadge(state: .degraded)
+                    } else {
+                        StatusBadge(state: .unavailable)
+                    }
+                }
+
+                if let primeSaveConfirmation {
+                    Text(primeSaveConfirmation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("Stored only in this Mac's Keychain. The Prime authentication token is never displayed after saving.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 LabeledContent("Mac Ollama", value: "Optional · Disabled")
                 Text("Requires an administrator-enabled local AI profile. No model or service is force-enabled by Sigil.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -96,6 +148,8 @@ struct SettingsView: View {
     private func refreshStoredState() {
         apiKeyStored = KeychainStore.get(forAccount: Self.apiKeyAccount) != nil
         secretKeyStored = KeychainStore.get(forAccount: Self.secretKeyAccount) != nil
+        primeBaseURLStored = KeychainStore.get(forAccount: Self.primeBaseURLAccount) != nil
+        primeAuthTokenStored = KeychainStore.get(forAccount: Self.primeAuthTokenAccount) != nil
     }
 
     private func save() {
@@ -116,5 +170,31 @@ struct SettingsView: View {
         KeychainStore.delete(forAccount: Self.secretKeyAccount)
         refreshStoredState()
         saveConfirmation = "Cleared from Keychain."
+    }
+
+    private func savePrimeConfiguration() {
+        if !primeBaseURLInput.isEmpty {
+            KeychainStore.set(primeBaseURLInput, forAccount: Self.primeBaseURLAccount)
+            primeBaseURLInput = ""
+        }
+
+        if !primeAuthTokenInput.isEmpty {
+            KeychainStore.set(primeAuthTokenInput, forAccount: Self.primeAuthTokenAccount)
+            primeAuthTokenInput = ""
+        }
+
+        refreshStoredState()
+        primeSaveConfirmation = "Prime configuration saved to Keychain."
+    }
+
+    private func clearPrimeConfiguration() {
+        KeychainStore.delete(forAccount: Self.primeBaseURLAccount)
+        KeychainStore.delete(forAccount: Self.primeAuthTokenAccount)
+
+        primeBaseURLInput = ""
+        primeAuthTokenInput = ""
+
+        refreshStoredState()
+        primeSaveConfirmation = "Prime configuration cleared from Keychain."
     }
 }

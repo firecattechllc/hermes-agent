@@ -1,7 +1,13 @@
 import Foundation
 
 @objc protocol HermesBridgeServiceProtocol {
-    func start(apiKey: String?, secretKey: String?, reply: @escaping (Bool, String?) -> Void)
+    func start(
+        apiKey: String?,
+        secretKey: String?,
+        primeBaseURL: String?,
+        primeAuthToken: String?,
+        reply: @escaping (Bool, String?) -> Void
+    )
     func stop(reply: @escaping () -> Void)
 }
 
@@ -34,7 +40,9 @@ final class HermesBridgeServiceController {
         } as? HermesBridgeServiceProtocol
         proxy?.start(
             apiKey: KeychainStore.get(forAccount: "alpaca_api_key"),
-            secretKey: KeychainStore.get(forAccount: "alpaca_secret_key")
+            secretKey: KeychainStore.get(forAccount: "alpaca_secret_key"),
+            primeBaseURL: KeychainStore.get(forAccount: "prime_base_url"),
+            primeAuthToken: KeychainStore.get(forAccount: "prime_auth_token")
         ) { [weak self] started, reason in
             Task { @MainActor in self?.startupFailure = started ? nil : (reason ?? "Hermes bridge failed to start") }
         }

@@ -2,7 +2,13 @@ import Foundation
 import Network
 
 @objc protocol HermesBridgeServiceProtocol {
-    func start(apiKey: String?, secretKey: String?, reply: @escaping (Bool, String?) -> Void)
+    func start(
+        apiKey: String?,
+        secretKey: String?,
+        primeBaseURL: String?,
+        primeAuthToken: String?,
+        reply: @escaping (Bool, String?) -> Void
+    )
     func stop(reply: @escaping () -> Void)
 }
 
@@ -18,8 +24,16 @@ private final class LoopbackHTTPServer: @unchecked Sendable {
     private var listener: NWListener?
     private var apiKey: String?
     private var secretKey: String?
+    private var primeBaseURL: String?
+    private var primeAuthToken: String?
 
-    func start(apiKey: String?, secretKey: String?, completion: @escaping (Result<Void, Error>) -> Void) {
+    func start(
+        apiKey: String?,
+        secretKey: String?,
+        primeBaseURL: String?,
+        primeAuthToken: String?,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
         queue.async {
             guard self.listener == nil else {
                 completion(.success(()))
@@ -27,6 +41,8 @@ private final class LoopbackHTTPServer: @unchecked Sendable {
             }
             self.apiKey = apiKey
             self.secretKey = secretKey
+            self.primeBaseURL = primeBaseURL
+            self.primeAuthToken = primeAuthToken
             do {
                 let parameters = NWParameters.tcp
                 parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: 8799)
@@ -59,6 +75,8 @@ private final class LoopbackHTTPServer: @unchecked Sendable {
             listener = nil
             apiKey = nil
             secretKey = nil
+            primeBaseURL = nil
+            primeAuthToken = nil
         }
     }
 
@@ -80,7 +98,10 @@ private final class LoopbackHTTPServer: @unchecked Sendable {
         let method = String(firstLine[0])
         let route = String(firstLine[1]).split(separator: "?", maxSplits: 1).first.map(String.init) ?? ""
 
-        if method == "GET" {
+        if method == "GET", route == "/prime_fleet_status" {
+            let result = await primeFleetStatus()
+            send(status: 200, object: ["ok": true, "result": result], on: connection)
+        } else if method == "GET" {
             guard let response = readResponse(route) else {
                 send(status: 404, object: failure("not_found"), on: connection); return
             }
@@ -142,8 +163,6 @@ private final class LoopbackHTTPServer: @unchecked Sendable {
             result = ["runtime_visibility": ["operational_state": "stopped", "health": "not_configured", "connection_state": "not_configured", "automation_mode": "paper_only", "paper_execution_available": false, "counts": ["cycles": 0, "proposals": 0, "executions": 0, "reconciliation": 0, "audit_events": 0]], "safety": safety]
         case "/ai_status":
             result = ["enabled": false, "service_state": "disabled", "local_gemma_health": "disabled", "configured_model_count": 0, "available_model_count": 0, "registry_revision": "unconfigured", "mac_ollama": ["enabled": false, "roles": [:]], "evidence_record_count": 0, "artifact_count": 0, "evidence_ledger_health": "empty", "artifact_store_health": "empty", "latest_analysis_summary": NSNull(), "orchestration": ["enabled": false, "health": "disabled", "active_count": 0, "completed_count": 0, "failed_count": 0, "paused_count": 0], "fleet": ["registered_node_count": 0, "healthy_node_count": 0, "nodes": ["titan": NSNull(), "mac": NSNull(), "prime": NSNull()], "latest_route": NSNull(), "latest_failover": NSNull(), "active_tasks": 0, "queued_tasks": 0, "completion_unknown_tasks": 0, "clock_warnings": 0], "safety": safety]
-        case "/prime_fleet_status":
-            result = ["configured": false, "reachable": false, "base_url": NSNull(), "nodes": [], "certification": ["status": "unconfigured", "evidence_ref": NSNull()], "safety": safety]
         case "/paper_execution_status":
             result = ["environment": "paper", "live_execution": false, "broker": "none", "broker_submission": false, "lifecycle_actions_available": false, "lifecycle_unavailable_reason": "Governed paper-runtime backend not configured", "activated": false, "paused": false, "kill_switch": true, "degraded_conditions": [], "unmanaged_position_symbols": [], "open_positions": 0, "open_orders": 0, "deployed_paper_capital": "0", "remaining_governed_allocation": "0", "last_reconciliation": NSNull(), "last_order_intent": NSNull(), "last_submitted_order": NSNull(), "last_fill": NSNull(), "last_rejection": NSNull(), "safety": safety]
         case "/paper_positions", "/paper_orders", "/paper_fills", "/recent_proposals", "/recent_candidates", "/recent_rejections", "/recent_audit":
@@ -154,6 +173,49 @@ private final class LoopbackHTTPServer: @unchecked Sendable {
             return nil
         }
         return ["ok": true, "result": result]
+    }
+
+    /// Real, governed visibility into the Hermes Prime fleet control plane —
+    /// the native-Swift counterpart to
+    /// `apps/sigil/src/sigil/desktop_bridge/prime_fleet.py`'s
+    /// `prime_fleet_status()`. Same contract (`GET /v1/fleet/nodes`,
+    /// `GET /v1/fleet/certification`, `Authorization: Bearer <token>`), same
+    /// fail-closed/honest shape: not configured, unreachable, and malformed
+    /// responses are all reported as such — never a fabricated healthy fleet.
+    private func primeFleetStatus() async -> [String: Any] {
+        guard let primeBaseURL, !primeBaseURL.isEmpty, let primeAuthToken, !primeAuthToken.isEmpty else {
+            return ["configured": false, "reachable": false, "base_url": NSNull(), "nodes": [], "certification": ["status": "unknown", "evidence_ref": NSNull()], "safety": safety]
+        }
+        let base = primeBaseURL.hasSuffix("/") ? String(primeBaseURL.dropLast()) : primeBaseURL
+
+        async let nodesCall = primeRequest(base: base, token: primeAuthToken, path: "/v1/fleet/nodes")
+        async let certCall = primeRequest(base: base, token: primeAuthToken, path: "/v1/fleet/certification")
+        let (nodesStatus, nodesBody) = await nodesCall
+        let (certStatus, certBody) = await certCall
+
+        let reachable = nodesStatus == 200 && certStatus == 200
+        let nodes = reachable ? (nodesBody?["nodes"] as? [[String: Any]] ?? []) : []
+        let certification = reachable ? (certBody ?? ["status": "unknown", "evidence_ref": NSNull()]) : ["status": "unknown", "evidence_ref": NSNull()]
+
+        return ["configured": true, "reachable": reachable, "base_url": base, "nodes": nodes, "certification": certification, "safety": safety]
+    }
+
+    /// Returns `(status_code, parsed_body)`. `status_code` is `nil` only for
+    /// a network-level failure (unreachable, timeout, DNS) — mirrors
+    /// `prime_fleet._request`'s contract exactly.
+    private func primeRequest(base: String, token: String, path: String) async -> (Int?, [String: Any]?) {
+        guard let url = URL(string: "\(base)\(path)") else { return (nil, nil) }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard data.count <= 1_048_576, let httpResponse = response as? HTTPURLResponse else { return (nil, nil) }
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            return (httpResponse.statusCode, object)
+        } catch {
+            return (nil, nil)
+        }
     }
 
     private func marketQuotes(_ requested: [String]) async -> [String: Any] {
@@ -211,8 +273,19 @@ private final class LoopbackHTTPServer: @unchecked Sendable {
 
 private final class Service: NSObject, HermesBridgeServiceProtocol {
     private let server = LoopbackHTTPServer()
-    func start(apiKey: String?, secretKey: String?, reply: @escaping (Bool, String?) -> Void) {
-        server.start(apiKey: apiKey, secretKey: secretKey) { result in
+    func start(
+        apiKey: String?,
+        secretKey: String?,
+        primeBaseURL: String?,
+        primeAuthToken: String?,
+        reply: @escaping (Bool, String?) -> Void
+    ) {
+        server.start(
+            apiKey: apiKey,
+            secretKey: secretKey,
+            primeBaseURL: primeBaseURL,
+            primeAuthToken: primeAuthToken
+        ) { result in
             switch result { case .success: reply(true, nil); case .failure(let error): reply(false, error.localizedDescription) }
         }
     }
