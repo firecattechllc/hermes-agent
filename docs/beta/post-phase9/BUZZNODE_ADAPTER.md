@@ -14,6 +14,26 @@ Hermes remains the central authority.
 No Buzznode is provisioned, connected, authenticated, or executed during
 Stage 6.
 
+## Provenance
+
+The Buzznode described here is a governed internal projection of this
+repository — a disabled-by-default component modeled over the Stage 1
+integration registry and Stage 2 worker/job contract. It is not a vendored or
+imported external component.
+
+The naming reflects conceptual lineage with
+[`github.com/pdparchitect/buzznode`](https://github.com/pdparchitect/buzznode),
+a community-built persistent, browser-accessible single-Buzz-agent worker host
+in Block's Nostr-based Buzz ecosystem. That project is explicitly not an
+official Block Inc. project. It is cited only as related external prior art; no
+definitional identity between it and this repository's Buzznode component is
+stated or implied.
+
+The unrelated homonym
+[`github.com/BuzzVerse/BuzzNode`](https://github.com/BuzzVerse/BuzzNode) — a
+Zephyr-RTOS IoT firmware project — is not connected to this component and is
+noted here only to prevent misattribution.
+
 ## Modeled concepts
 
 The adapter models immutable references for:
