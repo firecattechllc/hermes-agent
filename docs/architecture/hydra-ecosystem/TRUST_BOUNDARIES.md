@@ -1,5 +1,9 @@
 # Trust Boundaries
 
+> Hydra Live is no longer an active trust domain or fleet requirement. Its
+> boundary below is retained for historical evidence compatibility. See
+> [HYDRA_LIVE_RETIREMENT.md](HYDRA_LIVE_RETIREMENT.md).
+
 ## Human authority boundary
 
 The user is the final authority for:

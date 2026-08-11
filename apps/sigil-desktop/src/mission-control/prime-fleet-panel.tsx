@@ -15,6 +15,7 @@ import type {
 } from './types'
 
 const REFRESH_INTERVAL_MS = 20_000
+const ACTIVE_FLEET_NATURAL_KEYS = new Set(['prime', 'titan', 'mac'])
 
 // Only "advisory_financial_sentiment" is currently routable end-to-end (it
 // targets Titan, a fleet node distinct from Sigil's own Mac host). The other
@@ -92,6 +93,7 @@ export function PrimeFleetPanel(): React.JSX.Element {
   const [routing, setRouting] = useState(false)
   const [routeResult, setRouteResult] = useState<PrimeSigilRouteResult | null>(null)
   const mountedRef = useRef(true)
+  const activeNodes = status?.nodes.filter(node => ACTIVE_FLEET_NATURAL_KEYS.has(node.natural_key.toLowerCase())) ?? []
 
   const load = useCallback(async () => {
     const desktop = window.sigilDesktop
@@ -205,11 +207,11 @@ export function PrimeFleetPanel(): React.JSX.Element {
               )}
             </div>
 
-            {status.nodes.length === 0 ? (
+            {activeNodes.length === 0 ? (
               <EmptyState description="No fleet nodes are registered with Prime yet." title="No nodes registered" />
             ) : (
               <ul className="flex flex-col gap-2" data-testid="prime-fleet-node-list">
-                {status.nodes.map(node => (
+                {activeNodes.map(node => (
                   <li
                     className="flex flex-col gap-1 rounded-md border border-(--ui-stroke-secondary) px-3 py-2"
                     key={node.natural_key}

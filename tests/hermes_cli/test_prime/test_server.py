@@ -13,7 +13,11 @@ from hermes_cli.prime.admission import CertificationStatus
 from hermes_cli.prime.client import PrimeClientError, PrimeHTTPClient
 from hermes_cli.prime.dispatch_gate import CertificationSnapshot
 from hermes_cli.prime.evidence import PrimeEvidenceStore
-from hermes_cli.prime.fleet_registry import FleetNodeRegistrationRequest, FleetNodeRole
+from hermes_cli.prime.fleet_registry import (
+    FleetNodeRecord,
+    FleetNodeRegistrationRequest,
+    FleetNodeRole,
+)
 from hermes_cli.prime.fleet_runtime import FleetRuntime
 from hermes_cli.prime.health import LivenessState, ReadinessState
 from hermes_cli.prime.heartbeat import HeartbeatSubmission
@@ -138,6 +142,26 @@ def test_list_nodes_requires_authorization(live_server) -> None:
     with pytest.raises(urllib.error.HTTPError) as excinfo:
         urllib.request.urlopen(request, timeout=5)  # noqa: S310
     assert excinfo.value.code == 401
+
+
+def test_list_nodes_excludes_parseable_retired_hydra_live_record(live_server) -> None:
+    base_url, runtime = live_server
+    runtime.registry._store.put(  # noqa: SLF001 - inject historical durable state
+        FleetNodeRecord(
+            identity_id="fid_node_hydra_live_historical",
+            natural_key="hydra-live",
+            role=FleetNodeRole.HYDRA_LIVE,
+            endpoint="http://hydra-live.invalid:3130",
+            software_version="historical",
+            protocol_version=1,
+            registered_at=1,
+            updated_at=1,
+        )
+    )
+
+    payload = _get_json(f"{base_url}/v1/fleet/nodes", auth_token=AUTH_TOKEN)
+    assert payload == {"nodes": []}
+    assert runtime.registry.historical_records()[0].natural_key == "hydra-live"
 
 
 def _get_json(url: str, *, auth_token: str) -> dict:

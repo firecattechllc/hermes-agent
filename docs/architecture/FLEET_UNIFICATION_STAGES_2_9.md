@@ -1,5 +1,10 @@
 # Fleet Unification — Stages 2 through 9
 
+> **Topology update (2026-08-11):** Hydra Live is retired from active fleet
+> membership. Stage 4 material remains an historical record of the governed,
+> fake-only maintenance boundary; it is not an active fleet health or
+> certification dependency. The active registry is Prime, Titan, and Mac.
+
 ## Status of this document
 
 This is the authoritative architecture record for Fleet Unification Stages

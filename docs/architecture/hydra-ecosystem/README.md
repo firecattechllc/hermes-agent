@@ -1,5 +1,9 @@
 # Hydra Ecosystem Architecture Baseline
 
+> Hydra Live is retired from the active fleet and superseded by
+> `hydra-hostinger`. It remains in this baseline only for historical accuracy.
+> See [HYDRA_LIVE_RETIREMENT.md](HYDRA_LIVE_RETIREMENT.md).
+
 ## Mission
 
 Create the authoritative map of the private FireCat operating ecosystem before
@@ -10,7 +14,8 @@ Hermes begins major application, operating-system, networking, or deployment wor
 - Hermes
 - Prime
 - Titan
-- Hydra Live
+- Hydra Live (retired; historical evidence only)
+- hydra-hostinger (always-on production host)
 - Sigil
 - Sigil OS
 - development Mac

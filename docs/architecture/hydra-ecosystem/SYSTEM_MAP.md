@@ -1,5 +1,9 @@
 # System Map
 
+> Current topology: Hydra Live is retired and `hydra-hostinger` is the
+> always-on production host. The Hydra Live section is retained as historical
+> system documentation; see [HYDRA_LIVE_RETIREMENT.md](HYDRA_LIVE_RETIREMENT.md).
+
 ## Hermes
 
 Role:

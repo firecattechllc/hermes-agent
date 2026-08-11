@@ -25,6 +25,7 @@ from urllib.request import Request, urlopen
 
 DEFAULT_TIMEOUT_SECONDS = 8.0
 MAX_RESPONSE_BYTES = 1_000_000
+ACTIVE_FLEET_NATURAL_KEYS = frozenset({"prime", "titan", "mac"})
 
 
 def _prime_config(environment: dict[str, str] | None = None) -> tuple[str, str] | None:
@@ -91,7 +92,14 @@ def prime_fleet_status(environment: dict[str, str] | None = None) -> dict[str, A
     cert_status, cert_body = _request(base_url, auth_token, "/v1/fleet/certification")
 
     reachable = nodes_status == 200 and cert_status == 200
-    nodes = nodes_body.get("nodes", []) if reachable and isinstance(nodes_body, dict) else []
+    raw_nodes = nodes_body.get("nodes", []) if reachable and isinstance(nodes_body, dict) else []
+    nodes = [
+        node
+        for node in raw_nodes
+        if isinstance(node, dict)
+        and str(node.get("natural_key", "")).strip().lower()
+        in ACTIVE_FLEET_NATURAL_KEYS
+    ]
     certification = (
         cert_body
         if reachable and isinstance(cert_body, dict)

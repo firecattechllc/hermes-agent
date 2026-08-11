@@ -1,5 +1,10 @@
 # Governed Hydra Live Stabilization and Repair Workflow
 
+> **Archived:** Hydra Live is retired from the active fleet. This document is
+> retained as historical design/evidence and must not be used as an automatic
+> repair or certification target. `hydra-hostinger` supersedes Hydra Live as
+> the always-on production host.
+
 ## Objective
 
 Teach Hermes to inspect, propose, approve, execute, roll back, and certify repairs on Hydra Live without uncontrolled shell access or silent destructive changes.

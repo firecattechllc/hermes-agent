@@ -75,7 +75,7 @@ def architecture_inventory() -> Tuple[ArchitectureComponent, ...]:
         ("9", "dispatch admission", ("workflow_dispatch",), "dispatch preparation cannot invoke providers"),
         ("10-14", "runtime execution and supervision", ("runtime_execution", "runtime_supervision"), "admission and supervision fail closed"),
         ("15-23", "runtime recovery, evidence, certification and acceptance", ("runtime_recovery", "runtime_recovery_certification", "runtime_recovery_acceptance"), "recovery requires bounded authority"),
-        ("24", "Hydra Live governed maintenance", ("remote_maintenance",), "fake/local adapters only during certification", True),
+        ("24", "retired Hydra Live maintenance compatibility", ("remote_maintenance",), "archived fake/local adapters; not an active fleet certification target", True),
         ("25", "governed fleet inventory", ("fleet_inventory",), "inventory authority and sanitized evidence"),
         ("26", "governed model routing", ("model_routing",), "no-route decisions prohibit execution"),
         ("27", "governed model execution and fallback", ("model_execution",), "provider invocation exists only behind Step 27 adapters", True),

@@ -6,9 +6,8 @@ decision primitives for identity, health, and admission but — per
 ``docs/architecture/FLEET_UNIFICATION_STAGES_2_9.md`` §8 — never persisted a
 concrete node registry or wired a real fleet together. This module is that
 durable node registry: it composes ``IdentityRegistry`` with an append-free,
-atomically-written, keyed store so the same four intended fleet nodes
-(Prime, Titan, Mac, Hydra Live) resolve to stable identities across process
-restarts.
+atomically-written, keyed store so the intended active fleet nodes (Prime,
+Titan, and Mac) resolve to stable identities across process restarts.
 
 This module does not grant execution, admission, or dispatch authority.
 Registering a node only makes it *resolvable* — whether it may participate in
@@ -20,7 +19,7 @@ routing work to a node.
 
 Registration is fail-closed and default-deny:
 
-- Only the four natural keys in :data:`KNOWN_FLEET_NODES` may register. Any
+- Only the natural keys in :data:`KNOWN_FLEET_NODES` may register. Any
   other natural key is rejected as ``unknown_node`` — this registry never
   admits an arbitrary, previously-undeclared node.
 - A natural key's role is fixed at its first successful registration; a
@@ -98,6 +97,9 @@ class FleetNodeRole(str, Enum):
     PRIME = "prime"
     TITAN = "titan"
     MAC = "mac"
+    # Retained only so historical registry/evidence payloads remain parseable.
+    # Hydra Live is not present in KNOWN_FLEET_NODES and cannot register,
+    # heartbeat, gain admission, or appear in active fleet projections.
     HYDRA_LIVE = "hydra_live"
 
 
@@ -110,7 +112,6 @@ KNOWN_FLEET_NODES: Dict[str, FleetNodeRole] = {
     "prime": FleetNodeRole.PRIME,
     "titan": FleetNodeRole.TITAN,
     "mac": FleetNodeRole.MAC,
-    "hydra-live": FleetNodeRole.HYDRA_LIVE,
 }
 
 # Closed capability vocabulary. A node may declare any subset; declaring a
@@ -559,12 +560,36 @@ class FleetNodeRegistry:
         return self._store.get(natural_key.strip().lower())
 
     def all(self) -> Tuple[FleetNodeRecord, ...]:
+        """Return active fleet records only.
+
+        Retired records remain readable through :meth:`historical_records` so
+        existing durable state can be audited without treating it as current
+        fleet membership.
+        """
+        return tuple(
+            record
+            for record in self._store.all()
+            if KNOWN_FLEET_NODES.get(record.natural_key) == record.role
+        )
+
+    def historical_records(self) -> Tuple[FleetNodeRecord, ...]:
+        """Return every parseable record, including retired fleet members."""
         return self._store.all()
+
+    def is_active_node(self, natural_key: str) -> bool:
+        """Return whether a natural key belongs to the current closed fleet."""
+        return natural_key.strip().lower() in KNOWN_FLEET_NODES
 
     def is_admissible_node(self, natural_key: str) -> bool:
         """Fail-closed membership check: unregistered/revoked nodes are never admissible."""
-        record = self.get(natural_key)
-        return record is not None and not record.revoked
+        normalized = natural_key.strip().lower()
+        record = self.get(normalized)
+        return (
+            self.is_active_node(normalized)
+            and record is not None
+            and KNOWN_FLEET_NODES[normalized] == record.role
+            and not record.revoked
+        )
 
     @property
     def identity_registry(self) -> IdentityRegistry:

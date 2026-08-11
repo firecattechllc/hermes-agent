@@ -354,7 +354,7 @@ def build_mission_control_parser(
     p_overview.add_argument("--interval", type=float, default=2.0, help="Refresh interval in seconds")
     p_overview.set_defaults(_mission_control_handler=_cmd_overview)
 
-    p_fleet = sub.add_parser("fleet", help="Show live fleet node status (Prime/Titan/Mac/Hydra Live)")
+    p_fleet = sub.add_parser("fleet", help="Show live fleet node status (Prime/Titan/Mac)")
     p_fleet.add_argument("project", help="Project ID")
     p_fleet.add_argument("--json", action="store_true", help="Output JSON")
     p_fleet.set_defaults(_mission_control_handler=_cmd_fleet)

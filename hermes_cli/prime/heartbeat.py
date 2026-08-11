@@ -285,7 +285,7 @@ class HeartbeatService:
             )
 
         record = self._registry.get(natural_key)
-        if record is None:
+        if record is None or not self._registry.is_active_node(natural_key):
             return _result(
                 HeartbeatOutcome.REJECTED,
                 rejection_code=HeartbeatRejectionCode.UNKNOWN_NODE,

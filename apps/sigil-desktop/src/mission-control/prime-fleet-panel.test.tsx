@@ -107,6 +107,26 @@ describe('Prime Fleet panel', () => {
     expect(screen.queryByText('connected')).toBeNull()
   })
 
+  it('does not present a retired Hydra Live record from historical payloads', async () => {
+    const status: PrimeFleetStatus = {
+      configured: true,
+      reachable: true,
+      base_url: 'http://100.119.205.44:8743',
+      nodes: [
+        { natural_key: 'hydra-live', role: 'hydra_live', connection_state: 'disconnected', last_seen_at: 1, model_inventory: [] },
+        { natural_key: 'titan', role: 'titan', connection_state: 'connected', last_seen_at: 1, model_inventory: [] }
+      ],
+      certification: { status: 'certified', evidence_ref: null }
+    }
+
+    mockDesktop({ getPrimeFleetStatus: async () => ({ ok: true, result: status }) })
+    render(<PrimeFleetPanel />)
+
+    expect(await screen.findByText('titan')).toBeTruthy()
+    expect(screen.queryByText('hydra-live')).toBeNull()
+    expect(screen.queryByText('disconnected')).toBeNull()
+  })
+
   it('sends a governed route test request and renders Prime\'s real accepted result', async () => {
     const status: PrimeFleetStatus = {
       configured: true,

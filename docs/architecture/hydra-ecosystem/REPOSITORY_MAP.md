@@ -1,5 +1,8 @@
 # Repository Map
 
+> Hydra Live repository references are historical. The node is retired from
+> active fleet membership; see [HYDRA_LIVE_RETIREMENT.md](HYDRA_LIVE_RETIREMENT.md).
+
 ## Hermes
 
 Repository:
@@ -36,6 +39,6 @@ Important recovery history:
 ## Repositories requiring discovery
 
 - Prime
-- Hydra Live
+- Hydra Live (retired; preserve discovery history)
 - Sigil OS
 - deployment and infrastructure configuration

@@ -83,6 +83,24 @@ struct BridgeDecodingTests {
         #expect(result.nodes.isEmpty)
     }
 
+    @Test func decodesHistoricalHydraLiveNodeWithoutMakingItExpected() throws {
+        let json = #"""
+        {
+          "configured": true,
+          "reachable": true,
+          "base_url": "http://prime.invalid:8743",
+          "nodes": [
+            {"natural_key": "hydra-live", "role": "hydra_live",
+             "connection_state": "disconnected", "model_inventory": []}
+          ],
+          "certification": {"status": "unknown", "evidence_ref": null}
+        }
+        """#
+        let result = try decode(PrimeFleetStatusResult.self, json)
+        #expect(result.nodes.first?.naturalKey == "hydra-live")
+        #expect(result.nodes.first?.role == "hydra_live")
+    }
+
     @Test func decodesPaperExecutionStatus() throws {
         let json = #"""
         {

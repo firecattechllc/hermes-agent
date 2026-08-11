@@ -105,6 +105,22 @@ def test_fleet_status_reports_real_nodes_and_certification(fake_prime) -> None:
     assert result["certification"]["status"] == "certified"
 
 
+def test_fleet_status_ignores_retired_hydra_live_but_parses_historical_payload(fake_prime) -> None:
+    base_url, handler = fake_prime
+    handler.nodes_response = {
+        "nodes": [
+            {"natural_key": "hydra-live", "connection_state": "disconnected", "role": "hydra_live"},
+            {"natural_key": "titan", "connection_state": "connected", "role": "titan"},
+        ]
+    }
+
+    result = prime_fleet_status(
+        {"HERMES_PRIME_BASE_URL": base_url, "HERMES_PRIME_AUTH_TOKEN": AUTH_TOKEN}
+    )
+
+    assert [node["natural_key"] for node in result["nodes"]] == ["titan"]
+
+
 def test_fleet_status_rejects_wrong_auth_token(fake_prime) -> None:
     base_url, _ = fake_prime
     result = prime_fleet_status({"HERMES_PRIME_BASE_URL": base_url, "HERMES_PRIME_AUTH_TOKEN": "wrong-token"})

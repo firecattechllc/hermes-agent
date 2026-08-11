@@ -6,6 +6,7 @@ import pytest
 
 from hermes_cli.prime.fleet_registry import (
     FleetNodeConnectionState,
+    FleetNodeRecord,
     FleetNodeRegistrationRequest,
     FleetNodeRegistry,
     FleetNodeRole,
@@ -88,6 +89,36 @@ def test_unknown_node_heartbeat_is_rejected(tmp_path) -> None:
     assert result.outcome == HeartbeatOutcome.REJECTED
     assert result.rejection_code == HeartbeatRejectionCode.UNKNOWN_NODE
     assert heartbeats.is_usable_for_dispatch("ghost-node", now=now) is False
+
+
+def test_retired_historical_node_heartbeat_is_rejected(tmp_path) -> None:
+    registry, heartbeats = _setup(tmp_path)
+    registry._store.put(  # noqa: SLF001 - inject historical durable state
+        FleetNodeRecord(
+            identity_id="fid_node_hydra_live_historical",
+            natural_key="hydra-live",
+            role=FleetNodeRole.HYDRA_LIVE,
+            endpoint="http://hydra-live.invalid:3130",
+            software_version="historical",
+            protocol_version=1,
+            registered_at=1,
+            updated_at=1,
+        )
+    )
+    now = _now()
+    result = heartbeats.ingest(
+        HeartbeatSubmission(
+            natural_key="hydra-live",
+            liveness=LivenessState.ALIVE,
+            readiness=ReadinessState.READY,
+            submitted_at=now,
+        ),
+        now=now,
+    )
+
+    assert result.outcome == HeartbeatOutcome.REJECTED
+    assert result.rejection_code == HeartbeatRejectionCode.UNKNOWN_NODE
+    assert heartbeats.is_usable_for_dispatch("hydra-live", now=now) is False
 
 
 def test_revoked_node_heartbeat_is_rejected(tmp_path) -> None:

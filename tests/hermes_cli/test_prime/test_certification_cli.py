@@ -5,7 +5,11 @@ from pathlib import Path
 
 from hermes_cli.prime.certification import FleetCertificationStatus
 from hermes_cli.prime.certification_cli import main, run_certification
-from hermes_cli.prime.fleet_registry import FleetNodeRegistrationRequest, FleetNodeRole
+from hermes_cli.prime.fleet_registry import (
+    FleetNodeRecord,
+    FleetNodeRegistrationRequest,
+    FleetNodeRole,
+)
 from hermes_cli.prime.fleet_runtime import FleetRuntime
 
 
@@ -39,6 +43,18 @@ def test_run_certification_with_real_state_root_evaluates_real_fleet(tmp_path: P
         ),
         now=now,
     )
+    runtime.registry._store.put(  # noqa: SLF001 - historical durable state fixture
+        FleetNodeRecord(
+            identity_id="fid_node_hydra_live_historical",
+            natural_key="hydra-live",
+            role=FleetNodeRole.HYDRA_LIVE,
+            endpoint="http://hydra-live.invalid:3130",
+            software_version="historical",
+            protocol_version=1,
+            registered_at=1,
+            updated_at=1,
+        )
+    )
 
     payload, status = run_certification(
         repo_root=tmp_path,
@@ -47,6 +63,7 @@ def test_run_certification_with_real_state_root_evaluates_real_fleet(tmp_path: P
         skip_stage1=True,
     )
     assert len(payload["evaluated_identity_ids"]) == 1
+    assert "fid_node_hydra_live_historical" not in payload["evaluated_identity_ids"]
     assert payload["checks_detail"]["evidence_chain_valid"] is True
     # stage1 skipped -> BLOCKED at best, never CERTIFIED, never FAILED from a
     # missing check that was never actually run.

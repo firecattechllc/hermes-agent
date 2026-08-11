@@ -1,5 +1,10 @@
 # Governed Hydra Live repair operator playbook
 
+> **Archived / do not invoke automatically:** Hydra Live is retired from the
+> active fleet. This playbook remains for historical auditability and
+> backwards-compatible test fixtures only; it is not part of fleet health,
+> startup, routing, repair, or certification.
+
 This capability operates on a configured target and runtime-owned secret reference. It never embeds an address, credential, or private key in a proposal or evidence artifact, and it exposes command identifiers rather than an unrestricted shell.
 
 ## Workflow

@@ -1,11 +1,17 @@
 # Canonical Hydra Ecosystem Architecture
 
+> **Current topology note (2026-08-11):** Hydra Live is retired from the
+> active production fleet and superseded by `hydra-hostinger` as the always-on
+> host. Hydra Live sections below are retained as the historical architecture
+> baseline and are not current health, admission, routing, repair, or
+> certification requirements. See [HYDRA_LIVE_RETIREMENT.md](HYDRA_LIVE_RETIREMENT.md).
+
 ## Status
 
 - Architecture state: baseline approved for stabilization
 - Evidence basis: direct discovery of MacBook, Prime, Titan, and Hydra Live
 - Branch: `agent/hydra-ecosystem-architecture-baseline`
-- Scope: current four-machine private engineering and application platform
+- Scope: historical four-machine private engineering and application baseline
 
 This document defines the authoritative responsibility, trust, communication,
 deployment, and recovery model for the Hydra ecosystem.

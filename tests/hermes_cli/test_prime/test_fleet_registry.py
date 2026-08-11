@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from hermes_cli.prime.fleet_registry import (
     FleetNodeConnectionState,
+    FleetNodeRecord,
     FleetNodeRegistrationRequest,
     FleetNodeRegistry,
     FleetNodeRole,
@@ -59,20 +60,52 @@ def test_register_new_node_succeeds(tmp_path) -> None:
     assert not record.revoked
 
 
-def test_register_all_four_intended_fleet_nodes(tmp_path) -> None:
+def test_register_all_three_active_fleet_nodes(tmp_path) -> None:
     registry = _registry(tmp_path)
     for natural_key, role in (
         ("prime", FleetNodeRole.PRIME),
         ("titan", FleetNodeRole.TITAN),
         ("mac", FleetNodeRole.MAC),
-        ("hydra-live", FleetNodeRole.HYDRA_LIVE),
     ):
         decision = registry.register(
             _request(natural_key=natural_key, role=role, request_id=f"req-{natural_key}"),
             now=_now(),
         )
         assert decision.outcome == FleetRegistrationOutcome.REGISTERED, natural_key
-    assert {r.natural_key for r in registry.all()} == {"prime", "titan", "mac", "hydra-live"}
+    assert {r.natural_key for r in registry.all()} == {"prime", "titan", "mac"}
+
+
+def test_retired_hydra_live_cannot_register_or_be_admitted(tmp_path) -> None:
+    registry = _registry(tmp_path)
+    decision = registry.register(
+        _request(natural_key="hydra-live", role=FleetNodeRole.HYDRA_LIVE),
+        now=_now(),
+    )
+    assert decision.outcome == FleetRegistrationOutcome.REJECTED
+    assert decision.rejection_code == FleetRegistrationRejectionCode.UNKNOWN_NODE
+    assert registry.is_admissible_node("hydra-live") is False
+
+
+def test_historical_hydra_live_record_remains_parseable_but_inactive(tmp_path) -> None:
+    store = FleetRegistryStore(state_root=tmp_path / "prime")
+    store.put(
+        FleetNodeRecord(
+            identity_id="fid_node_hydra_live_historical",
+            natural_key="hydra-live",
+            role=FleetNodeRole.HYDRA_LIVE,
+            endpoint="http://hydra-live.invalid:3130",
+            software_version="historical",
+            protocol_version=1,
+            registered_at=1,
+            updated_at=1,
+        )
+    )
+    registry = FleetNodeRegistry(store=store)
+
+    assert registry.get("hydra-live").role == FleetNodeRole.HYDRA_LIVE
+    assert {record.natural_key for record in registry.historical_records()} == {"hydra-live"}
+    assert registry.all() == ()
+    assert registry.is_admissible_node("hydra-live") is False
 
 
 def test_unknown_node_is_rejected(tmp_path) -> None:

@@ -185,6 +185,7 @@ class FleetFinding(BaseModel):
 
 
 def diagnose_hydra_live(evidence: Iterable[MaintenanceEvidence]) -> Tuple[FleetFinding, ...]:
+    """Decode historical Hydra Live evidence; not an active repair target."""
     items = tuple(evidence)
     text = "\n".join(item.output.lower() for item in items)
     refs = tuple(sorted(item.evidence_id for item in items))
@@ -397,6 +398,7 @@ class RepairCertification(BaseModel):
 
 
 def certify_hydra_live(observation: CertificationObservation) -> RepairCertification:
+    """Validate historical/fake evidence; not active fleet certification."""
     serialized = json.dumps([item.model_dump(mode="json") for item in observation.evidence])
     secret_free = redact_evidence(serialized) == serialized
     checks = (

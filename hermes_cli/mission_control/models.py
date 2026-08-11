@@ -91,6 +91,7 @@ _FLEET_NODE_ROLES = frozenset({
     "prime",
     "titan",
     "mac",
+    # Historical Mission Control events remain decodable after retirement.
     "hydra_live",
 })
 

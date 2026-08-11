@@ -1,4 +1,9 @@
-"""Deterministic Hydra Live repair proposals; these functions never execute."""
+"""Archived deterministic Hydra Live repair fixtures.
+
+Hydra Live is retired from the active fleet. These non-executing builders are
+retained for historical evidence decoding and backwards-compatible tests; no
+active runtime, startup, health, or certification path invokes them.
+"""
 
 from __future__ import annotations
 

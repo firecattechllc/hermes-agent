@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-08-05T14:35:00Z",
+  "updated_at": "2026-08-11T14:00:00Z",
   "releases": [
     {
       "id": "sigil-3.7.0",
@@ -9,7 +9,7 @@
       "objective": "Prime/Titan/Mac deployment, Prime-governed Sigil routing, Mission Control fleet UI, paper-only safeguards",
       "implementation_status": "complete",
       "test_status": "green (267 hermes_cli/prime pytest, 2182 apps/sigil pytest, 101 apps/sigil-desktop vitest; ruff/ty/eslint/tsc clean)",
-      "deployment_status": "live: Prime (hydra-prime), Titan (hydra-titan), Mac worker (this machine) deployed and verified; Hydra Live offline/unreachable",
+      "deployment_status": "live: Prime (hydra-prime), Titan (hydra-titan), Mac worker (this machine) deployed and verified; Hydra Live retired from active fleet expectations and superseded by hydra-hostinger",
       "review_status": "PR open, not reviewed, not merged",
       "certification_status": "live fleet certification CERTIFIED against real deployed state (Stage 1 included); Sigil 3.7 certification tests passing",
       "blockers": [

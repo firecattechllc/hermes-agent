@@ -12,8 +12,9 @@ complete, certification is green, and the PR is merged.
 
 ## Sigil 3.7.0 — Governed Fleet Release
 
-Prime/Titan/Mac deployment, Hydra Live where reachable, Prime-governed Sigil
-routing, Mission Control fleet UI, paper-only safeguards.
+Prime/Titan/Mac deployment, Prime-governed Sigil routing, Mission Control
+fleet UI, and paper-only safeguards. Hydra Live was part of the historical
+3.7 evidence but is now retired from active fleet expectations.
 
 - Branch: `sigil-v3.7-fleet-ui-release`
 - PR: https://github.com/firecattechllc/hermes-agent/pull/69
