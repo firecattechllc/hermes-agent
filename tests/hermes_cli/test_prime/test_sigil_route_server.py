@@ -11,7 +11,10 @@ from hermes_cli.prime.fleet_registry import FleetNodeRegistrationRequest, FleetN
 from hermes_cli.prime.fleet_runtime import FleetRuntime
 from hermes_cli.prime.health import LivenessState, ReadinessState
 from hermes_cli.prime.heartbeat import HeartbeatSubmission
+from hermes_cli.prime.identity import IdentityKind
 from hermes_cli.prime.sigil_route_server import (
+    GOVERNED_DISPATCH_TIMEOUT_SECONDS,
+    SIGIL_SERVICE_IDENTITY,
     NodeModelAliasConfig,
     SigilRouteConfigurationError,
     handle_sigil_route_request,
@@ -207,3 +210,72 @@ def test_route_never_dispatches_to_unadmitted_node_even_with_alias_configured(
     )
     assert result["ok"] is False
     assert result["service_admitted"] is False
+
+
+def test_sigil_service_identity_differs_from_mac_worker_node_identity(
+    runtime: FleetRuntime,
+) -> None:
+    now = _now()
+    _register_and_heartbeat(runtime, "mac", FleetNodeRole.MAC, now=now)
+    mac_node = runtime.registry.get("mac")
+    assert mac_node is not None
+    assert SIGIL_SERVICE_IDENTITY.identity_id != mac_node.identity_id
+    assert SIGIL_SERVICE_IDENTITY.kind == IdentityKind.SERVICE
+
+
+def test_route_dispatches_to_mac_worker_without_self_address_rejection(
+    runtime: FleetRuntime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = _now()
+    _register_and_heartbeat(runtime, "mac", FleetNodeRole.MAC, now=now)
+
+    import hermes_cli.prime.ollama_node as ollama_node_module
+
+    class _FakeTransport:
+        def get(self, url: str, *, timeout_seconds: float):
+            return {"models": [{"name": "test-model"}]}
+
+        def post(self, url: str, payload: dict, *, timeout_seconds: float):
+            assert timeout_seconds == GOVERNED_DISPATCH_TIMEOUT_SECONDS
+            return {"response": "governed valuation output"}
+
+    monkeypatch.setattr(ollama_node_module, "UrllibOllamaTransport", _FakeTransport)
+
+    result = handle_sigil_route_request(
+        fleet_runtime=runtime,
+        node_aliases=NodeModelAliasConfig(
+            aliases_by_node={"mac": {"primary_reasoning": "test-model"}}
+        ),
+        certification_provider=_certified,
+        body={"operation": "advisory_valuation"},
+        now=now,
+    )
+    assert result["ok"] is True
+    assert result["outcome"] == "accepted"
+    assert result["advisory_output"]["routed_to"] == "mac"
+
+
+def test_route_to_mac_still_rejects_when_mac_worker_is_unadmitted(
+    runtime: FleetRuntime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hermes_cli.prime.ollama_node as ollama_node_module
+
+    class _FakeTransport:
+        def get(self, url: str, *, timeout_seconds: float):
+            raise AssertionError("must not reach the network")
+
+        def post(self, url: str, payload: dict, *, timeout_seconds: float):
+            raise AssertionError("must not reach the network")
+
+    monkeypatch.setattr(ollama_node_module, "UrllibOllamaTransport", _FakeTransport)
+    result = handle_sigil_route_request(
+        fleet_runtime=runtime,
+        node_aliases=NodeModelAliasConfig(
+            aliases_by_node={"mac": {"primary_reasoning": "test-model"}}
+        ),
+        certification_provider=_certified,
+        body={"operation": "advisory_valuation"},
+        now=_now(),
+    )
+    assert result["ok"] is False
+    assert result["error"] == "caller_not_admitted"

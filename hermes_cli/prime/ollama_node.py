@@ -226,6 +226,9 @@ class OllamaOutputStore:
         return self._by_reference.get(reference)
 
 
+MAX_OUTPUT_TOKENS = 256
+
+
 class OllamaNodeProviderAdapter:
     """Governed generation adapter for one fleet node's Ollama endpoint.
 
@@ -269,7 +272,13 @@ class OllamaNodeProviderAdapter:
         try:
             raw = self.transport.post(
                 f"{self.config.endpoint.rstrip('/')}/api/generate",
-                {"model": model, "prompt": input_text, "stream": False},
+                {
+                    "model": model,
+                    "prompt": input_text,
+                    "stream": False,
+                    "think": False,
+                    "options": {"num_predict": MAX_OUTPUT_TOKENS},
+                },
                 timeout_seconds=min(timeout_seconds, self.config.timeout_ms / 1_000),
             )
         except OllamaNodeTransportError as error:

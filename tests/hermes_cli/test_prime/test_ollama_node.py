@@ -130,6 +130,8 @@ def test_generate_succeeds_when_model_installed_and_healthy() -> None:
     assert outcome.succeeded is True
     assert outcome.output_text == "hello from titan"
     assert transport.generate_calls[0]["model"] == "hermes-llama3.2:3b-64k"
+    assert transport.generate_calls[0]["think"] is False
+    assert transport.generate_calls[0]["options"] == {"num_predict": 256}
 
 
 def test_generate_handles_unavailable_endpoint() -> None:

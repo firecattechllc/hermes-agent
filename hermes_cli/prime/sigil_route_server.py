@@ -16,10 +16,9 @@ followed by :class:`hermes_cli.prime.dispatch_gate.PrimeGovernedProviderAdapter.
 own independent re-check) that :mod:`hermes_cli.prime.sigil_routing` already
 enforces — this module adds no new bypass of either gate.
 
-The caller is always treated as the Mac fleet node (``natural_key="mac"``),
-since Sigil runs on the Mac and that is the node whose ``desktop_use``
-registration is Sigil's own admission fact — never a caller-supplied
-identity, which would let an unadmitted caller assert its own admission.
+The Mac fleet node (``natural_key="mac"``) remains the caller-side admission
+and health fact. Sigil itself uses a distinct governed service identity so a
+valid Sigil-to-Mac-worker route is not mistaken for node self-addressing.
 """
 
 from __future__ import annotations
@@ -38,6 +37,7 @@ from hermes_cli.prime.dispatch_gate import (
 )
 from hermes_cli.prime.fleet_runtime import FleetRuntime
 from hermes_cli.prime.health import is_usable_for_admission
+from hermes_cli.prime.identity import FleetIdentity, IdentityKind, IdentitySource
 from hermes_cli.prime.ollama_node import OllamaNodeConfig, OllamaNodeProviderAdapter
 from hermes_cli.prime.sigil_contract import (
     SigilContractRequest,
@@ -46,6 +46,14 @@ from hermes_cli.prime.sigil_contract import (
 from hermes_cli.prime.sigil_routing import DEFAULT_OPERATION_ROUTES, SigilRoutingService
 
 SIGIL_CALLER_NATURAL_KEY = "mac"
+SIGIL_SERVICE_IDENTITY = FleetIdentity(
+    kind=IdentityKind.SERVICE,
+    natural_key="sigil",
+    source=IdentitySource.NATIVE,
+    source_reference="native:sigil",
+    registered_at=0,
+)
+GOVERNED_DISPATCH_TIMEOUT_SECONDS = 90
 
 
 class SigilRouteConfigurationError(ValueError):
@@ -108,7 +116,10 @@ def _build_adapter(
         return None
     try:
         ollama_config = OllamaNodeConfig(
-            natural_key=natural_key, endpoint=node.endpoint, model_aliases=aliases
+            natural_key=natural_key,
+            endpoint=node.endpoint,
+            model_aliases=aliases,
+            timeout_ms=GOVERNED_DISPATCH_TIMEOUT_SECONDS * 1_000,
         )
     except ValueError:
         return None
@@ -207,11 +218,11 @@ def handle_sigil_route_request(
         request = SigilContractRequest(
             request_id=f"sigil_route_{operation}_{now}",
             correlation_id=f"sigil_route_corr_{now}",
-            caller_identity_id=caller_node.identity_id,
+            caller_identity_id=SIGIL_SERVICE_IDENTITY.identity_id,
             service_identity_id=service_node.identity_id,
             operation=operation,
             requested_at=now,
-            timeout_seconds=int(body.get("timeout_seconds", 30)),
+            timeout_seconds=int(body.get("timeout_seconds", GOVERNED_DISPATCH_TIMEOUT_SECONDS)),
             input_payload=input_payload,
         )
     except ValueError as error:
