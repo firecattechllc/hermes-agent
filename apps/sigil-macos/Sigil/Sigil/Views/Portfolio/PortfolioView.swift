@@ -2,7 +2,10 @@ import SwiftUI
 
 /// Real, read-only paper portfolio state from the governed backend —
 /// deployed capital, governed allocation headroom, and open positions.
-/// Never a broker connection; this is Sigil's own local paper ledger.
+/// Never a LIVE broker connection: order submission always targets Alpaca's
+/// paper-trading API only (see autonomous_paper/alpaca.py), never a live
+/// endpoint. This view does make real network calls through that paper API;
+/// it is not a purely local simulation.
 struct PortfolioView: View {
     @StateObject private var statusStore = PaperExecutionStore()
     @StateObject private var positionsStore = PaperCollectionStore(fetch: { try await HermesBridgeClient().paperPositions() })
@@ -17,6 +20,7 @@ struct PortfolioView: View {
                             LabeledContent("Remaining governed allocation", value: status.remainingGovernedAllocation)
                             LabeledContent("Open positions", value: "\(status.openPositions)")
                             LabeledContent("Broker", value: status.broker)
+                            LabeledContent("Positions as of", value: status.lastReconciliation ?? "Never reconciled")
                             HStack {
                                 Text("Broker submission")
                                 Spacer()

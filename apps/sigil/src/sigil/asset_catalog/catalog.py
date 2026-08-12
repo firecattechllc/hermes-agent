@@ -610,12 +610,23 @@ class AssetCatalogStore:
 
 
 def _configured_credentials() -> tuple[str | None, str | None]:
+    """Resolve Alpaca credentials with the same precedence as the desktop bridge.
+
+    Kept aligned with sigil.desktop_bridge.providers.alpaca_credentials() so a
+    credential saved through the app's Keychain-backed Settings UI (exported
+    as ALPACA_API_KEY/ALPACA_SECRET_KEY) is honored by the asset catalog the
+    same way it is everywhere else, instead of being silently ignored here.
+    """
     key = os.environ.get("APCA_API_KEY_ID") or os.environ.get(
         "SIGIL_ALPACA_API_KEY_ID"
     )
     secret = os.environ.get("APCA_API_SECRET_KEY") or os.environ.get(
         "SIGIL_ALPACA_API_SECRET_KEY"
     )
+    if key and secret:
+        return key, secret
+    key = os.environ.get("ALPACA_API_KEY")
+    secret = os.environ.get("ALPACA_SECRET_KEY")
     if key and secret:
         return key, secret
     try:

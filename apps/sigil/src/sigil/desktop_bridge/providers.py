@@ -42,20 +42,22 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _credential_path() -> Path:
+def _credential_path() -> Path | None:
     configured = os.environ.get("SIGIL_PROVIDER_CREDENTIAL_FILE")
-    return (
-        Path(configured).expanduser()
-        if configured
-        else Path.home() / "Desktop" / "Sigil-provider-credentials.txt"
-    )
+    return Path(configured).expanduser() if configured else None
 
 
 def load_credentials(path: Path | None = None) -> dict[str, str]:
-    """Load an exact allowlist from a private regular file."""
+    """Load an exact allowlist from an explicitly-configured private regular file.
 
-    target = path or _credential_path()
-    if not target.is_absolute() or target.is_symlink() or not target.is_file():
+    There is no implicit default location: a credential file is only ever
+    consulted when SIGIL_PROVIDER_CREDENTIAL_FILE (or an explicit path) names
+    it, so Keychain/env-derived credentials can never be silently shadowed by
+    a stray file someone happens to have left in a well-known location.
+    """
+
+    target = path if path is not None else _credential_path()
+    if target is None or not target.is_absolute() or target.is_symlink() or not target.is_file():
         raise RuntimeError("provider credential file is unavailable")
     stat = target.stat()
     if stat.st_size > MAX_CREDENTIAL_BYTES or stat.st_mode & 0o077:
@@ -81,7 +83,14 @@ def load_credentials(path: Path | None = None) -> dict[str, str]:
 
 
 def alpaca_credentials(path: Path | None = None) -> tuple[str | None, str | None]:
-    """Resolve Alpaca credentials without returning them across the bridge."""
+    """Resolve Alpaca credentials without returning them across the bridge.
+
+    Env-derived pairs (including ALPACA_API_KEY/ALPACA_SECRET_KEY, the pair
+    Keychain-backed credentials are exported under) always take precedence
+    over an explicitly-configured credential file, so a file can never
+    silently shadow a credential the user saved through the app's own
+    Keychain-backed Settings UI.
+    """
 
     canonical_pairs = (
         (os.environ.get("APCA_API_KEY_ID"), os.environ.get("APCA_API_SECRET_KEY")),
@@ -89,6 +98,7 @@ def alpaca_credentials(path: Path | None = None) -> tuple[str | None, str | None
             os.environ.get("SIGIL_ALPACA_API_KEY_ID"),
             os.environ.get("SIGIL_ALPACA_API_SECRET_KEY"),
         ),
+        (os.environ.get("ALPACA_API_KEY"), os.environ.get("ALPACA_SECRET_KEY")),
     )
     for key, secret in canonical_pairs:
         if key and secret:
@@ -101,7 +111,7 @@ def alpaca_credentials(path: Path | None = None) -> tuple[str | None, str | None
     file_secret = credentials.get("SIGIL_ALPACA_API_SECRET_KEY")
     if file_key and file_secret:
         return file_key, file_secret
-    return os.environ.get("ALPACA_API_KEY"), os.environ.get("ALPACA_SECRET_KEY")
+    return None, None
 
 
 def _alpaca_probe(

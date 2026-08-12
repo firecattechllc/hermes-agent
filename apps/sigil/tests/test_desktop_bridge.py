@@ -392,17 +392,31 @@ def test_alpaca_credentials_fall_back_to_private_provider_file(
     assert alpaca_credentials(credential_path) == ("file-key", "file-secret")
 
 
-def test_private_provider_file_precedes_legacy_shell_aliases(tmp_path, monkeypatch) -> None:
+def test_keychain_backed_env_precedes_private_provider_file(tmp_path, monkeypatch) -> None:
+    """ALPACA_API_KEY/ALPACA_SECRET_KEY is what Keychain-backed Settings exports.
+
+    It must never be shadowed by a credential file, so a file left over in a
+    well-known location can't silently override what the user saved via the
+    app's Keychain-backed Settings UI.
+    """
     credential_path = tmp_path / "providers.txt"
     credential_path.write_text(
         "SIGIL_ALPACA_API_KEY_ID=file-key\n"
         "SIGIL_ALPACA_API_SECRET_KEY=file-secret\n"
     )
     credential_path.chmod(0o600)
-    monkeypatch.setenv("ALPACA_API_KEY", "legacy-key")
-    monkeypatch.setenv("ALPACA_SECRET_KEY", "legacy-secret")
+    monkeypatch.setenv("ALPACA_API_KEY", "keychain-key")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "keychain-secret")
 
-    assert alpaca_credentials(credential_path) == ("file-key", "file-secret")
+    assert alpaca_credentials(credential_path) == ("keychain-key", "keychain-secret")
+
+
+def test_provider_credential_file_has_no_implicit_default_location(monkeypatch) -> None:
+    """There is no fallback to a well-known path like ~/Desktop; it must be opt-in."""
+    monkeypatch.delenv("SIGIL_PROVIDER_CREDENTIAL_FILE", raising=False)
+
+    with pytest.raises(RuntimeError):
+        load_credentials()
 
 
 def test_alpaca_health_separates_account_quote_and_history() -> None:
