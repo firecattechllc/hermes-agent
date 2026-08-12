@@ -6,3 +6,14 @@ DerivedData/
 
 # Local dev shim runtime artifacts (log/pid files from script/build_and_run.sh).
 .dev-support/
+
+# Release build artifacts (archives, exported .app/.zip, manifests) from
+# script/release.sh — reproducible from source + a signing identity, never
+# meaningful to commit, and must never contain secrets, but keep them out of
+# git regardless since they're large binaries.
+.release/
+
+# The root .gitignore's broad `export*` pattern unintentionally matches this
+# file's name; it must stay tracked — it's the Developer ID export config
+# release.sh depends on, not a build artifact.
+!script/ExportOptions.plist
