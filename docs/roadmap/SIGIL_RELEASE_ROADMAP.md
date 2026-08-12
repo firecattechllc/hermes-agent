@@ -51,10 +51,27 @@ Store validation, privacy policy, terms, support/account deletion, crash
 reporting, security and supply-chain review, beta remediation, release
 notes, launch assets, rollback plan.
 
-- Branch: `sigil-v4.0-public-release`
-- Status: not started. Depends on 3.9 merging first. Public-release
-  readiness will not be claimed without successful signing, archive,
-  notarization, production Supabase validation, and final certification.
+- Branch: `sigil-v4.0-public-release` was never created. Instead, a native
+  macOS 4.0.0 build (Swift/Xcode, replacing the earlier Electron app) was
+  developed on `sigil/4.0-native-macos`, partially merged to `sigil-alpha`
+  via PR #75/#76 (tag `v4.0.0`), then extended with additional commits on
+  that branch (the Hermes Bridge XPC service, Agent Watch improvements)
+  that were never merged back — meaning the actually-signed-and-installed
+  `/Applications/Sigil.app` v4.0.0 could not be reproduced from `sigil-alpha`
+  or from the `v4.0.0` tag alone. This gap was found during a 2026-08-12
+  certification audit and closed by merging `sigil/4.0-native-macos` into
+  `sigil-alpha` (see evidence below); `sigil-alpha` is now the single
+  canonical source capable of reproducing the shipped app's feature set.
+- Status: shipped (installed, signed, notarized) but **not formally
+  certified**. The 2026-08-12 audit found trading-safety and governance
+  strong (no live-trading path exists, kill switch and paper/live
+  separation verified), but no CI-driven signing/notarization pipeline
+  exists for `apps/sigil-macos` — v4.0.0 was built via manual Xcode steps,
+  not a repeatable process — and several P1 findings remain open. See
+  `Sigil-4.0-Certification-Report-2026-08-12.md` (Desktop) for full detail.
+  Do not claim public-release readiness until that pipeline exists and the
+  app is rebuilt/re-signed/re-notarized from the reconciled `sigil-alpha`
+  source.
 
 ## Post-4.0 — Paper-Trading Maturation
 

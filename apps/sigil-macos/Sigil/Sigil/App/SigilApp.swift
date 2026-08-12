@@ -3,7 +3,12 @@ import SwiftUI
 
 @MainActor
 private final class SigilAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        HermesBridgeServiceController.shared.start()
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        HermesBridgeServiceController.shared.stop()
         AgentLifecycleIntegration().stop()
     }
 }

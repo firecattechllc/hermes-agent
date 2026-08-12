@@ -14,11 +14,14 @@ struct ReconciliationView: View {
                 SectionCard(title: "Reconciliation", systemImage: "arrow.triangle.2.circlepath") {
                     if let status = store.status {
                         VStack(alignment: .leading, spacing: 10) {
-                            LabeledContent("Last reconciliation", value: status.lastReconciliation ?? "Never")
+                            if status.lifecycleActionsAvailable == false {
+                                StatusRowView(entry: StatusEntry(title: "Reconciliation Source", state: .notConfigured, detail: "Governed paper-runtime backend not configured; no reconciliation has run."))
+                            }
+                            LabeledContent("Last reconciliation", value: status.lastReconciliation ?? "No run yet")
                             HStack(alignment: .top) {
                                 Text("Degraded conditions")
                                 Spacer()
-                                StatusBadge(state: status.degradedConditions.isEmpty ? .connected : .degraded)
+                                StatusBadge(state: status.degradedConditions.isEmpty ? .noData : .degraded)
                             }
                             if !status.degradedConditions.isEmpty {
                                 Text(status.degradedConditions.joined(separator: ", "))
@@ -28,7 +31,7 @@ struct ReconciliationView: View {
                             HStack(alignment: .top) {
                                 Text("Unmanaged positions")
                                 Spacer()
-                                StatusBadge(state: status.unmanagedPositionSymbols.isEmpty ? .connected : .degraded)
+                                StatusBadge(state: status.unmanagedPositionSymbols.isEmpty ? .noData : .degraded)
                             }
                             if !status.unmanagedPositionSymbols.isEmpty {
                                 Text(status.unmanagedPositionSymbols.joined(separator: ", "))

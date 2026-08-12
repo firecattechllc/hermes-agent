@@ -6,7 +6,18 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		4B0000010000000000000001 /* HermesBridgeService.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 4B0000020000000000000002 /* HermesBridgeService.xpc */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		4B0000030000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1A3C34563026E7B3002C24AE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4B0000100000000000000010;
+			remoteInfo = HermesBridgeService;
+		};
 		1A3C346C3026E7B5002C24AE /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1A3C34563026E7B3002C24AE /* Project object */;
@@ -24,12 +35,31 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		4B0000020000000000000002 /* HermesBridgeService.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = HermesBridgeService.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A3C345E3026E7B3002C24AE /* SigilDev.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SigilDev.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A3C346B3026E7B5002C24AE /* SigilTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SigilTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A3C34753026E7B5002C24AE /* SigilUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SigilUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		4B0000150000000000000015 /* Exceptions for HermesBridgeService folder in HermesBridgeService target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 4B0000100000000000000010 /* HermesBridgeService */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		4B0000040000000000000004 /* HermesBridgeService */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				4B0000150000000000000015 /* Exceptions for HermesBridgeService folder in HermesBridgeService target */,
+			);
+			path = HermesBridgeService;
+			sourceTree = "<group>";
+		};
 		1A3C34603026E7B3002C24AE /* Sigil */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Sigil;
@@ -48,6 +78,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		4B0000050000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1A3C345B3026E7B3002C24AE /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -76,6 +113,7 @@
 			isa = PBXGroup;
 			children = (
 				1A3C34603026E7B3002C24AE /* Sigil */,
+				4B0000040000000000000004 /* HermesBridgeService */,
 				1A3C346E3026E7B5002C24AE /* SigilTests */,
 				1A3C34783026E7B5002C24AE /* SigilUITests */,
 				1A3C345F3026E7B3002C24AE /* Products */,
@@ -86,6 +124,7 @@
 			isa = PBXGroup;
 			children = (
 				1A3C345E3026E7B3002C24AE /* SigilDev.app */,
+				4B0000020000000000000002 /* HermesBridgeService.xpc */,
 				1A3C346B3026E7B5002C24AE /* SigilTests.xctest */,
 				1A3C34753026E7B5002C24AE /* SigilUITests.xctest */,
 			);
@@ -93,6 +132,20 @@
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		4B0000060000000000000006 /* Embed XPC Services */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "Contents/XPCServices";
+			dstSubfolderSpec = 1;
+			files = (
+				4B0000010000000000000001 /* HermesBridgeService.xpc in Embed XPC Services */,
+			);
+			name = "Embed XPC Services";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXNativeTarget section */
 		1A3C345D3026E7B3002C24AE /* Sigil */ = {
@@ -102,10 +155,12 @@
 				1A3C345A3026E7B3002C24AE /* Sources */,
 				1A3C345B3026E7B3002C24AE /* Frameworks */,
 				1A3C345C3026E7B3002C24AE /* Resources */,
+				4B0000060000000000000006 /* Embed XPC Services */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				4B0000070000000000000007 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				1A3C34603026E7B3002C24AE /* Sigil */,
@@ -116,6 +171,28 @@
 			productName = Sigil;
 			productReference = 1A3C345E3026E7B3002C24AE /* SigilDev.app */;
 			productType = "com.apple.product-type.application";
+		};
+		4B0000100000000000000010 /* HermesBridgeService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4B0000110000000000000011 /* Build configuration list for PBXNativeTarget "HermesBridgeService" */;
+			buildPhases = (
+				4B0000080000000000000008 /* Sources */,
+				4B0000050000000000000005 /* Frameworks */,
+				4B0000090000000000000009 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				4B0000040000000000000004 /* HermesBridgeService */,
+			);
+			name = HermesBridgeService;
+			packageProductDependencies = (
+			);
+			productName = HermesBridgeService;
+			productReference = 4B0000020000000000000002 /* HermesBridgeService.xpc */;
+			productType = "com.apple.product-type.xpc-service";
 		};
 		1A3C346A3026E7B5002C24AE /* SigilTests */ = {
 			isa = PBXNativeTarget;
@@ -173,6 +250,9 @@
 				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2660;
 				TargetAttributes = {
+					4B0000100000000000000010 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 					1A3C345D3026E7B3002C24AE = {
 						CreatedOnToolsVersion = 26.6;
 					};
@@ -201,6 +281,7 @@
 			projectRoot = "";
 			targets = (
 				1A3C345D3026E7B3002C24AE /* Sigil */,
+				4B0000100000000000000010 /* HermesBridgeService */,
 				1A3C346A3026E7B5002C24AE /* SigilTests */,
 				1A3C34743026E7B5002C24AE /* SigilUITests */,
 			);
@@ -208,6 +289,13 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		4B0000090000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1A3C345C3026E7B3002C24AE /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -232,6 +320,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4B0000080000000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1A3C345A3026E7B3002C24AE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -256,6 +351,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		4B0000070000000000000007 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4B0000100000000000000010 /* HermesBridgeService */;
+			targetProxy = 4B0000030000000000000003 /* PBXContainerItemProxy */;
+		};
 		1A3C346D3026E7B5002C24AE /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 1A3C345D3026E7B3002C24AE /* Sigil */;
@@ -269,6 +369,73 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		4B0000120000000000000012 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = HermesBridgeService/HermesBridgeService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VJ4ADMST5U;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HermesBridgeService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = HermesBridgeService;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 4.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.firecattechnology.Sigil.dev.HermesBridgeService;
+				PRODUCT_NAME = HermesBridgeService;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4B0000130000000000000013 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = HermesBridgeService/HermesBridgeService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VJ4ADMST5U;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HermesBridgeService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = HermesBridgeService;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 4.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.firecattechnology.Sigil.dev.HermesBridgeService;
+				PRODUCT_NAME = HermesBridgeService;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		4B0000140000000000000014 /* Production */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = HermesBridgeService/HermesBridgeService.entitlements;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VJ4ADMST5U;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HermesBridgeService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = HermesBridgeService;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 4.0.0;
+				OTHER_CODE_SIGN_FLAGS = "--timestamp";
+				PRODUCT_BUNDLE_IDENTIFIER = com.firecattechnology.sigil.macos.HermesBridgeService;
+				PRODUCT_NAME = HermesBridgeService;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Production;
+		};
 		1A3C347D3026E7B5002C24AE /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -462,6 +629,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Sigil/Sigil.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -630,6 +798,16 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		4B0000110000000000000011 /* Build configuration list for PBXNativeTarget "HermesBridgeService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4B0000120000000000000012 /* Debug */,
+				4B0000130000000000000013 /* Release */,
+				4B0000140000000000000014 /* Production */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		1A3C34593026E7B3002C24AE /* Build configuration list for PBXProject "Sigil" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

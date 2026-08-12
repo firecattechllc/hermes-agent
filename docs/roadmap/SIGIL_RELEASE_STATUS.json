@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-08-11T14:00:00Z",
+  "updated_at": "2026-08-12T21:20:00Z",
   "releases": [
     {
       "id": "sigil-3.7.0",
@@ -57,17 +57,21 @@
     {
       "id": "sigil-4.0.0",
       "name": "Public Release Ready",
-      "branch": "sigil-v4.0-public-release",
+      "branch": "sigil-alpha (reconciled 2026-08-12 from sigil/4.0-native-macos, which shipped the installed build; sigil-v4.0-public-release was never created)",
       "objective": "Signing, notarization, App Store validation, privacy/terms, crash reporting, supply-chain review, launch assets",
-      "implementation_status": "not_started",
-      "test_status": "not_started",
-      "deployment_status": "not_started",
-      "review_status": "not_started",
-      "certification_status": "not_started",
-      "blockers": ["depends on 3.9 merging first", "requires Apple signing credentials"],
-      "evidence_ref": null,
+      "implementation_status": "shipped_ad_hoc",
+      "test_status": "apps/sigil pytest: 2182 passed / 2 failed (both pre-existing wall-clock-fixture time bombs, root-caused, unrelated to any regression); apps/sigil-macos SigilTests: all passed locally (~3s)",
+      "deployment_status": "installed as /Applications/Sigil.app v4.0.0, signed (Developer ID Application: Matthew Callaham), notarization ticket stapled, spctl-accepted",
+      "review_status": "no formal PR covered the final Hermes Bridge XPC service / Agent Watch commits; built via manual Xcode archive, not CI. Source gap closed by merging sigil/4.0-native-macos into sigil-alpha on 2026-08-12; no independent review of that merge has occurred yet",
+      "certification_status": "audited 2026-08-12: NOT CERTIFIED. Trading-safety/governance verified strong (no live-trading code path exists anywhere in the repo; kill switch, paper/live separation, and fail-closed Prime/Titan handling all confirmed by code + live testing). Blocking: no CI signing/notarization automation exists for apps/sigil-macos; several P1s remain (kill switch does not flatten existing positions on emergency stop, Mission Control connection-status is a hardcoded constant, real trading-store audit trail caps at 200 events with no archive, Agent Watch is non-functional under the app sandbox). Two credential-handling and one Portfolio-staleness-display finding were fixed during the audit.",
+      "blockers": [
+        "no CI-driven build/sign/notarize pipeline exists for apps/sigil-macos (v4.0.0 was built manually)",
+        "app has not been rebuilt/re-signed/re-notarized from the now-reconciled sigil-alpha source",
+        "P1 findings from the 2026-08-12 audit remain open (see certification report)"
+      ],
+      "evidence_ref": "Sigil-4.0-Certification-Report-2026-08-12.md (Desktop)",
       "pr_url": null,
-      "next_action": "Await 3.9 merge."
+      "next_action": "Build CI signing/notarization automation, then rebuild/re-sign/re-notarize from sigil-alpha and re-verify the artifact before claiming certification."
     },
     {
       "id": "sigil-post-4.0-maturation",

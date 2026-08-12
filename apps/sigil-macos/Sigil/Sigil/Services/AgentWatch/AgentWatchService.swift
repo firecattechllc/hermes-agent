@@ -59,8 +59,18 @@ final class AgentWatchService: ObservableObject {
             }
             return merged
         }
-        let discoveredIDs = Set(discovered.map(\.id))
-        for var missing in previous.values where !discoveredIDs.contains(missing.id) {
+        let nativeIdentities = Set(discovered.map { "\($0.kind.rawValue):\($0.processID)" })
+        let evidenceSessions = evidenceProvider.evidenceBackedSessions(now: now).filter {
+            !nativeIdentities.contains("\($0.kind.rawValue):\($0.processID)")
+        }.map { fresh in
+            guard let old = previous[fresh.id] else { return fresh }
+            var merged = fresh
+            if fresh.state == old.state { merged.lastStateChangeTime = old.lastStateChangeTime }
+            return merged
+        }
+        nextSessions.append(contentsOf: evidenceSessions)
+        let representedIdentities = Set(nextSessions.map { "\($0.kind.rawValue):\($0.processID)" })
+        for var missing in previous.values where !representedIdentities.contains("\(missing.kind.rawValue):\(missing.processID)") {
             if let evidence = evidenceProvider.evidence(for: missing, now: now) {
                 let priorState = missing.state
                 (missing.state, missing.stateReason) = AgentStateClassifier().classify(evidence)

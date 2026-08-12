@@ -3,6 +3,20 @@ import Testing
 @testable import SigilDev
 
 struct AgentWatchTests {
+    @Test func debugProductUsesItsExactApplicationSupportPath() {
+        let root = URL(filePath: "/tmp/Application Support", directoryHint: .isDirectory)
+        #expect(AgentWatchPaths.evidenceDirectory(applicationSupportDirectory: root).path == "/tmp/Application Support/SigilDev/AgentWatch/Events")
+    }
+
+    @Test func releaseAndDebugProductIdentitiesResolveIndependently() {
+        let mapping = [
+            "com.firecattechnology.sigil.macos": "Sigil/AgentWatch/Events",
+            "com.firecattechnology.Sigil.dev": "SigilDev/AgentWatch/Events",
+        ]
+        #expect(AgentWatchPaths.relativePath(bundleIdentifier: "com.firecattechnology.sigil.macos", mapping: mapping) == "Sigil/AgentWatch/Events")
+        #expect(AgentWatchPaths.relativePath(bundleIdentifier: "com.firecattechnology.Sigil.dev", mapping: mapping) == "SigilDev/AgentWatch/Events")
+        #expect(AgentWatchPaths.relativePath(bundleIdentifier: "unknown", mapping: mapping) == nil)
+    }
     private func process(_ name: String, path: String? = nil, pid: Int32 = 42) -> AgentProcessSnapshot {
         AgentProcessSnapshot(processID: pid, parentProcessID: 1, executablePath: path ?? "/usr/local/bin/\(name)", executableName: name, arguments: [], startTime: Date(timeIntervalSince1970: 100), associatedApplication: nil, applicationBundleIdentifier: nil)
     }
@@ -73,6 +87,61 @@ struct AgentWatchTests {
         try #"{"agent":"claudeCode","processID":10,"event":"beganWork","observedAt":"1970-01-01T00:03:20Z","prompt":"must reject"}"#.write(to: file, atomically: true, encoding: .utf8)
         let provider = LocalAgentStateEvidenceProvider(directory: directory, freshnessInterval: 900)
         #expect(provider.evidence(for: makeSession(state: .unknown), now: Date(timeIntervalSince1970: 200)) == nil)
+    }
+
+    @Test @MainActor func validCodexEvidenceCreatesSessionWithoutNativeDiscovery() async throws {
+        let fixture = try CodexEvidenceFixture(event: .sessionStarted, observedAt: 200)
+        defer { fixture.cleanup() }
+        let service = makeService(processes: [], evidence: fixture.provider)
+        await service.refresh(now: Date(timeIntervalSince1970: 200))
+        #expect(service.sessions.count == 1)
+        #expect(service.sessions.first?.kind == .codex)
+        #expect(service.sessions.first?.processID == 42)
+    }
+
+    @Test @MainActor func matchingNativeCodexAndEvidenceProduceOneSession() async throws {
+        let fixture = try CodexEvidenceFixture(event: .beganWork, observedAt: 200)
+        defer { fixture.cleanup() }
+        let service = makeService(processes: [process("codex", pid: 42)], evidence: fixture.provider)
+        await service.refresh(now: Date(timeIntervalSince1970: 200))
+        #expect(service.sessions.count == 1)
+        #expect(service.sessions.first?.processID == 42)
+        #expect(service.sessions.first?.evidenceSource == .nativeLifecycle)
+    }
+
+    @Test @MainActor func evidenceCreatedCodexSessionTransitionsToWorking() async throws {
+        let fixture = try CodexEvidenceFixture(event: .sessionStarted, observedAt: 200)
+        defer { fixture.cleanup() }
+        let service = makeService(processes: [], evidence: fixture.provider)
+        await service.refresh(now: Date(timeIntervalSince1970: 200))
+        try fixture.write(event: .beganWork, observedAt: 201)
+        await service.refresh(now: Date(timeIntervalSince1970: 201))
+        #expect(service.sessions.count == 1)
+        #expect(service.sessions.first?.state == .working)
+    }
+
+    @Test @MainActor func evidenceCreatedCodexSessionTransitionsToCompleted() async throws {
+        let fixture = try CodexEvidenceFixture(event: .beganWork, observedAt: 200)
+        defer { fixture.cleanup() }
+        let service = makeService(processes: [], evidence: fixture.provider)
+        await service.refresh(now: Date(timeIntervalSince1970: 200))
+        try fixture.write(event: .completed, observedAt: 201)
+        await service.refresh(now: Date(timeIntervalSince1970: 201))
+        #expect(service.sessions.count == 1)
+        #expect(service.sessions.first?.state == .done)
+    }
+
+    @Test @MainActor func staleOrInvalidCodexEvidenceDoesNotCreateSession() async throws {
+        let stale = try CodexEvidenceFixture(event: .beganWork, observedAt: 190)
+        defer { stale.cleanup() }
+        var service = makeService(processes: [], evidence: stale.provider)
+        await service.refresh(now: Date(timeIntervalSince1970: 200))
+        #expect(service.sessions.isEmpty)
+
+        try stale.writeRaw(#"{"agent":"codex","processID":42,"event":"beganWork","observedAt":"1970-01-01T00:03:20Z","prompt":"rejected"}"#)
+        service = makeService(processes: [], evidence: stale.provider)
+        await service.refresh(now: Date(timeIntervalSince1970: 200))
+        #expect(service.sessions.isEmpty)
     }
 
     @Test func lifecycleEvidenceUpgradesSourceAndProcessFallbackIsLowConfidence() async {
@@ -242,6 +311,48 @@ struct AgentWatchTests {
                 .appending(path: UUID().uuidString, directoryHint: .isDirectory)
         )
     }
+
+    @MainActor private func makeService(
+        processes: [AgentProcessSnapshot], evidence: LocalAgentStateEvidenceProvider
+    ) -> AgentWatchService {
+        AgentWatchService(
+            discovery: AgentDiscoveryService(provider: StubProcessProvider(items: processes)),
+            notifications: AgentNotificationService(delivery: RecordingNotificationDelivery()),
+            power: RecordingPowerManager(),
+            evidenceProvider: evidence,
+            lifecycleIntegration: testLifecycleIntegration(),
+            thresholds: .init()
+        )
+    }
+}
+
+private final class CodexEvidenceFixture {
+    let directory: URL
+    let provider: LocalAgentStateEvidenceProvider
+    private var file: URL { directory.appending(path: "codex-42.json") }
+
+    init(event: SanitizedAgentLifecycleEvent, observedAt: TimeInterval) throws {
+        directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        provider = LocalAgentStateEvidenceProvider(directory: directory, freshnessInterval: 900)
+        try write(event: event, observedAt: observedAt)
+    }
+
+    func write(event: SanitizedAgentLifecycleEvent, observedAt: TimeInterval) throws {
+        let signal = SanitizedAgentEvent(
+            agent: .codex, processID: 42, event: event,
+            observedAt: Date(timeIntervalSince1970: observedAt)
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(signal).write(to: file, options: .atomic)
+    }
+
+    func writeRaw(_ value: String) throws {
+        try value.write(to: file, atomically: true, encoding: .utf8)
+    }
+
+    func cleanup() { try? FileManager.default.removeItem(at: directory) }
 }
 
 private struct StubProcessProvider: AgentProcessProviding {

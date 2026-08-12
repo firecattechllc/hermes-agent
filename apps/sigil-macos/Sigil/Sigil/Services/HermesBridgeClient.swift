@@ -10,13 +10,12 @@ enum HermesBridgeError: Error {
     case backendRejected(error: String, message: String)
 }
 
-/// Thin HTTP client for the local Hermes bridge shim
-/// (`apps/sigil/src/sigil/desktop_bridge/http_shim.py`). Talks only to
+/// Thin HTTP client for Sigil's embedded XPC bridge. Talks only to
 /// 127.0.0.1. Read methods issue GET against status/inspection routes.
 /// The four `paperExecution*` methods issue POST against an explicit,
 /// separately-allow-listed set of governed paper-automation lifecycle
 /// commands — there is no generic "send any command" method anywhere here;
-/// every reachable route is named one at a time, matching the shim's own
+/// every reachable route is named one at a time, matching the bridge's own
 /// explicit two-list design.
 struct HermesBridgeClient {
     nonisolated static let defaultBaseURLString = "http://127.0.0.1:8799"

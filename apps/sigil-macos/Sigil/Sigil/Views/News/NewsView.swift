@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Real governed news evidence store status. `status == "empty"` (nothing
 /// ingested yet in this isolated dev environment) is shown honestly as
-/// "Unavailable" rather than invented content — this is a genuine backend
+/// "No Data Yet" rather than invented content — this is a genuine backend
 /// source (`governed_news_status`), not a placeholder.
 struct NewsView: View {
     @StateObject private var store = NewsStore()
@@ -16,11 +16,11 @@ struct NewsView: View {
                             HStack {
                                 Text("Status")
                                 Spacer()
-                                StatusBadge(state: status.status == "ready" ? .connected : .unavailable)
+                                StatusBadge(state: status.status == "ready" ? .connected : .noData)
                             }
                             LabeledContent("Headlines", value: "\(status.headlineCount)")
                             LabeledContent("Symbols covered", value: "\(status.symbolCount)")
-                            LabeledContent("Last collected", value: status.lastCollectedAt ?? "Never")
+                            LabeledContent("Last collected", value: status.lastCollectedAt ?? "Waiting for first configured collection")
                         }
                     } else if let error = store.errorMessage {
                         StatusRowView(entry: StatusEntry(title: "News", state: .offline, detail: error))

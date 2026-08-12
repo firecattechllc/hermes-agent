@@ -22,6 +22,11 @@ nonisolated struct SanitizedAgentEvent: Codable, Equatable, Sendable {
 
 nonisolated protocol AgentStateEvidenceProviding: Sendable {
     func evidence(for session: AgentWatchSession, now: Date) -> AgentStateEvidence?
+    func evidenceBackedSessions(now: Date) -> [AgentWatchSession]
+}
+
+nonisolated extension AgentStateEvidenceProviding {
+    func evidenceBackedSessions(now: Date) -> [AgentWatchSession] { [] }
 }
 
 nonisolated struct LocalAgentStateEvidenceProvider: AgentStateEvidenceProviding {
@@ -29,8 +34,7 @@ nonisolated struct LocalAgentStateEvidenceProvider: AgentStateEvidenceProviding 
     let freshnessInterval: TimeInterval
 
     nonisolated init(
-        directory: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appending(path: "SigilDev/AgentWatch/Events", directoryHint: .isDirectory),
+        directory: URL = AgentWatchPaths.evidenceDirectory(),
         freshnessInterval: TimeInterval = 15 * 60
     ) {
         self.directory = directory
@@ -39,16 +43,55 @@ nonisolated struct LocalAgentStateEvidenceProvider: AgentStateEvidenceProviding 
 
     nonisolated func evidence(for session: AgentWatchSession, now: Date) -> AgentStateEvidence? {
         let url = directory.appending(path: "\(session.kind.rawValue)-\(session.processID).json")
+        guard let signal = validatedSignal(at: url, now: now),
+              signal.agent == session.kind, signal.processID == session.processID
+        else { return nil }
+        return Self.map(signal.event)
+    }
+
+    nonisolated func evidenceBackedSessions(now: Date) -> [AgentWatchSession] {
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil
+        ) else { return [] }
+        return urls.compactMap { url in
+            guard url.lastPathComponent.hasPrefix("codex-"),
+                  url.pathExtension == "json",
+                  let signal = validatedSignal(at: url, now: now),
+                  signal.agent == .codex,
+                  url.deletingPathExtension().lastPathComponent == "codex-\(signal.processID)"
+            else { return nil }
+            let (state, reason) = AgentStateClassifier().classify(Self.map(signal.event))
+            return AgentWatchSession(
+                id: "codex:\(signal.processID):lifecycle",
+                kind: .codex,
+                displayName: AgentKind.codex.displayName,
+                state: state,
+                stateReason: reason,
+                evidenceSource: .nativeLifecycle,
+                evidenceConfidence: .high,
+                processID: signal.processID,
+                parentProcessID: nil,
+                host: "This Mac",
+                workingDirectory: nil,
+                associatedApplication: nil,
+                applicationBundleIdentifier: nil,
+                startTime: signal.observedAt,
+                lastActivityTime: signal.observedAt,
+                lastStateChangeTime: now
+            )
+        }
+    }
+
+    private nonisolated func validatedSignal(at url: URL, now: Date) -> SanitizedAgentEvent? {
         guard let data = try? Data(contentsOf: url),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               Set(object.keys) == ["agent", "processID", "event", "observedAt"],
               let signal = try? JSONDecoder.agentWatch.decode(SanitizedAgentEvent.self, from: data),
-              signal.agent == session.kind,
-              signal.processID == session.processID,
+              signal.processID > 1,
               signal.observedAt <= now,
-              now.timeIntervalSince(signal.observedAt) <= (session.kind == .codex ? 8 : freshnessInterval)
+              now.timeIntervalSince(signal.observedAt) <= (signal.agent == .codex ? 8 : freshnessInterval)
         else { return nil }
-        return Self.map(signal.event)
+        return signal
     }
 
     nonisolated static func map(_ event: SanitizedAgentLifecycleEvent) -> AgentStateEvidence {
@@ -68,6 +111,29 @@ nonisolated struct LocalAgentStateEvidenceProvider: AgentStateEvidenceProviding 
         case .ended:
             AgentStateEvidence(processAlive: false, completionReason: "Native session ended")
         }
+    }
+}
+
+nonisolated enum AgentWatchPaths {
+    static func evidenceDirectory(
+        bundle: Bundle = .main,
+        applicationSupportDirectory: URL = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        )[0]
+    ) -> URL {
+        guard let identifier = bundle.bundleIdentifier,
+              let contractURL = bundle.url(forResource: "agent_watch_paths", withExtension: "json"),
+              let data = try? Data(contentsOf: contractURL),
+              let mapping = try? JSONDecoder().decode([String: String].self, from: data),
+              let relativePath = relativePath(bundleIdentifier: identifier, mapping: mapping)
+        else {
+            preconditionFailure("Unsupported or missing Agent Watch product identity")
+        }
+        return applicationSupportDirectory.appending(path: relativePath, directoryHint: .isDirectory)
+    }
+
+    static func relativePath(bundleIdentifier: String, mapping: [String: String]) -> String? {
+        mapping[bundleIdentifier]
     }
 }
 

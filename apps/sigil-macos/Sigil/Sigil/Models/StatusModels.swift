@@ -13,6 +13,9 @@ enum ServiceState: String, Hashable {
     case mockData
     case degraded
     case disabled
+    case optional
+    case notConfigured
+    case noData
     case unavailable
     case offline
 
@@ -22,6 +25,9 @@ enum ServiceState: String, Hashable {
         case .mockData: return "Demo Data"
         case .degraded: return "Degraded"
         case .disabled: return "Disabled"
+        case .optional: return "Optional"
+        case .notConfigured: return "Not Configured"
+        case .noData: return "No Data Yet"
         case .unavailable: return "Unavailable"
         case .offline: return "Offline"
         }
@@ -32,7 +38,7 @@ enum ServiceState: String, Hashable {
         case .connected: return .green
         case .mockData: return .orange
         case .degraded: return .yellow
-        case .disabled: return .secondary
+        case .disabled, .optional, .notConfigured, .noData: return .secondary
         case .unavailable: return .blue
         case .offline: return .red
         }
@@ -44,6 +50,9 @@ enum ServiceState: String, Hashable {
         case .mockData: return "flask.fill"
         case .degraded: return "exclamationmark.triangle.fill"
         case .disabled: return "slash.circle"
+        case .optional: return "circle.dashed"
+        case .notConfigured: return "gearshape"
+        case .noData: return "tray"
         case .unavailable: return "questionmark.circle"
         case .offline: return "xmark.circle.fill"
         }

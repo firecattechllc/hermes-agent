@@ -14,7 +14,7 @@ struct SafetyPosture: Hashable {
         isPaperOnly: true,
         hasLiveExecutionAuthority: false,
         isBrokerSubmissionEnabled: false,
-        brokerGovernanceNote: "Broker submission is disabled unless explicitly governed by the existing paper runtime.",
+        brokerGovernanceNote: "Broker submission is disabled in this app. No visible route can submit or stage an order.",
         authorityNote: "Hermes remains authoritative. This client cannot execute, override, or bypass governed decisions."
     )
 }

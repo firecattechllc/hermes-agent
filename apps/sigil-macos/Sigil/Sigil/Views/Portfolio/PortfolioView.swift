@@ -16,6 +16,9 @@ struct PortfolioView: View {
                 if let status = statusStore.status {
                     SectionCard(title: "Paper Portfolio", systemImage: "chart.pie") {
                         VStack(alignment: .leading, spacing: 10) {
+                            if status.lifecycleActionsAvailable == false {
+                                StatusRowView(entry: StatusEntry(title: "Portfolio Source", state: .notConfigured, detail: "Governed paper-runtime backend not configured; values below are local empty-state values, not a brokerage account."))
+                            }
                             LabeledContent("Deployed paper capital", value: status.deployedPaperCapital)
                             LabeledContent("Remaining governed allocation", value: status.remainingGovernedAllocation)
                             LabeledContent("Open positions", value: "\(status.openPositions)")

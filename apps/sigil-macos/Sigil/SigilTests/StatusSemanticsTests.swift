@@ -7,15 +7,36 @@ import Testing
 /// state, not a default.
 struct StatusSemanticsTests {
     @Test func everyServiceStateHasANonEmptyLabel() {
-        for state: ServiceState in [.connected, .mockData, .degraded, .disabled, .unavailable, .offline] {
+        for state: ServiceState in [.connected, .mockData, .degraded, .disabled, .optional, .notConfigured, .noData, .unavailable, .offline] {
             #expect(!state.label.isEmpty)
         }
     }
 
     @Test func everyServiceStateHasASystemImage() {
-        for state: ServiceState in [.connected, .mockData, .degraded, .disabled, .unavailable, .offline] {
+        for state: ServiceState in [.connected, .mockData, .degraded, .disabled, .optional, .notConfigured, .noData, .unavailable, .offline] {
             #expect(!state.systemImage.isEmpty)
         }
+    }
+
+    @Test func expectedAbsenceStatesAreNotErrors() {
+        for state: ServiceState in [.optional, .notConfigured, .noData] {
+            #expect(state.tint != ServiceState.offline.tint)
+            #expect(state.tint != ServiceState.degraded.tint)
+        }
+    }
+
+    @Test func backendStateClassificationDistinguishesConfigurationAndFirstRun() {
+        #expect(HermesBridgeDataProvider.state(forBackendHealth: "not_configured") == .notConfigured)
+        #expect(HermesBridgeDataProvider.state(forBackendHealth: "unconfigured") == .notConfigured)
+        #expect(HermesBridgeDataProvider.state(forBackendHealth: "empty") == .noData)
+        #expect(HermesBridgeDataProvider.state(forConnection: "not_configured") == .notConfigured)
+        #expect(HermesBridgeDataProvider.state(forConnection: "disconnected") == .offline)
+    }
+
+    @Test func emptyEvidenceHealthIsNoDataNotConnected() {
+        let state = HermesBridgeDataProvider.combinedEvidenceState(ledgerState: .noData, artifactState: .noData)
+        #expect(state == .noData)
+        #expect(state != .connected)
     }
 
     @Test func mockDataAndUnavailableAreVisuallyDistinctFromConnected() {
