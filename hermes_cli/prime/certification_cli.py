@@ -28,7 +28,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from hermes_cli.prime.certification import (
     FleetCertificationStatus,
@@ -60,6 +60,48 @@ def _real_evaluated_identity_ids(state_root: Optional[Path]) -> tuple[str, ...]:
     return tuple(node.identity_id for node in runtime.registry.all())
 
 
+def _configured_models_available(
+    state_root: Optional[Path],
+    node_model_aliases: Optional[Mapping[str, Mapping[str, str]]],
+) -> tuple[bool, dict[str, Any]]:
+    """Verify explicit aliases against inventories reported by fleet nodes.
+
+    This is intentionally exact-match and fail-closed: another installed
+    model never substitutes for a missing configured model.
+    """
+    configured = node_model_aliases or {}
+    missing: list[dict[str, str]] = []
+    if configured and state_root is None:
+        missing.append(
+            {"node": "*", "alias": "*", "model": "*", "reason": "state_root_unavailable"}
+        )
+    elif configured:
+        runtime = FleetRuntime(state_root=state_root)
+        for natural_key, aliases in sorted(configured.items()):
+            node = runtime.registry.get(natural_key)
+            inventory = set(node.model_inventory) if node is not None else set()
+            for alias, model in sorted(aliases.items()):
+                if node is None or model not in inventory:
+                    missing.append(
+                        {
+                            "node": natural_key,
+                            "alias": alias,
+                            "model": model,
+                            "reason": (
+                                "node_not_registered"
+                                if node is None
+                                else "configured_model_not_reported"
+                            ),
+                        }
+                    )
+    return not missing, {
+        "passed": not missing,
+        "configured_alias_count": sum(len(aliases) for aliases in configured.values()),
+        "missing": missing,
+        "automatic_fallback": False,
+    }
+
+
 def run_certification(
     *,
     repo_root: Path,
@@ -68,6 +110,7 @@ def run_certification(
     policy_version: str = DEFAULT_POLICY_VERSION,
     revalidation_seconds: int = 3600,
     skip_stage1: bool = False,
+    node_model_aliases: Optional[Mapping[str, Mapping[str, str]]] = None,
 ) -> tuple[dict[str, Any], FleetCertificationStatus]:
     """Run every real check and assemble one :class:`FleetCertification`.
 
@@ -89,6 +132,13 @@ def run_certification(
     live_runtime_selftests = run_all_live_runtime_selftests()
     evidence_chain_valid = _real_evidence_chain_valid(state_root)
     evaluated_identity_ids = _real_evaluated_identity_ids(state_root)
+    configured_models_available, configured_models_detail = _configured_models_available(
+        state_root, node_model_aliases
+    )
+    dispatch_and_model_configuration_passed = (
+        live_runtime_selftests["dispatch_routing_and_model_configuration"]
+        and configured_models_available
+    )
 
     certification = certify_fleet(
         evaluated_identity_ids=evaluated_identity_ids,
@@ -107,9 +157,9 @@ def run_certification(
         live_runtime_fleet_registry_and_heartbeat_selftest_passed=live_runtime_selftests[
             "fleet_registry_and_heartbeat"
         ],
-        live_runtime_dispatch_routing_and_model_configuration_selftest_passed=live_runtime_selftests[
-            "dispatch_routing_and_model_configuration"
-        ],
+        live_runtime_dispatch_routing_and_model_configuration_selftest_passed=(
+            dispatch_and_model_configuration_passed
+        ),
         live_runtime_desktop_use_and_operator_approval_selftest_passed=live_runtime_selftests[
             "desktop_use_and_operator_approval"
         ],
@@ -128,6 +178,7 @@ def run_certification(
         "stage1_regression": {"passed": stage1_passed, "detail": stage1_detail},
         "production_selftests": production_selftests,
         "live_runtime_selftests": live_runtime_selftests,
+        "configured_model_aliases": configured_models_detail,
         "evidence_chain_valid": evidence_chain_valid,
         "state_root_evaluated": str(state_root) if state_root is not None else None,
     }

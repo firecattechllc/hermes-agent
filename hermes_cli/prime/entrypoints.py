@@ -135,6 +135,9 @@ def _refresh_certification(
             state_root=config.state_root,
             certifier_identity_id="prime-service",
             skip_stage1=config.certification_skip_stage1,
+            node_model_aliases=NodeModelAliasConfig.from_env(
+                {"HERMES_PRIME_NODE_MODEL_ALIASES": config.node_model_aliases_raw}
+            ).aliases_by_node,
         )
         certification_status = (
             CertificationStatus.CERTIFIED
