@@ -12,7 +12,7 @@ enum HermesBridgeError: Error {
 
 /// Thin HTTP client for Sigil's embedded XPC bridge. Talks only to
 /// 127.0.0.1. Read methods issue GET against status/inspection routes.
-/// The four `paperExecution*` methods issue POST against an explicit,
+/// The six `paperExecution*` methods issue POST against an explicit,
 /// separately-allow-listed set of governed paper-automation lifecycle
 /// commands — there is no generic "send any command" method anywhere here;
 /// every reachable route is named one at a time, matching the bridge's own
@@ -144,5 +144,21 @@ struct HermesBridgeClient {
 
     func paperExecutionResume() async throws -> PaperExecutionStatus {
         try await request("POST", "/paper_execution_resume", as: PaperExecutionStatus.self)
+    }
+
+    /// STOP: immediately prevents new order submission and attempts to
+    /// cancel every resting/unfilled order. Never touches already-filled
+    /// positions — that is the separate, explicit `paperExecutionFlattenPositions()`.
+    func paperExecutionEmergencyStop() async throws -> PaperExecutionStatus {
+        try await request("POST", "/paper_execution_emergency_stop", as: PaperExecutionStatus.self)
+    }
+
+    /// Explicit, separate operator action: closes every currently-tracked
+    /// position via the paper broker. Never triggered by STOP alone.
+    /// Reaching this route at all (gated by its own confirmation dialog one
+    /// step earlier in the UI) is the confirmation — no request body is
+    /// sent, matching every other lifecycle route in this client.
+    func paperExecutionFlattenPositions() async throws -> PaperExecutionStatus {
+        try await request("POST", "/paper_execution_flatten_positions", as: PaperExecutionStatus.self)
     }
 }

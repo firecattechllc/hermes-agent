@@ -37,16 +37,43 @@ final class PaperExecutionStore: ObservableObject {
     func pause() async { await performAction("Pause") { try await $0.paperExecutionPause() } }
     func resume() async { await performAction("Resume") { try await $0.paperExecutionResume() } }
 
+    /// STOP: prevents new exposure. Never closes existing positions — see flattenPositions().
+    func emergencyStop() async { await performAction("Emergency stop") { try await $0.paperExecutionEmergencyStop() } }
+
+    /// Separate, explicit action: closes every currently-tracked position.
+    /// The success/failure message is derived from `flatten_result`
+    /// (computed backend-side from a fresh post-close broker read) so a
+    /// partial failure is never reported as a plain "succeeded."
+    func flattenPositions() async {
+        await performAction("Flatten positions", messageOverride: { status in
+            guard let result = status.flattenResult else { return nil }
+            let fullyFlattened = (result["fully_flattened"].map { if case .bool(let v) = $0 { return v } else { return false } }) ?? false
+            if fullyFlattened {
+                return "Flatten positions succeeded: every tracked position was closed."
+            }
+            let remaining: [String]
+            if case .array(let values)? = result["remaining_symbols"] {
+                remaining = values.map(\.displayString)
+            } else {
+                remaining = []
+            }
+            let symbolList = remaining.isEmpty ? "" : " (\(remaining.joined(separator: ", ")))"
+            return "Flatten positions did NOT fully succeed — \(remaining.count) position(s) still open\(symbolList). See Audit for per-symbol detail."
+        }) { try await $0.paperExecutionFlattenPositions() }
+    }
+
     private func performAction(
         _ label: String,
+        messageOverride: ((PaperExecutionStatus) -> String?)? = nil,
         _ action: @escaping (HermesBridgeClient) async throws -> PaperExecutionStatus
     ) async {
         isPerformingAction = true
         errorMessage = nil
         do {
-            status = try await action(client)
+            let result = try await action(client)
+            status = result
             lastUpdatedAt = Date()
-            lastActionMessage = "\(label) succeeded."
+            lastActionMessage = messageOverride?(result) ?? "\(label) succeeded."
         } catch {
             lastActionMessage = nil
             errorMessage = "\(label) failed: \(Self.describe(error))"

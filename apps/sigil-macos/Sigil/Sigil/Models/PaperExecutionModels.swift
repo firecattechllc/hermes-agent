@@ -24,6 +24,10 @@ struct PaperExecutionStatus: Decodable {
     let lastSubmittedOrder: JSONRecord?
     let lastFill: JSONRecord?
     let lastRejection: JSONRecord?
+    /// Present only in the response to `paperExecutionFlattenPositions()` —
+    /// per-symbol close results plus `fully_flattened`, computed from a
+    /// fresh post-close broker read, never from the close calls alone.
+    let flattenResult: JSONRecord?
 
     enum CodingKeys: String, CodingKey {
         case environment
@@ -45,6 +49,7 @@ struct PaperExecutionStatus: Decodable {
         case lastSubmittedOrder = "last_submitted_order"
         case lastFill = "last_fill"
         case lastRejection = "last_rejection"
+        case flattenResult = "flatten_result"
     }
 }
 

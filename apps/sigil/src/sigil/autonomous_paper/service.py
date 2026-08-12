@@ -60,6 +60,7 @@ def _audit(
             "environment": "paper",
             "live_execution": False,
             "broker_submission": bool(state["broker_submission"]),
+            "kill_switch": bool(state["kill_switch"]),
             "details": details or {},
         },
     )
@@ -159,6 +160,22 @@ class GovernedPaperExecutionService:
             return self._projection(state)
 
     def pause(self, *, emergency: bool = False) -> dict[str, Any]:
+        """Halt paper automation; ``emergency=True`` is the STOP control.
+
+        Ordering matters here and is deliberate: the kill switch and
+        broker_submission are flipped False and persisted FIRST, in their own
+        locked transaction, before any attempt is made to cancel resting
+        orders. That means the "no new exposure can be created" guarantee
+        (enforced by _submit_winner's preflight check) is fully in effect
+        the instant this call returns from its first lock, independent of
+        whether the best-effort order-cancellation phase that follows
+        succeeds, partially succeeds, or fails outright. STOP does not
+        attempt to close already-filled positions -- that is a deliberate,
+        separate, explicit action (see flatten_positions()); STOP's mandate
+        is limited to preventing NEW exposure, and a resting/unfilled order
+        is exactly that: potential future exposure that hasn't materialized
+        yet, so canceling it is in scope here.
+        """
         with self.store.locked() as state:
             state["paused"] = True
             if emergency:
@@ -167,10 +184,132 @@ class GovernedPaperExecutionService:
             _audit(
                 state,
                 "emergency_paper_stop" if emergency else "paper_execution_paused",
-                evidence_id=f"SIGIL-V2-PAUSE-{state['revision']}",
+                evidence_id=f"SIGIL-V2-{'ESTOP' if emergency else 'PAUSE'}-{state['revision']}",
+            )
+            self.store.save(state)
+            pending_orders = (
+                [
+                    dict(item)
+                    for item in state["orders"]
+                    if item.get("status") not in TERMINAL_ORDER_STATUSES
+                ]
+                if emergency
+                else []
+            )
+
+        if not pending_orders:
+            return self._projection(self.store.load())
+
+        cancel_results: list[dict[str, Any]] = []
+        for order in pending_orders:
+            provider_order_id = order.get("id")
+            symbol = order.get("symbol")
+            if not provider_order_id:
+                cancel_results.append(
+                    {"symbol": symbol, "provider_order_id": None, "cancelled": False, "error": "missing_provider_order_id"}
+                )
+                continue
+            try:
+                self.client.cancel_order(provider_order_id)
+                cancel_results.append({"symbol": symbol, "provider_order_id": provider_order_id, "cancelled": True})
+            except (AlpacaPaperError, AlpacaPaperTransportError) as error:
+                cancel_results.append(
+                    {"symbol": symbol, "provider_order_id": provider_order_id, "cancelled": False, "error": str(error)}
+                )
+
+        with self.store.locked() as state:
+            # _reconcile_orders() only refreshes order_intents, which these
+            # resting orders may not have a corresponding entry for (e.g. an
+            # order captured on a prior reconcile/activate cycle). Mark
+            # locally-known cancellations directly so "still open" reflects
+            # what actually happened here, not just whatever unrelated
+            # intents happened to also need reconciling.
+            cancelled_ids = {r["provider_order_id"] for r in cancel_results if r["cancelled"]}
+            for item in state["orders"]:
+                if item.get("id") in cancelled_ids:
+                    item["status"] = "canceled"
+            self._reconcile_orders(state)
+            still_open = sum(
+                item.get("status") not in TERMINAL_ORDER_STATUSES for item in state["orders"]
+            )
+            _audit(
+                state,
+                "emergency_paper_stop_order_cancellation",
+                evidence_id=f"SIGIL-V2-ESTOP-CANCEL-{state['revision']}",
+                details={
+                    "attempted": len(pending_orders),
+                    "results": cancel_results,
+                    "still_open_after_attempt": still_open,
+                },
             )
             self.store.save(state)
             return self._projection(state)
+
+    def flatten_positions(self, *, confirm: bool) -> dict[str, Any]:
+        """Explicit, operator-only unwind of every currently-tracked position.
+
+        This is deliberately NOT called by pause()/deactivate() -- flattening
+        is a separate, explicit action an operator chooses, never an implicit
+        side effect of engaging the kill switch. It is intentionally NOT
+        gated on activated/paused/kill_switch/broker_submission state: an
+        operator must be able to flatten regardless of lifecycle state,
+        including (especially) after already engaging STOP. Paper-only is
+        enforced the same way every other order path in this service is --
+        self.client is always an AlpacaPaperClient, whose base URL is a
+        hardcoded class attribute with a runtime self-assertion on every
+        request (see alpaca.py); there is no parameter here or anywhere in
+        this call chain that could redirect it to a live endpoint.
+
+        Never reports success by trusting the close-position responses
+        alone: after attempting every close, it re-fetches positions from
+        the broker and reports `fully_flattened` based on what is actually
+        still open, not on what the close calls claimed.
+        """
+        if not confirm:
+            raise ValueError("flatten_positions requires explicit confirm=True")
+
+        with self.store.locked() as state:
+            targets = [dict(item) for item in state["positions"]]
+
+        results: list[dict[str, Any]] = []
+        for position in targets:
+            symbol = position.get("symbol")
+            qty = position.get("qty")
+            if not symbol or not qty:
+                results.append({"symbol": symbol, "closed": False, "error": "missing_symbol_or_quantity"})
+                continue
+            try:
+                self.client.close_position(symbol, quantity=str(qty))
+                results.append({"symbol": symbol, "closed": True})
+            except (AlpacaPaperError, AlpacaPaperTransportError) as error:
+                results.append({"symbol": symbol, "closed": False, "error": str(error)})
+
+        # Ground truth comes from a fresh read of the broker, never from the
+        # close-call responses above -- a 200 from Alpaca means the close
+        # request was accepted, not that the position is already gone.
+        remaining_positions = self._sanitize_positions(self.client.positions())
+        remaining_symbols = sorted(str(item.get("symbol")) for item in remaining_positions)
+        fully_flattened = not remaining_positions
+
+        with self.store.locked() as state:
+            state["positions"] = remaining_positions
+            flatten_result = {
+                "requested": len(targets),
+                "results": results,
+                "remaining_symbols": remaining_symbols,
+                "fully_flattened": fully_flattened,
+            }
+            _audit(
+                state,
+                "paper_positions_flatten_attempted",
+                evidence_id=f"SIGIL-V2-FLATTEN-{state['revision']}",
+                details=flatten_result,
+            )
+            self.store.save(state)
+            projection = self._projection(state)
+
+        projection["flatten_result"] = flatten_result
+        return projection
 
     def resume(self) -> dict[str, Any]:
         account = self.client.account()
@@ -719,6 +858,7 @@ class GovernedPaperExecutionService:
         if (
             not preflight["activated"]
             or not preflight["broker_submission"]
+            or preflight["kill_switch"]
             or (preflight["paused"] and not emergency)
         ):
             return self._projection(preflight)
@@ -728,7 +868,7 @@ class GovernedPaperExecutionService:
                 raise ValueError("live execution is permanently disabled")
             if state["paused"] and not emergency:
                 return self._projection(state)
-            if not state["activated"] or not state["broker_submission"]:
+            if not state["activated"] or not state["broker_submission"] or state["kill_switch"]:
                 return self._projection(state)
             if clock.get("is_open") is not True:
                 return self._projection(state)
@@ -879,6 +1019,22 @@ class GovernedPaperExecutionService:
             "live_execution": False,
             "broker": "alpaca_paper",
             "broker_base_url": ALPACA_PAPER_BASE_URL,
+            # This projection is only ever produced by a live
+            # GovernedPaperExecutionService instance backed by a real,
+            # constructed AlpacaPaperClient (see desktop_bridge/
+            # autonomous_paper.py's _service()) -- by definition a governed
+            # backend is configured whenever this method runs at all, so
+            # this is unconditionally true. It exists as an explicit field
+            # (rather than the UI inferring availability from other state)
+            # because the Swift Launch screen's button-enabled logic depends
+            # on it; each individual action (activate/deactivate/pause/
+            # resume/emergency_stop/flatten) still enforces its own separate
+            # preconditions and raises a specific, surfaced error if invoked
+            # when not appropriate -- this field only answers "is there a
+            # backend to talk to at all," not "will this specific action
+            # succeed right now."
+            "lifecycle_actions_available": True,
+            "lifecycle_unavailable_reason": None,
             "broker_submission": bool(state["broker_submission"]),
             "activated": bool(state["activated"]),
             "paused": bool(state["paused"]),

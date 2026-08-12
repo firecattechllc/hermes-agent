@@ -40,6 +40,7 @@ from .autonomous_paper import (
     paper_execution_collection,
     paper_execution_deactivate,
     paper_execution_emergency_stop,
+    paper_execution_flatten_positions,
     paper_execution_pause,
     paper_execution_resume,
     paper_execution_status,
@@ -124,6 +125,7 @@ SUPPORTED_COMMANDS: Final[tuple[str, ...]] = (
     "recent_audit",
     "reconcile_paper_orders",
     "emergency_paper_stop",
+    "paper_execution_flatten_positions",
     "production_research_status",
     "strategy_status",
     "current_batch_research",
@@ -514,6 +516,9 @@ def handle_request(request: object) -> dict[str, Any]:
 
     if command == "emergency_paper_stop":
         return {"ok": True, "result": paper_execution_emergency_stop()}
+
+    if command == "paper_execution_flatten_positions":
+        return {"ok": True, "result": paper_execution_flatten_positions()}
 
     if command in {
         "production_research_status",

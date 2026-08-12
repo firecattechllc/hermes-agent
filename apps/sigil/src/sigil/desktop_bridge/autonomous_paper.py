@@ -88,6 +88,20 @@ def paper_execution_emergency_stop() -> dict[str, Any]:
     return _service().pause(emergency=True)
 
 
+def paper_execution_flatten_positions() -> dict[str, Any]:
+    """Explicit, separate action: close every currently-tracked position.
+
+    Takes no payload. Reaching this specific, individually allow-listed
+    command name (via the HTTP shim's dedicated route or the Electron
+    stdin/stdout dispatcher) is itself the confirmation -- the same trust
+    model already used for activate/deactivate/pause/resume, none of which
+    take a confirmation flag either. The operator-facing confirmation lives
+    in the UI layer (a confirmationDialog describing exactly what will
+    happen), one step before this function is ever reached.
+    """
+    return _service().flatten_positions(confirm=True)
+
+
 def reconcile_paper_orders() -> dict[str, Any]:
     return _service().reconcile()
 

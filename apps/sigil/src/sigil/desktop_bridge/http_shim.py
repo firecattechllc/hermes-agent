@@ -14,15 +14,19 @@ Two explicit, separate allow-lists, GET vs POST:
 
 - ``READ_ROUTE_TO_COMMAND`` (GET): status/inspection commands only. No
   command reachable here ever mutates paper-runtime state.
-- ``WRITE_ROUTE_TO_COMMAND`` (POST): exactly the four governed, already-
+- ``WRITE_ROUTE_TO_COMMAND`` (POST): exactly the six governed, already-
   audited, paper-only automation lifecycle commands the "Launch" screen
-  needs (activate/deactivate/pause/resume) -- nothing else. Every one of
-  these already existed in ``handle_request``'s own allow-list and already
-  writes its own audit trail entry; this shim adds no new capability to the
-  backend, it only makes four already-governed actions reachable over HTTP
-  for this one local client. No generic command passthrough exists anywhere
-  in this file -- every reachable command is named explicitly, one at a
-  time, in one of the two dicts above.
+  needs (activate/deactivate/pause/resume/emergency_stop/
+  flatten_positions) -- nothing else. Every one of these already existed
+  in ``handle_request``'s own allow-list and already writes its own audit
+  trail entry; this shim adds no new capability to the backend, it only
+  makes six already-governed actions reachable over HTTP for this one
+  local client. No generic command passthrough exists anywhere in this
+  file -- every reachable command is named explicitly, one at a time, in
+  one of the two dicts above, and none of the six write commands accept a
+  request body (see do_POST): the command name itself is the fully-
+  specified action, and reaching it via a real POST -- gated in the UI by
+  its own confirmation dialog one step earlier -- is the confirmation.
 
 Isolation from the certified Sigil 3.7 app: this shim requires
 ``SIGIL_DESKTOP_STATE_DIR`` to point at a paper-runtime state directory that
@@ -70,7 +74,7 @@ READ_ROUTE_TO_COMMAND: dict[str, str] = {
     "/governed_news_status": "governed_news_status",
 }
 
-# Exactly the four governed paper-automation lifecycle commands, and nothing
+# Exactly the six governed paper-automation lifecycle commands, and nothing
 # else. Each already exists in handle_request's own allow-list, is
 # paper-only (broker_submission never becomes real/live), and already writes
 # its own audit trail entry independent of this shim.
@@ -79,13 +83,15 @@ WRITE_ROUTE_TO_COMMAND: dict[str, str] = {
     "/paper_execution_deactivate": "paper_execution_deactivate",
     "/paper_execution_pause": "paper_execution_pause",
     "/paper_execution_resume": "paper_execution_resume",
+    "/paper_execution_emergency_stop": "emergency_paper_stop",
+    "/paper_execution_flatten_positions": "paper_execution_flatten_positions",
 }
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
     server_version = "SigilDevBridgeShim/1.1"
 
-    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+    def log_message(self, format: str, *args: object) -> None:
         sys.stderr.write(f"[sigil-dev-bridge-shim] {self.address_string()} {format % args}\n")
 
     def _write_json(self, status: int, payload: dict[str, object]) -> None:
@@ -107,7 +113,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         self._write_json(200, result)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         command = READ_ROUTE_TO_COMMAND.get(self.path)
         if command is None:
             self._write_json(
@@ -117,8 +123,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         self._dispatch(command)
 
-    def do_POST(self) -> None:  # noqa: N802
-        # Drain and discard any request body -- these four commands take no
+    def do_POST(self) -> None:
+        # Drain and discard any request body -- these six commands take no
         # payload, and nothing here ever forwards client-supplied data into
         # handle_request. The command name itself is the only input, and it
         # must be an exact, pre-registered match.

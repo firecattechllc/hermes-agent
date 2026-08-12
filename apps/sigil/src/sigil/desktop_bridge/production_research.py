@@ -203,28 +203,22 @@ def collect_local_position_marks(
 
 
 def emergency_paper_liquidation() -> dict[str, Any]:
-    """Submit governed exits for Sigil-owned positions only."""
-    execution = _execution_service()
-    execution.reconcile()
-    positions = execution.recent("positions", limit=100)["items"]
-    managed = set(execution.status()["managed_position_symbols"])
-    symbols = tuple(
-        sorted(str(item["symbol"]) for item in positions if item.get("symbol") in managed)
-    )
-    if not symbols:
-        return execution.status()
-    now = datetime.now().astimezone()
-    evidence = _data_client().collect_batch(symbols, now=now)
-    prices = {
-        item.symbol: item.bid
-        for item in evidence
-        if item.status.value == "complete" and item.bid is not None
-    }
-    if set(prices) != set(symbols):
-        raise ValueError(
-            "emergency paper liquidation requires fresh validated prices for every managed position"
-        )
-    return execution.monitor_positions(prices, now=now, emergency=True)
+    """Deprecated alias for the explicit flatten-positions action.
+
+    Previously this attempted to compute planned exit orders for a subset of
+    positions filtered against a `managed_position_symbols` status key that
+    the backend never actually emitted -- every call raised KeyError. Being
+    unreachable from the HTTP shim and the native Sigil 4.0 UI (only the
+    legacy Electron stdin/stdout dispatcher could reach this command name at
+    all), that bug shipped undetected. This now delegates to
+    GovernedPaperExecutionService.flatten_positions(), the one real
+    implementation: an unconditional close of every currently-tracked
+    position via Alpaca's close-position endpoint, verified against a fresh
+    post-close read rather than trusting the close responses, with full
+    per-symbol audit evidence. Retained under this name only so any existing
+    caller of this exact command string keeps working.
+    """
+    return _execution_service().flatten_positions(confirm=True)
 
 
 def _fresh_catalog_snapshot(now: datetime) -> Any:
