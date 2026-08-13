@@ -92,6 +92,22 @@ def test_authorization_transitions_validated(tmp_path):
         transition(LifecycleState.DISCOVERED, LifecycleState.APPROVED)
 
 
+def test_credential_ref_accepts_idiomatic_pointer_names_but_rejects_raw_secrets():
+    # Regression: ProviderRecord.credential_ref previously reused clean_label's
+    # generic sensitive-marker filter, which false-positived on the exact
+    # idiomatic pointer names any real credential_ref will use (discovered
+    # while wiring up the LaoZhang adapter's "env:LAOZHANG_API_KEY").
+    ok = make_provider("vendor-x", credential_ref="env:LAOZHANG_API_KEY")
+    assert ok.credential_ref == "env:LAOZHANG_API_KEY"
+    ok2 = make_provider("vendor-y", credential_ref="keychain:runway/acme")
+    assert ok2.credential_ref == "keychain:runway/acme"
+
+    with pytest.raises(ValueError):
+        make_provider("vendor-z", credential_ref="sk-abcdef1234567890")
+    with pytest.raises(ValueError):
+        make_provider("vendor-w", credential_ref="api_key=abcdef1234567890")
+
+
 def test_unknown_provider_defaults_fail_closed():
     candidate = DiscoveryCandidate(
         candidate_id="cand-1", source="fixture:pricing-feed", suggested_provider_id="mystery-relay",

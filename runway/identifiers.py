@@ -45,3 +45,23 @@ def digest(value: object) -> str:
 def contains_sensitive_marker(text: str) -> bool:
     lowered = text.lower()
     return any(marker in lowered for marker in _SENSITIVE_MARKERS)
+
+
+def clean_credential_ref(value: str) -> str:
+    """Validate a credential *pointer* (e.g. ``"env:LAOZHANG_API_KEY"``,
+    ``"keychain:runway/acme"``) — a reference to where a secret lives, never
+    the secret itself.
+
+    Deliberately not implemented via :func:`contains_sensitive_marker`:
+    that marker list includes ``"api_key"``, which false-positives on the
+    idiomatic pointer names every real credential_ref will actually use
+    (``OPENAI_API_KEY``, ``LAOZHANG_API_KEY``, ...). Instead this rejects
+    only shapes a raw secret value would actually take: a vendor key
+    prefix, a literal ``Bearer`` header, or an inline ``key=value`` paste.
+    """
+    value = value.strip()
+    if not value:
+        raise ValueError("credential_ref must not be empty")
+    if value.startswith(("sk-", "Bearer ", "Bearer\t")) or "=" in value:
+        raise ValueError("credential_ref must be a pointer (e.g. 'env:NAME'), not a raw secret")
+    return value

@@ -19,7 +19,7 @@ from typing import Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from runway.capabilities import ModelCapabilityProfile
-from runway.identifiers import clean_identifier, clean_label
+from runway.identifiers import clean_credential_ref, clean_identifier, clean_label
 from runway.lifecycle import LifecycleState
 from runway.pricing import CostModel
 from runway.trust import TrustTier
@@ -69,9 +69,10 @@ class ProviderRecord(BaseModel):
     trust_tier: TrustTier
     lifecycle_state: LifecycleState = LifecycleState.DISCOVERED
     endpoints: Tuple[EndpointRecord, ...] = ()
-    #: Opaque pointer into an external secret store (e.g. "keychain:runway/acme").
-    #: Never a credential value itself — enforced by clean_label, which rejects
-    #: anything shaped like a key/token/password.
+    #: Opaque pointer into an external secret store (e.g. "keychain:runway/acme",
+    #: "env:LAOZHANG_API_KEY"). Never a credential value itself — enforced by
+    #: clean_credential_ref, which rejects raw-secret shapes without
+    #: false-positiving on idiomatic pointer names like "*_API_KEY".
     credential_ref: Optional[str] = None
 
     @field_validator("provider_id")
@@ -89,7 +90,7 @@ class ProviderRecord(BaseModel):
     def _credential_ref(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
-        return clean_label(value)
+        return clean_credential_ref(value)
 
     @model_validator(mode="after")
     def _endpoints_unique(self) -> "ProviderRecord":
