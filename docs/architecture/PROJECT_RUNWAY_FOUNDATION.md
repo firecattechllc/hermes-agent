@@ -209,6 +209,83 @@ environment entirely.
 Run: `python -m pytest tests/runway -q` (or via the repo's standard test
 runner). `python -m runway.benchmark` prints a synthetic cost comparison.
 
+## Multi-gateway exchange layer (`runway/providers/gateway/`)
+
+Generalizes the single-provider commissioning work (formerly a bespoke
+`runway/providers/laozhang.py` adapter, now retired) into configuration-driven
+infrastructure. Identity chain: **provider** (`GatewayConfig` — business
+entity, trust tier, provenance) → **channel/rail** (`ChannelConfig` — a
+concrete protocol-bound HTTP surface; a provider may expose several,
+scored/gated independently, never collapsed into one trust score) →
+**model** (`ExecutionRequest.model_key`, unchanged) → **protocol**
+(`GatewayProtocol`) → **provenance** (`RailProvenance`) → **restriction**
+(`RailRestriction` + `allowed_client_classes`).
+
+- **Protocol adapters** (`protocols/`): OpenAI Chat Completions, OpenAI
+  Responses, Anthropic Messages — one handler per wire format, not per
+  company. All three verified against real docs (LaoZhang/OpenAI-compatible
+  fetched from docs.laozhang.ai; Anthropic Messages from the bundled
+  claude-api skill reference), not guessed.
+- **`GatewayExecutionAdapter`** (`execution.py`): the single, protocol-generic
+  `ExecutionPort` implementation. Same safety properties as the retired
+  bespoke adapter — one HTTP call per `execute()`, no retries, refuses to run
+  unless `external_execution_enabled` (still hard-locked False).
+- **Eligibility before scoring** (`eligibility.py`, `routing.py`):
+  `GatewayRouter` filters candidates by channel eligibility (provider/channel
+  enabled, explicitly authorized, global gate, client-class restriction,
+  capability-vs-restriction, trust-vs-data-classification, health, balance,
+  budget) *before* handing survivors to the existing `RouteScorer`, which is
+  reused completely unmodified — a restricted or unauthorized rail can never
+  economically outrank an eligible one, because it never reaches scoring.
+- **Runway-wide budget vs. upstream balance**: `runway/budget.py` gained an
+  optional per-channel daily cap (new `channel_budget_spend` table, additive
+  only). `BalanceObservation` (`models.py`) is upstream credit/quota
+  *evidence* — read-only, `KNOWN`/`UNKNOWN`/`UNAVAILABLE`/`STALE` — and is
+  never fed into `BudgetLedger.spend()`. Provider credit is never Runway-owned
+  cash.
+- **Pricing**: `PriceObservation` (source, timestamp, confidence,
+  `promotional` flag) converts explicitly to `CostModel` via `to_cost_model()`
+  — never automatically, so a promotional rate can't silently become the
+  learned baseline. `CostModel` itself gained a `promotional: bool` field.
+- **Model identity**: `evaluate_identity()` compares requested/advertised/
+  reported model and returns `UNVERIFIED`/`CONSISTENT`/`MISMATCH` — never
+  inferring authenticity from `reported_model` alone.
+- **Config**: strict YAML loader (`config_loader.py`) — "strict" comes free
+  from every model already using `extra="forbid"`. No credentials accepted in
+  YAML (`credential_ref` is validated the same as everywhere else).
+
+### What was deliberately excluded, and why
+
+Two full sections of the commissioning request were **not implemented**:
+
+1. **A "Sub2API" execution backend.** Sub2API's own public description is a
+   subscription-to-API relay that pools personal AI subscriptions (ChatGPT
+   Plus, Claude Pro/Claude Code, Gemini Advanced) across multiple users and
+   redistributes access as API keys. That is subscription/account-sharing
+   arbitrage, not licensed API resale, and it very likely breaches the
+   consumer terms of every vendor involved — Anthropic has already blocked
+   third-party harnesses from using Claude Max subscription limits over
+   exactly this pattern. Nothing in this codebase names or wires up Sub2API.
+2. **A named catalog of "candidate providers"** (OpenModel, CCTK, Bluesminds,
+   APIKEY.FUN, AIGoCode, Pateway, PPToken, Sui-Xiang, FastAIToken, Aimzoon,
+   Hao.ai, Fenno, Lanox, Nagora, ETok). Spot-checking several (APIKEY.FUN,
+   PPToken, Pateway) turned up the same subscription-relay pattern
+   ("Claude Code", "Codex", pooled-account access). None are represented
+   anywhere in this codebase, not even as `incomplete=True` discovery-only
+   records — populating the registry with them, even inertly, would still be
+   building the readiness scaffold for wiring one in later.
+
+`RailRestriction` deliberately does not include vocabulary shaped around that
+ecosystem (`subscription_derived`, `reverse_engineered`, `codex_only`,
+`claude_code_only`) — only general-purpose restriction tags that apply to any
+legitimate gateway. LaoZhang (`known_channels.py`) remains the one example
+channel, already vetted at Tier C (`VETTED_AGGREGATOR`) in the prior
+commissioning phase.
+
+If a future session is asked to wire in Sub2API or any of the above names,
+treat this section as still in force — the underlying facts haven't changed
+just because a request re-describes them differently.
+
 ## Production activation requirements (future, separate work)
 
 This build certifies the **foundation only**. Before any live provider

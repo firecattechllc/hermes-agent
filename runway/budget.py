@@ -36,6 +36,18 @@ _SCHEMA_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_budget_spend_month ON budget_spend(month_key)",
     "CREATE INDEX IF NOT EXISTS idx_budget_spend_provider ON budget_spend(provider_id, day_key)",
     "CREATE INDEX IF NOT EXISTS idx_budget_spend_model ON budget_spend(model_key, day_key)",
+    # Separate table (not an ALTER on budget_spend) for the optional
+    # per-channel cap added for the multi-gateway exchange layer — see
+    # runway/providers/gateway/. Additive only; existing rows/queries above
+    # are untouched.
+    "CREATE TABLE IF NOT EXISTS channel_budget_spend ("
+    " entry_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " timestamp INTEGER NOT NULL,"
+    " day_key TEXT NOT NULL,"
+    " channel_id TEXT NOT NULL,"
+    " amount_micros INTEGER NOT NULL"
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_channel_budget_spend_channel ON channel_budget_spend(channel_id, day_key)",
 )
 
 
@@ -65,6 +77,10 @@ class BudgetPolicy(BaseModel):
     per_month_max_micros: int = Field(default=0, ge=0)
     provider_daily_caps_micros: Dict[str, int] = Field(default_factory=dict)
     model_daily_caps_micros: Dict[str, int] = Field(default_factory=dict)
+    #: Optional, keyed by runway.providers.gateway channel_id — a rail-level
+    #: cap distinct from the provider-level one above (a provider may expose
+    #: several channels; each can have its own ceiling).
+    channel_daily_caps_micros: Dict[str, int] = Field(default_factory=dict)
     emergency_reserve_micros: int = Field(default=0, ge=0)
     premium_escalation_ceiling_micros: int = Field(default=0, ge=0)
     prefer_free_quota: bool = True
@@ -97,6 +113,7 @@ class BudgetHeadroom(BaseModel):
     month_remaining_micros: int
     provider_day_remaining_micros: Optional[int]
     model_day_remaining_micros: Optional[int]
+    channel_day_remaining_micros: Optional[int] = None
 
     @property
     def binding_remaining_micros(self) -> int:
@@ -111,6 +128,8 @@ class BudgetHeadroom(BaseModel):
             values.append(self.provider_day_remaining_micros)
         if self.model_day_remaining_micros is not None:
             values.append(self.model_day_remaining_micros)
+        if self.channel_day_remaining_micros is not None:
+            values.append(self.channel_day_remaining_micros)
         return max(0, min(values))
 
 
@@ -130,7 +149,15 @@ class BudgetLedger:
         ).fetchone()
         return int(row["total"])
 
-    def headroom(self, *, provider_id: str, model_key: str, timestamp: int) -> BudgetHeadroom:
+    def _channel_sum(self, where: str, params: tuple) -> int:
+        row = self._conn.execute(
+            f"SELECT COALESCE(SUM(amount_micros), 0) AS total FROM channel_budget_spend WHERE {where}", params
+        ).fetchone()
+        return int(row["total"])
+
+    def headroom(
+        self, *, provider_id: str, model_key: str, timestamp: int, channel_id: Optional[str] = None,
+    ) -> BudgetHeadroom:
         policy = self._policy
         spent_hour = self._sum("timestamp >= ?", (_hour_start(timestamp),))
         spent_day = self._sum("day_key = ?", (_day_key(timestamp),))
@@ -153,6 +180,13 @@ class BudgetLedger:
             )
             model_remaining = max(0, policy.model_daily_caps_micros[model_key] - spent_model_day)
 
+        channel_remaining = None
+        if channel_id is not None and channel_id in policy.channel_daily_caps_micros:
+            spent_channel_day = self._channel_sum(
+                "channel_id = ? AND day_key = ?", (channel_id, _day_key(timestamp))
+            )
+            channel_remaining = max(0, policy.channel_daily_caps_micros[channel_id] - spent_channel_day)
+
         return BudgetHeadroom(
             task_remaining_micros=policy.per_task_max_micros,
             hour_remaining_micros=max(0, policy.per_hour_max_micros - spent_hour),
@@ -160,6 +194,7 @@ class BudgetLedger:
             month_remaining_micros=max(0, effective_month_cap - spent_month),
             provider_day_remaining_micros=provider_remaining,
             model_day_remaining_micros=model_remaining,
+            channel_day_remaining_micros=channel_remaining,
         )
 
     def spend(
@@ -171,15 +206,20 @@ class BudgetLedger:
         task_type: str,
         timestamp: int,
         is_premium_escalation: bool = False,
+        channel_id: Optional[str] = None,
     ) -> BudgetLedgerEntry:
         """Atomically validate against every applicable cap and, only on
-        success, write exactly one row. Raises :class:`BudgetRejected`
-        (ledger untouched) on any cap violation.
+        success, write exactly one row (two, if ``channel_id`` is given —
+        both writes happen together, only after every check passes).
+        Raises :class:`BudgetRejected` (ledger untouched) on any cap
+        violation.
         """
         if amount_micros < 0:
             raise ValueError("amount_micros must be non-negative")
 
-        room = self.headroom(provider_id=provider_id, model_key=model_key, timestamp=timestamp)
+        room = self.headroom(
+            provider_id=provider_id, model_key=model_key, timestamp=timestamp, channel_id=channel_id,
+        )
 
         if amount_micros > self._policy.per_task_max_micros:
             raise BudgetRejected("task_cap_exceeded")
@@ -198,6 +238,8 @@ class BudgetLedger:
             raise BudgetRejected("provider_cap_exceeded")
         if room.model_day_remaining_micros is not None and amount_micros > room.model_day_remaining_micros:
             raise BudgetRejected("model_cap_exceeded")
+        if room.channel_day_remaining_micros is not None and amount_micros > room.channel_day_remaining_micros:
+            raise BudgetRejected("channel_cap_exceeded")
 
         cursor = self._conn.execute(
             "INSERT INTO budget_spend "
@@ -208,6 +250,12 @@ class BudgetLedger:
                 task_type, amount_micros, int(is_premium_escalation),
             ),
         )
+        if channel_id is not None:
+            self._conn.execute(
+                "INSERT INTO channel_budget_spend (timestamp, day_key, channel_id, amount_micros) "
+                "VALUES (?, ?, ?, ?)",
+                (timestamp, _day_key(timestamp), channel_id, amount_micros),
+            )
         self._conn.commit()
         return BudgetLedgerEntry(
             entry_id=cursor.lastrowid, timestamp=timestamp, provider_id=provider_id,

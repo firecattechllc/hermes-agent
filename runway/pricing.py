@@ -34,6 +34,16 @@ class CostModel(BaseModel):
     video_second_micros: int = Field(default=0, ge=0)
     audio_second_micros: int = Field(default=0, ge=0)
 
+    #: True when this snapshot reflects a temporary/promotional rate rather
+    #: than a stable one (multi-gateway spec section 8/12: "promotional
+    #: prices must be distinguishable from stable prices... do not
+    #: permanently learn a promotional rate as baseline truth"). Scoring
+    #: doesn't special-case this today, but the fact travels with the price
+    #: so a caller refreshing ModelRecord.cost from a
+    #: runway.providers.gateway.models.PriceObservation can refuse to let a
+    #: promotional observation silently become the permanent baseline.
+    promotional: bool = False
+
     free_quota_micros: int = Field(default=0, ge=0)
     promotional_credit_micros: int = Field(default=0, ge=0)
     platform_fee_micros: int = Field(default=0, ge=0)

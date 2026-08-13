@@ -38,6 +38,23 @@ _OUTCOME_FLAGS: dict[ExecutionFailureCategory, tuple[bool, bool, bool]] = {
 }
 
 
+def categorize_http_status(status: int) -> ExecutionFailureCategory:
+    """Shared HTTP-status -> failure-category mapping, reused by every
+    protocol handler in ``runway.providers.gateway.protocols`` so the
+    OpenAI-compatible, OpenAI Responses, and Anthropic Messages adapters
+    don't each reinvent it. All three protocols use the same status-code
+    vocabulary (400/401/403/404/413/429/5xx); 529 (Anthropic's "overloaded")
+    is treated the same as any other server error.
+    """
+    if status in (401, 403):
+        return ExecutionFailureCategory.AUTH_FAILED
+    if status == 429:
+        return ExecutionFailureCategory.RATE_LIMITED
+    if status in (400, 404, 413):
+        return ExecutionFailureCategory.INVALID_REQUEST
+    return ExecutionFailureCategory.PROVIDER_ERROR
+
+
 def to_task_outcome_flags(error: str) -> dict:
     """Map an :class:`~runway.omniroute_port.ExecutionResult.error` string to
     the ``network_failure`` / ``provider_error`` / ``validation_failure``

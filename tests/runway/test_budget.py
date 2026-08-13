@@ -75,6 +75,22 @@ def test_premium_reserve(tmp_path):
     assert ledger.premium_escalation_count(timestamp=2) == 1
 
 
+def test_channel_cap(tmp_path):
+    policy = BudgetPolicy(
+        per_task_max_micros=1_000, per_hour_max_micros=10_000, per_day_max_micros=10_000,
+        per_month_max_micros=10_000, channel_daily_caps_micros={"chan-1": 100},
+    )
+    ledger = BudgetLedger.open(policy, path=tmp_path / "b.db")
+    ledger.spend(amount_micros=80, provider_id="p1", model_key="m@p1", task_type="t", timestamp=0, channel_id="chan-1")
+    with pytest.raises(BudgetRejected) as excinfo:
+        ledger.spend(amount_micros=30, provider_id="p1", model_key="m@p1", task_type="t", timestamp=1, channel_id="chan-1")
+    assert excinfo.value.reason == "channel_cap_exceeded"
+    # a different channel on the same provider/model is unaffected
+    ledger.spend(amount_micros=30, provider_id="p1", model_key="m@p1", task_type="t", timestamp=1, channel_id="chan-2")
+    # spend without a channel_id at all never touches the channel table/cap
+    ledger.spend(amount_micros=30, provider_id="p1", model_key="m@p1", task_type="t", timestamp=1)
+
+
 def test_rejected_spend_does_not_mutate_ledger(tmp_path):
     ledger = BudgetLedger.open(
         BudgetPolicy(per_task_max_micros=10, per_hour_max_micros=10, per_day_max_micros=10, per_month_max_micros=10),
