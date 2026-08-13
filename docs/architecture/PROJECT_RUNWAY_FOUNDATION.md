@@ -286,6 +286,36 @@ If a future session is asked to wire in Sub2API or any of the above names,
 treat this section as still in force — the underlying facts haven't changed
 just because a request re-describes them differently.
 
+## Local provider credential store
+
+`runway/providers/credentials.py` gained a second `CredentialResolver`
+alongside the existing `EnvCredentialResolver`: `FileCredentialResolver`,
+resolving `credential_ref` values of the form `"file:VAR_NAME"` against a
+local, permission-locked `KEY=value` file at
+`~/.config/hermes/runway/providers.env` (never committed — see `.gitignore`;
+the real file lives entirely outside the repo).
+
+- `ensure_providers_env()` creates the directory (`0700`) and file (`0600`)
+  if missing, and re-asserts those permissions either way — the umask can
+  otherwise leave a freshly-created path more permissive than intended.
+- `parse_providers_env()` is a strict, non-executing `KEY=value` parser
+  (comments, blank lines; rejects malformed entries and duplicate keys) —
+  the file is never sourced or evaluated as shell code.
+- `FileCredentialResolver.resolve()` fails closed on unsafe permissions or a
+  missing variable; `.status()` reports `CONFIGURED`/`MISSING` per name
+  without ever exposing the value, and treats a *missing file* as a normal,
+  all-`MISSING` state (distinct from unsafe permissions on an *existing*
+  file, which still fails closed).
+- `runway/cli.py` (`python -m runway.cli credentials edit|status`) drives
+  this — `edit` creates/opens the file in `$EDITOR`/`$VISUAL`/`nano`/`vi`
+  without ever printing its contents; `status` takes explicit `--var`
+  names or `--config <gateway.yaml>` (sourcing `credential_ref` names from
+  a real channel registry) — there is no default/hardcoded list of
+  provider names anywhere in this mechanism, deliberately: see
+  [What was deliberately excluded](#what-was-deliberately-excluded-and-why)
+  above. No console-script entry point was registered in `pyproject.toml`
+  for this change; invoke via `python -m runway.cli`.
+
 ## Production activation requirements (future, separate work)
 
 This build certifies the **foundation only**. Before any live provider

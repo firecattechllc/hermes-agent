@@ -17,6 +17,12 @@ act/
 .env.production.local
 .env.development
 .env.test
+# Project Runway local provider credentials (real file lives outside the repo
+# at ~/.config/hermes/runway/providers.env -- these patterns are defense in
+# depth in case a local copy/test artifact ever lands inside the tree).
+providers.env
+runway/providers.env
+**/runway/providers.env
 .hermes-docker/
 .notebooklm-home/
 .notebooklm-cli-venv/
