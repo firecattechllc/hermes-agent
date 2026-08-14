@@ -1,0 +1,36 @@
+[Unit]
+Description=BrowserOS isolated external browser worker for Hermes
+After=network-online.target docker.service
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/hermes/browseros.env
+ExecStartPre=-/usr/bin/docker rm -f hermes-browseros
+ExecStart=/usr/bin/docker run --name hermes-browseros --init --rm \
+    --network bridge \
+    --publish 127.0.0.1:9239:9000 \
+    --security-opt seccomp=unconfined \
+    --security-opt no-new-privileges \
+    --cap-drop ALL \
+    --read-only \
+    --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+    --memory 2g \
+    --cpus 2 \
+    --mount type=bind,source=${BROWSEROS_PROFILE},target=/home/browseros \
+    ${BROWSEROS_IMAGE}
+ExecStop=/usr/bin/docker stop --time 20 hermes-browseros
+Restart=always
+RestartSec=10
+TimeoutStartSec=120
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/hermes-browseros /run/docker.sock
+
+[Install]
+WantedBy=multi-user.target
