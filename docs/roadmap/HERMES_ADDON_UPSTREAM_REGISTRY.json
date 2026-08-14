@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "document_purpose": "Discovery-stage upstream identity registry for the Hermes Add-on Prerequisite Program. Distinguishes verified upstream projects from unverified candidates and unresolved names. Does not install, activate, or connect anything.",
+  "retrieval_date": "2026-08-05",
+  "classification_states": [
+    "verified_official_upstream",
+    "plausible_unverified_candidate",
+    "unresolved",
+    "internal_hermes_implementation",
+    "duplicate_or_incompatible_implementation"
+  ],
+  "entries": [
+    {
+      "id": "paperclip",
+      "track": "1-paperclip",
+      "display_name": "Paperclip",
+      "classification": "verified_official_upstream",
+      "repository": "https://github.com/paperclipai/paperclip",
+      "website": "https://paperclip.ing/",
+      "docs": "https://docs.paperclip.ing/",
+      "maintainer": "Paperclip Labs, Inc. (project publicly associated with pseudonymous developer @dotta)",
+      "license": "MIT",
+      "latest_stable_release": "v2026.722.0 (2026-07-22)",
+      "architecture": "Node.js server + React UI + embedded/external PostgreSQL. 12 subsystems: Identity & Access, Org Chart & Agents, Work & Task System, Heartbeat Execution, Workspaces & Runtime, Governance & Approvals, Budget & Cost Control, Routines & Schedules, Plugins, Secrets & Storage, Activity & Events, Company Portability.",
+      "deployment_methods": ["local dev via pnpm + embedded Postgres", "install.sh managed background service (Linux/macOS)", "Docker (Dockerfile in repo)", "self-managed Postgres + arbitrary hosting"],
+      "api_mcp_interfaces": "HTTP/REST API (default port 3100); MCP Tool Gateway & Apps for governed tool access; webhook triggers for routines",
+      "authentication_model": "trusted local loopback mode (default) or authenticated/private mode with LAN or Tailnet binding; per-agent API keys; short-lived run JWTs; board user accounts",
+      "data_storage": "PostgreSQL (local embedded or external); encrypted local secret storage; provider-backed object storage for attachments/work products",
+      "networking_requirements": "API server default port 3100; mobile dev server port 3101; optional Tailscale binding",
+      "agent_job_model": "Heartbeat-based execution on schedules and event triggers; agents have roles/titles/reporting lines/permissions/budgets; supports Claude Code, Codex, CLI agents, HTTP/webhook bots, external adapters",
+      "webhooks_events": "Routine system supports cron, webhook, and API triggers; durable activity log for mutating actions, heartbeat state, cost events, approvals, comments",
+      "hermes_governance_overlap": "Direct conceptual overlap with Hermes agent roles, scheduling/routines, worker heartbeats, budgets/cost control, and approvals. This is exactly the overlap the existing docs/beta/post-phase9/PAPERCLIP_ADAPTER.md and PAPERCLIP_CONTRACT.md already anticipate and constrain: Paperclip may project organizational/assignment state but Hermes remains sole admission, budget, and approval authority.",
+      "self_hostable_privately": true,
+      "security_supply_chain_notes": "Checksum-verified install script; optional OpenTelemetry auto-instrumentation; anonymous opt-in telemetry (disable via env/config); per-agent secret scoping; full audit log. No independent third-party security audit identified during this discovery pass.",
+      "evidence_source": [
+        "https://github.com/paperclipai/paperclip (README, fetched via WebFetch)",
+        "https://github.com/paperclipai/paperclip/releases",
+        "https://paperclip.ing/",
+        "https://www.zenml.io/llmops-database/open-source-agent-orchestration-platform-for-multi-agent-business-automation",
+        "https://rywalker.com/research/paperclip"
+      ],
+      "evidence_retrieval_date": "2026-08-05",
+      "notes": "Semantic fit with the pre-existing Hermes Paperclip adapter design (organizations, employees, projects, issues, assignments, comments, heartbeats, sessions, transcripts, skills, worktrees, checkpoints, cost/usage) is very high, which is corroborating but not conclusive evidence of intent. Operator confirmation of intended project identity is still recommended before any live wiring (Stage 2+)."
+    },
+    {
+      "id": "paperclip-unrelated-thoughtbot-gem",
+      "track": "1-paperclip",
+      "display_name": "thoughtbot/paperclip (Ruby on Rails file-attachment gem)",
+      "classification": "duplicate_or_incompatible_implementation",
+      "repository": "https://github.com/thoughtbot/paperclip",
+      "license": "MIT (archived/deprecated project)",
+      "notes": "Unrelated Ruby on Rails file-upload library, publicly archived years before this program. No conceptual overlap with agent orchestration. Listed only to document that the name was checked and ruled out.",
+      "evidence_source": ["WebSearch result set for \"Paperclip\", 2026-08-05"],
+      "evidence_retrieval_date": "2026-08-05"
+    },
+    {
+      "id": "paperclip-unrelated-clipboard-tool",
+      "track": "1-paperclip",
+      "display_name": "sablekunal/paperclip (clipboard-to-AI utility)",
+      "classification": "duplicate_or_incompatible_implementation",
+      "repository": "https://github.com/sablekunal/paperclip",
+      "notes": "Personal single-purpose clipboard-to-model utility. No org/employee/project model. Ruled out.",
+      "evidence_source": ["WebSearch result set for \"Paperclip\", 2026-08-05"],
+      "evidence_retrieval_date": "2026-08-05"
+    },
+    {
+      "id": "paperclip-unrelated-privacy-companion",
+      "track": "1-paperclip",
+      "display_name": "mostofa-faysal/Paperclip (local privacy AI companion)",
+      "classification": "duplicate_or_incompatible_implementation",
+      "repository": "https://github.com/mostofa-faysal/Paperclip",
+      "notes": "Small local privacy-focused AI companion project. No org/employee/project model. Ruled out.",
+      "evidence_source": ["WebSearch result set for \"Paperclip\", 2026-08-05"],
+      "evidence_retrieval_date": "2026-08-05"
+    },
+    {
+      "id": "buzz-relay-and-web",
+      "track": "2-buzz-ecosystem",
+      "display_name": "Buzz (Block, Inc.) — covers \"Buzz Web\" and \"Buzz Relay\"",
+      "classification": "verified_official_upstream",
+      "repository": "https://github.com/block/buzz",
+      "website": "https://buzz.xyz/",
+      "maintainer": "Block, Inc.",
+      "license": "Apache-2.0",
+      "latest_stable_release": "Not pinned to a numbered tag as of retrieval; repository is under active post-launch development (launched 2026-07-21).",
+      "architecture": "Single Rust (Axum) relay binary serves the WebSocket relay, REST API, and bundled web UI from one process. Desktop client is Tauri + React. buzz-cli provides a JSON-in/JSON-out interface for LLM tool calls. buzz-acp bridges external agent runtimes (Goose, Codex, Claude Code) to the relay.",
+      "deployment_methods": ["local dev: Docker Compose + Hermit toolchain", "self-hosted VPS: production Compose bundle in deploy/compose/", "one-click Railway deploy", "Block-hosted managed relay at buzz.xyz"],
+      "api_mcp_interfaces": "WebSocket (primary), REST (secondary), Nostr NIP-01/NIP-42 (signed events, Schnorr auth), NIP-34 (git events), Blossom protocol (media)",
+      "authentication_model": "Nostr keypair identity for every participant (human or agent); Schnorr signatures; rate limiting via buzz-auth; no username/password model",
+      "data_storage": "PostgreSQL (events, audit log, full-text search); Redis (pub/sub, presence, typing — ephemeral); S3/MinIO via Blossom (media)",
+      "networking_requirements": "WebSocket + REST default port 3000 (ws://localhost:3000 in local dev); optional Caddy reverse proxy with TLS for production",
+      "agent_job_model": "Agents are scoped by cryptographic identity (\"the same way you'd scope a teammate\"), not permission flags; agents can read/post/react, create channels, run workflows and git operations, and execute shell commands via the buzz-cli tool interface",
+      "webhooks_events": "All activity (messages, reactions, workflow steps, review approvals, git events) is a signed Nostr event in one audit log; workflow triggers support message/reaction/schedule/webhook",
+      "hermes_governance_overlap": "Very high — buzz-cli's shell-execution and workflow-run capability, and buzz-acp's external-agent bridging, directly overlap Hermes's own admission/execution authority. This is exactly why docs/beta/post-phase9/BUZZ_RELAY_ADAPTER.md and BUZZ_SECURITY.md model Buzz strictly as a signed-event transport with zero independent execution, approval, or credential authority.",
+      "self_hostable_privately": true,
+      "security_supply_chain_notes": "Apache-2.0, corporate-backed (Block/Square lineage), single relay binary reduces supply-chain surface versus a multi-service stack, but buzz-cli's direct shell-execution capability for agents is a meaningful risk that Hermes governance must intermediate, never expose directly.",
+      "evidence_source": [
+        "https://github.com/block/buzz (README, fetched via WebFetch)",
+        "https://block.xyz/inside/introducing-buzz-where-humans-and-agents-work-together",
+        "https://engineering.block.xyz/blog/run-your-own-buzz-relay",
+        "https://www.techtimes.com/articles/321242/20260722/block-launches-buzz-open-source-workspace-where-ai-agents-sign-their-own-work.htm"
+      ],
+      "evidence_retrieval_date": "2026-08-05",
+      "notes": "\"Buzz Web\" is not a separate repository — the web UI is served by the same relay binary as \"Buzz Relay\". Treat Buzz Web and Buzz Relay as one upstream (github.com/block/buzz), not two."
+    },
+    {
+      "id": "buzznode",
+      "track": "2-buzz-ecosystem",
+      "display_name": "Buzznode",
+      "classification": "unresolved",
+      "notes": "No distinct upstream project named \"Buzznode\" was found. The closest concept in the verified Buzz upstream is buzz-acp (the agent/worker connection bridge inside github.com/block/buzz), which is a component of the single Buzz repository, not a standalone worker-host product. The existing internal design (docs/beta/post-phase9/BUZZNODE_ADAPTER.md) models Buzznode as a Hermes-side concept: a persistent, isolated worker-host capability that would connect to Buzz via buzz-acp. Recommendation: treat \"Buzznode\" as an internal Hermes worker-host classification that consumes the Buzz upstream, not as a separate external project to source. Operator should confirm this reading before Stage 6 live work begins.",
+      "evidence_source": ["WebSearch queries for \"Buzznode\", \"Buzz Relay\" combined with block/buzz README review, 2026-08-05"],
+      "evidence_retrieval_date": "2026-08-05"
+    },
+    {
+      "id": "buzz-centralized-agents-workers",
+      "track": "2-buzz-ecosystem",
+      "display_name": "Centralized Buzz agents/workers",
+      "classification": "internal_hermes_implementation",
+      "notes": "\"Centralized Buzz agents/workers\" maps to the existing Hermes-side worker/job contract (docs/beta/post-phase9/WORKER_JOB_CONTRACT.md, apps/sigil/src/sigil/buzz_relay_adapter.py, buzznode_adapter.py) that would consume Buzz's buzz-acp/buzz-cli interfaces under Hermes admission. This is not a separate upstream identity — it is the already-built internal adapter layer waiting on a pinned Buzz registry entry.",
+      "evidence_source": ["Internal repository review, docs/beta/post-phase9/, apps/sigil/src/sigil/buzz_relay_adapter.py, buzznode_adapter.py"],
+      "evidence_retrieval_date": "2026-08-05"
+    },
+    {
+      "id": "supabase",
+      "track": "3-supabase",
+      "display_name": "Supabase",
+      "classification": "verified_official_upstream",
+      "repository": "https://github.com/supabase/supabase",
+      "website": "https://supabase.com",
+      "maintainer": "Supabase, Inc.",
+      "license": "Apache-2.0 (core platform; individual components vary)",
+      "hermes_governance_overlap": "None modeled yet in docs/beta/post-phase9/. Maps to the planned sigil-v3.8-supabase-platform release, not the Stage 0-12 ecosystem adapter program.",
+      "notes": "Well-known, unambiguous upstream identity — no competing candidates. Prerequisite work here is account/project state, not upstream identification. See HERMES_ADDON_PREREQUISITES.md track 3 for current linked-project findings (self-hosted account inspection, not general web research).",
+      "evidence_source": ["https://github.com/supabase/supabase", "https://supabase.com"],
+      "evidence_retrieval_date": "2026-08-05"
+    },
+    {
+      "id": "alexa-plus-smart-home-skills",
+      "track": "5-alexa-plus",
+      "display_name": "Alexa Smart Home Skills API / Custom Skills Kit (classic, self-serve)",
+      "classification": "verified_official_upstream",
+      "repository": null,
+      "website": "https://developer.amazon.com/en-US/docs/alexa/smarthome/understand-the-smart-home-skill-api.html",
+      "maintainer": "Amazon",
+      "license": "Proprietary developer program; free enrollment",
+      "notes": "Fully self-serve, publicly documented, requires AWS Lambda or HTTPS endpoint, OAuth2 account linking, and Amazon certification before publication. Models device control (lights, thermostats, locks, etc.), not general task delegation. This is the closest fully-open, non-partner-gated Alexa integration route available today.",
+      "evidence_source": [
+        "https://developer.amazon.com/en-US/docs/alexa/smarthome/development-options.html",
+        "https://developer.amazon.com/en-US/docs/alexa/smarthome/understand-the-smart-home-skill-api.html"
+      ],
+      "evidence_retrieval_date": "2026-08-05"
+    },
+    {
+      "id": "alexa-plus-for-builders-mcp",
+      "track": "5-alexa-plus",
+      "display_name": "Alexa+ for Builders (MCP add-on integration)",
+      "classification": "plausible_unverified_candidate",
+      "repository": null,
+      "website": "https://developer.amazon.com/alexaplus/",
+      "maintainer": "Amazon",
+      "notes": "Amazon's newest integration path (announced July 2026): brands bring their own MCP server, Alexa+ inspects it and generates a simulator-ready add-on package. Account linking uses OAuth 2.1 Authorization Code Grant with mandatory PKCE S256 (implicit grant not supported). As of retrieval, Alexa+ for Builders is stated to be \"available to select partners working directly with Amazon's team\" — not a general self-serve program. Classified as a plausible-but-unverified candidate for Hermes because (a) it is the only Alexa surface that matches Hermes's own MCP interfaces, but (b) general public availability, exact certification requirements, and whether a private/non-public MCP endpoint is acceptable to Amazon are unconfirmed.",
+      "evidence_source": [
+        "https://developer.amazon.com/alexaplus/blogs/2026/07/alexa-plus-new-ways-to-build-experiences",
+        "https://developer.amazon.com/alexaplus/",
+        "https://developer.amazon.com/docs/alexaplus/add-ons/category-sdk-mcp-account-linking.html"
+      ],
+      "evidence_retrieval_date": "2026-08-05"
+    },
+    {
+      "id": "obsidian",
+      "track": "6-obsidian",
+      "display_name": "Obsidian",
+      "classification": "verified_official_upstream",
+      "repository": null,
+      "website": "https://obsidian.md",
+      "maintainer": "Obsidian.md (Dynalist Inc.)",
+      "license": "Proprietary freeware application; vaults are local plain Markdown files with no proprietary lock-in",
+      "notes": "Unambiguous identity. The existing Hermes product already bundles a generic filesystem-first Obsidian skill (~/.hermes/skills/note-taking/obsidian/SKILL.md) that resolves a vault via the OBSIDIAN_VAULT_PATH environment variable, falling back to ~/Documents/Obsidian Vault. No vault path is currently configured specifically for this Hermes deployment (confirmed by local inspection, not by opening any vault contents).",
+      "evidence_source": ["https://obsidian.md", "local file ~/.hermes/skills/note-taking/obsidian/SKILL.md"],
+      "evidence_retrieval_date": "2026-08-05"
+    },
+    {
+      "id": "fred-api",
+      "track": "7-fred",
+      "display_name": "FRED (Federal Reserve Economic Data) API",
+      "classification": "verified_official_upstream",
+      "repository": null,
+      "website": "https://fred.stlouisfed.org/docs/api/fred/",
+      "maintainer": "Federal Reserve Bank of St. Louis",
+      "license": "Free public API; FRED Terms of Use apply (attribution required, no resale of raw data as a competing data feed)",
+      "notes": "Unambiguous identity. Authentication via a free 32-character api_key issued after account creation at fredaccount.stlouisfed.org. Published rate limit is 120 requests/minute per key. No key is currently present in this environment (FRED_API_KEY unset).",
+      "evidence_source": [
+        "https://fred.stlouisfed.org/docs/api/fred/",
+        "https://fred.stlouisfed.org/docs/api/api_key.html",
+        "https://fred.stlouisfed.org/legal/"
+      ],
+      "evidence_retrieval_date": "2026-08-05"
+    },
+    {
+      "id": "hydra-live",
+      "track": "4-hydra-live",
+      "display_name": "Hydra Live",
+      "classification": "internal_hermes_implementation",
+      "notes": "Not an external upstream — a private FireCat-operated ARM64 Ubuntu VM (Tailscale node hydra-live). See docs/architecture/hydra-ecosystem/ and docs/operations/hydra-live/ for the existing canonical architecture and operator playbook. Current live status recorded in HERMES_ADDON_PREREQUISITES.md track 4 (Tailscale shows the node offline at time of this discovery pass).",
+      "evidence_source": ["local `tailscale status`, 2026-08-05", "docs/architecture/hydra-ecosystem/evidence/HYDRA_LIVE_DISCOVERY.md"],
+      "evidence_retrieval_date": "2026-08-05"
+    },
+    {
+      "id": "self-evolution",
+      "track": "8-self-evolution",
+      "display_name": "Hermes Self-Evolution",
+      "classification": "internal_hermes_implementation",
+      "notes": "Not an external upstream. Fully internal, already implemented as a non-executing, proposal-only framework (apps/sigil/src/sigil/self_evolution.py) certified through Stage 9 / Stage 12D Golden Master readiness. See docs/security/HERMES_SELF_EVOLUTION_SAFETY_REVIEW.md.",
+      "evidence_source": ["apps/sigil/src/sigil/self_evolution.py", "docs/beta/post-phase9/SELF_EVOLUTION_FRAMEWORK.md", "docs/beta/post-phase9/SELF_EVOLUTION_POLICY.md", "docs/sigil/evidence/SELF_EVOLUTION_STAGE9_CERTIFICATION.json"],
+      "evidence_retrieval_date": "2026-08-05"
+    }
+  ]
+}
