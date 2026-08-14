@@ -28,8 +28,9 @@ from __future__ import annotations
 import os
 import re
 import stat
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, Optional, Protocol
+from typing import Dict, Iterable, Optional, Protocol, Tuple
 
 _ENV_PREFIX = "env:"
 _FILE_PREFIX = "file:"
@@ -204,3 +205,124 @@ class FileCredentialResolver:
         _check_permissions(self._path)
         values = parse_providers_env(self._path.read_text(encoding="utf-8"))
         return {name: bool(values.get(name)) for name in var_names}
+
+
+# ── Desktop staging file (manual-editing convenience only) ─────────────────
+#
+# Runway never reads credentials from this file directly -- it is a
+# fill-in-the-blanks staging area for humans, merged into the authoritative
+# ~/.config/hermes/runway/providers.env store only via an explicit
+# import_desktop_template() call (never automatic, never on a resolve path).
+
+DEFAULT_DESKTOP_TEMPLATE_PATH = Path.home() / "Desktop" / "Runway-Provider-Keys.env"
+
+_DESKTOP_TEMPLATE_HEADER = """\
+# Hermes Project Runway -- provider key entry sheet (Desktop convenience copy)
+#
+# THIS FILE IS NOT READ BY RUNWAY DIRECTLY. It exists only so you can paste
+# keys somewhere easy to find and edit. Once filled in, import it into the
+# real, permission-locked credential store with:
+#
+#   python -m runway.cli credentials import ~/Desktop/Runway-Provider-Keys.env
+#
+# After importing, DELETE this file (or re-run `desktop-template` to clear
+# it) -- your Desktop folder is commonly synced by iCloud/Dropbox/OneDrive,
+# which is not a safe place to leave real API keys sitting in plain text
+# longer than necessary.
+#
+# One KEY=value pair per line. Comments start with '#'; blank lines are
+# ignored. This file is only ever parsed as plain text, never sourced or
+# executed as shell code. A line left blank after '=' is skipped on import
+# (it will not overwrite an already-configured credential with an empty
+# value).
+#
+"""
+
+_DESKTOP_TEMPLATE_NO_NAMES_HINT = """\
+# No variable names were requested for this template. Add your own
+# KEY=value lines below, or regenerate with e.g.:
+#   python -m runway.cli credentials desktop-template --var RUNWAY_MY_PROVIDER_API_KEY
+"""
+
+
+def render_desktop_template(existing: Optional[Dict[str, str]] = None, var_names: Iterable[str] = ()) -> str:
+    """Build the Desktop template's text content. ``existing`` (already-set
+    KEY=value pairs from a prior version of the file) is preserved verbatim
+    on refresh -- this never clobbers a value the user already typed in.
+    ``var_names`` are added as blank entries only if not already present.
+    Deliberately takes no default variable-name list -- see module
+    docstring and ``docs/architecture/PROJECT_RUNWAY_FOUNDATION.md``.
+    """
+    entries = dict(existing or {})
+    for name in var_names:
+        entries.setdefault(name, "")
+
+    if not entries:
+        return _DESKTOP_TEMPLATE_HEADER + _DESKTOP_TEMPLATE_NO_NAMES_HINT
+
+    body = "".join(f"{key}={value}\n" for key, value in sorted(entries.items()))
+    return _DESKTOP_TEMPLATE_HEADER + body
+
+
+def write_desktop_template(path: Optional[Path] = None, var_names: Iterable[str] = ()) -> Path:
+    """Create or refresh the Desktop staging file. Only the *file* is
+    chmod'd to ``0600`` -- unlike :func:`ensure_providers_env`, this never
+    touches the parent directory's permissions, because that directory is
+    the user's general-purpose Desktop folder, not one Runway owns.
+    """
+    path = path or DEFAULT_DESKTOP_TEMPLATE_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: Dict[str, str] = {}
+    if path.exists():
+        existing = parse_providers_env(path.read_text(encoding="utf-8"))
+
+    path.write_text(render_desktop_template(existing, var_names), encoding="utf-8")
+    os.chmod(path, _FILE_MODE)
+    return path
+
+
+@dataclass(frozen=True)
+class ImportSummary:
+    added: Tuple[str, ...]
+    updated: Tuple[str, ...]
+    skipped_empty: Tuple[str, ...]
+
+
+def import_desktop_template(source_path: Path, target_path: Optional[Path] = None) -> ImportSummary:
+    """Parse ``source_path`` (never executed, only parsed as data -- reuses
+    :func:`parse_providers_env`) and upsert its non-empty entries into the
+    authoritative store at ``target_path`` (default
+    :data:`DEFAULT_PROVIDERS_ENV_PATH`), re-asserting ``0700``/``0600``
+    permissions on it afterward. Blank-valued lines in the source (an
+    unfilled template placeholder) are never imported -- they would
+    otherwise silently blank out an already-configured credential. Keys
+    already in the target but absent from the source are left untouched
+    (import merges, it never wipes). Returns names only, never values.
+    """
+    if not source_path.exists():
+        raise CredentialResolutionError(f"import source not found: {source_path}")
+    source_entries = parse_providers_env(source_path.read_text(encoding="utf-8"))
+
+    target_path = ensure_providers_env(target_path)
+    existing_entries = parse_providers_env(target_path.read_text(encoding="utf-8"))
+
+    added, updated, skipped_empty = [], [], []
+    merged = dict(existing_entries)
+    for key, value in source_entries.items():
+        if not value:
+            skipped_empty.append(key)
+            continue
+        if key in existing_entries:
+            if existing_entries[key] != value:
+                updated.append(key)
+        else:
+            added.append(key)
+        merged[key] = value
+
+    body = "".join(f"{key}={value}\n" for key, value in sorted(merged.items()))
+    target_path.write_text(_PROVIDERS_ENV_TEMPLATE + body, encoding="utf-8")
+    os.chmod(target_path.parent, _DIR_MODE)
+    os.chmod(target_path, _FILE_MODE)
+
+    return ImportSummary(added=tuple(sorted(added)), updated=tuple(sorted(updated)), skipped_empty=tuple(sorted(skipped_empty)))

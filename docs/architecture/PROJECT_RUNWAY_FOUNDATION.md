@@ -316,6 +316,28 @@ the real file lives entirely outside the repo).
   above. No console-script entry point was registered in `pyproject.toml`
   for this change; invoke via `python -m runway.cli`.
 
+### Desktop entry sheet (manual-editing convenience only)
+
+`credentials desktop-template` writes a staging copy to
+`~/Desktop/Runway-Provider-Keys.env` (`write_desktop_template()` /
+`render_desktop_template()`) — **Runway never reads from this path
+directly**; it exists only so a human has an easy place to paste keys.
+Refreshing it never clobbers a value already typed in, and only the *file*
+is chmod'd `0600` — the command never touches the Desktop directory's own
+permissions, since that folder is the user's general-purpose space, not one
+Runway owns. Like `status`, it takes names via `--var`/`--config` only —
+still no hardcoded provider list.
+
+`credentials import <path>` (`import_desktop_template()`) parses that file
+as data (reusing `parse_providers_env()` verbatim — never sourced/executed)
+and upserts its **non-empty** entries into the authoritative
+`providers.env`, re-locking `0700`/`0600` afterward. An unfilled blank
+placeholder in the source is skipped rather than blanking out an
+already-configured credential; a key already in the authoritative store but
+absent from the import source is left untouched (merge, never wipe). Output
+is names only (`added`/`updated`/`skipped (blank in source)`) — never
+values, in output or in any raised exception.
+
 ## Production activation requirements (future, separate work)
 
 This build certifies the **foundation only**. Before any live provider

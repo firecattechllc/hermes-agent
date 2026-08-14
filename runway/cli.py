@@ -7,6 +7,8 @@ Invoke as::
 
     python -m runway.cli credentials edit
     python -m runway.cli credentials status --var RUNWAY_SOME_PROVIDER_API_KEY
+    python -m runway.cli credentials desktop-template --var RUNWAY_SOME_PROVIDER_API_KEY
+    python -m runway.cli credentials import ~/Desktop/Runway-Provider-Keys.env
 
 Every command here is safe to run with no credentials configured, performs
 no network I/O, and never prints a credential value -- see
@@ -24,10 +26,13 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from runway.providers.credentials import (
+    DEFAULT_DESKTOP_TEMPLATE_PATH,
     DEFAULT_PROVIDERS_ENV_PATH,
     CredentialResolutionError,
     FileCredentialResolver,
     ensure_providers_env,
+    import_desktop_template,
+    write_desktop_template,
 )
 
 
@@ -82,6 +87,38 @@ def cmd_credentials_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_credentials_desktop_template(args: argparse.Namespace) -> int:
+    path = args.path or DEFAULT_DESKTOP_TEMPLATE_PATH
+    names = _variable_names(args)
+    result_path = write_desktop_template(path, names)
+    print(f"Wrote {result_path} ({len(names)} name(s) requested; contents are never printed by this command).")
+    print("This file is NOT read by Runway directly -- fill it in, then run:")
+    print(f"  python -m runway.cli credentials import {result_path}")
+    return 0
+
+
+def cmd_credentials_import(args: argparse.Namespace) -> int:
+    source = Path(args.source).expanduser()
+    target = args.target or DEFAULT_PROVIDERS_ENV_PATH
+    try:
+        summary = import_desktop_template(source, target)
+    except CredentialResolutionError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if not (summary.added or summary.updated or summary.skipped_empty):
+        print(f"No entries found in {source}. Nothing imported.")
+        return 0
+    for name in summary.added:
+        print(f"{name}: added")
+    for name in summary.updated:
+        print(f"{name}: updated")
+    for name in summary.skipped_empty:
+        print(f"{name}: skipped (blank in source -- did not overwrite any existing value)")
+    print(f"Imported into {target}. Consider deleting {source} now that its values are stored there.")
+    return 0
+
+
 def _variable_names(args: argparse.Namespace) -> list[str]:
     names: list[str] = list(dict.fromkeys(args.names or []))  # de-dupe, preserve order
     if args.config:
@@ -116,6 +153,30 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--config", type=str, default=None, help="Gateway YAML config to source credential_ref names from")
     status.add_argument("--var", dest="names", action="append", default=None, help="Variable name to check (repeatable)")
     status.set_defaults(func=cmd_credentials_status)
+
+    desktop_template = credentials_sub.add_parser(
+        "desktop-template",
+        help="Create/refresh a manual-editing-convenience key sheet on the Desktop (never read by Runway directly)",
+    )
+    desktop_template.add_argument(
+        "--path", type=Path, default=None, help=f"Override the default path ({DEFAULT_DESKTOP_TEMPLATE_PATH})"
+    )
+    desktop_template.add_argument(
+        "--config", type=str, default=None, help="Gateway YAML config to source credential_ref names from"
+    )
+    desktop_template.add_argument(
+        "--var", dest="names", action="append", default=None, help="Variable name to include (repeatable)"
+    )
+    desktop_template.set_defaults(func=cmd_credentials_desktop_template)
+
+    import_cmd = credentials_sub.add_parser(
+        "import", help="Import a KEY=value file (e.g. the Desktop template) into the authoritative providers.env"
+    )
+    import_cmd.add_argument("source", type=str, help="Path to the file to import (e.g. ~/Desktop/Runway-Provider-Keys.env)")
+    import_cmd.add_argument(
+        "--target", type=Path, default=None, help=f"Override the authoritative store path ({DEFAULT_PROVIDERS_ENV_PATH})"
+    )
+    import_cmd.set_defaults(func=cmd_credentials_import)
 
     return parser
 

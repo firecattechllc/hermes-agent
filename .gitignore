@@ -23,6 +23,9 @@ act/
 providers.env
 runway/providers.env
 **/runway/providers.env
+# The Desktop manual-entry convenience copy (real path is ~/Desktop, entirely
+# outside the repo -- defense in depth only, same reasoning as above).
+Runway-Provider-Keys.env
 .hermes-docker/
 .notebooklm-home/
 .notebooklm-cli-venv/

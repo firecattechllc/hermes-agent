@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import stat
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -139,7 +140,10 @@ def test_credentials_status_sources_names_from_gateway_config(tmp_path, capsys):
 def test_no_provider_names_hardcoded_in_cli_module():
     import runway.cli as cli_module
     source = open(cli_module.__file__).read()
-    for suspicious in ("CCTK", "OPENMODEL", "BLUESMINDS", "APIKEYFUN", "PATEWAY", "PPTOKEN", "LAOZHANG"):
+    for suspicious in (
+        "CCTK", "OPENMODEL", "BLUESMINDS", "ETOK", "APIKEYFUN", "AIGOCODE", "PATEWAY", "PPTOKEN",
+        "SUIXIANG", "FASTAITOKEN", "AIMZOON", "FENNO", "LANOX", "NAGORA", "LAOZHANG",
+    ):
         assert suspicious not in source.upper()
 
 
@@ -147,3 +151,115 @@ def test_external_execution_enabled_remains_structurally_unreachable():
     from runway.flags import RunwayFeatureFlags
     with pytest.raises(Exception):
         RunwayFeatureFlags(external_execution_enabled=True)
+
+
+# ── credentials desktop-template ─────────────────────────────────────────
+
+def test_desktop_template_command_creates_generic_file_with_no_names(tmp_path, capsys):
+    target = tmp_path / "Desktop" / "Runway-Provider-Keys.env"
+    exit_code = main(["credentials", "desktop-template", "--path", str(target)])
+    out = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert target.exists()
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert "0 name(s) requested" in out
+    assert _SECRET not in out
+
+
+def test_desktop_template_command_with_explicit_vars(tmp_path, capsys):
+    from runway.providers.credentials import parse_providers_env
+
+    target = tmp_path / "Desktop" / "Runway-Provider-Keys.env"
+    exit_code = main([
+        "credentials", "desktop-template", "--path", str(target),
+        "--var", "RUNWAY_A_API_KEY", "--var", "RUNWAY_B_API_KEY",
+    ])
+    assert exit_code == 0
+    parsed = parse_providers_env(target.read_text())
+    assert parsed == {"RUNWAY_A_API_KEY": "", "RUNWAY_B_API_KEY": ""}
+    out = capsys.readouterr().out
+    assert "2 name(s) requested" in out
+    assert "credentials import" in out  # tells the user the follow-up step
+
+
+def test_desktop_template_command_never_locks_down_desktop_directory(tmp_path):
+    desktop_dir = tmp_path / "Desktop"
+    desktop_dir.mkdir()
+    os.chmod(desktop_dir, 0o755)
+    target = desktop_dir / "Runway-Provider-Keys.env"
+
+    main(["credentials", "desktop-template", "--path", str(target)])
+
+    assert stat.S_IMODE(desktop_dir.stat().st_mode) == 0o755
+
+
+# ── credentials import ────────────────────────────────────────────────────
+
+def test_import_command_reports_names_never_values(tmp_path, capsys):
+    source = tmp_path / "Desktop" / "Runway-Provider-Keys.env"
+    source.parent.mkdir(parents=True)
+    source.write_text(f"RUNWAY_A_API_KEY={_SECRET}\n")
+    target = tmp_path / "cfg" / "providers.env"
+
+    exit_code = main(["credentials", "import", str(source), "--target", str(target)])
+    out = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "RUNWAY_A_API_KEY: added" in out
+    assert _SECRET not in out
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+
+
+def test_import_command_expands_user_home_in_source_path(tmp_path, monkeypatch, capsys):
+    fake_home = tmp_path / "home"
+    (fake_home / "Desktop").mkdir(parents=True)
+    (fake_home / "Desktop" / "Runway-Provider-Keys.env").write_text("RUNWAY_A_API_KEY=abc\n")
+    monkeypatch.setenv("HOME", str(fake_home))  # Path.expanduser() reads $HOME, not Path.home()
+    target = tmp_path / "cfg" / "providers.env"
+
+    exit_code = main(["credentials", "import", "~/Desktop/Runway-Provider-Keys.env", "--target", str(target)])
+    assert exit_code == 0
+    assert "RUNWAY_A_API_KEY: added" in capsys.readouterr().out
+
+
+def test_import_command_malformed_source_errors_without_leaking(tmp_path, capsys):
+    source = tmp_path / "Desktop" / "Runway-Provider-Keys.env"
+    source.parent.mkdir(parents=True)
+    source.write_text(f"not a valid line with {_SECRET} in it\n")
+    target = tmp_path / "cfg" / "providers.env"
+
+    exit_code = main(["credentials", "import", str(source), "--target", str(target)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert _SECRET not in captured.out
+    assert _SECRET not in captured.err
+
+
+def test_import_command_missing_source_errors_cleanly(tmp_path, capsys):
+    exit_code = main([
+        "credentials", "import", str(tmp_path / "nope.env"), "--target", str(tmp_path / "cfg" / "providers.env"),
+    ])
+    assert exit_code == 1
+    assert "error:" in capsys.readouterr().err
+
+
+def test_import_command_skips_blank_entries(tmp_path, capsys):
+    from runway.providers.credentials import ensure_providers_env
+
+    target = tmp_path / "cfg" / "providers.env"
+    ensure_providers_env(target)
+    target.write_text(f"RUNWAY_A_API_KEY={_SECRET}\n")
+    os.chmod(target, 0o600)
+
+    source = tmp_path / "Desktop" / "Runway-Provider-Keys.env"
+    source.parent.mkdir(parents=True)
+    source.write_text("RUNWAY_A_API_KEY=\n")  # unfilled placeholder
+
+    exit_code = main(["credentials", "import", str(source), "--target", str(target)])
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "skipped (blank in source" in out
+    assert _SECRET not in out
+    assert _SECRET in target.read_text()  # original value preserved, not blanked
