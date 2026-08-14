@@ -181,6 +181,7 @@ _TELEMETRY_EVENT_TYPES = frozenset({
     "inventory_recorded",
     "model_routing_recorded",
     "model_execution_recorded",
+    "browser_execution_recorded",
     # Step 31 Big Sister / Little Sister learning hierarchy
     "learning_hierarchy_recorded",
     # Step 32 governed Mac / Titan communication link
